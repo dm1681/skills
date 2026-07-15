@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Exact VERSION value to publish"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}-${{ inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate and test
+        run: |
+          python scripts/validate_repo.py
+          python -m unittest discover -s tests -v
+      - name: Resolve release version
+        id: version
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          version=$(tr -d '[:space:]' < VERSION)
+          tag="v${version}"
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            [[ "$INPUT_VERSION" == "$version" ]] || {
+              echo "Input $INPUT_VERSION does not match VERSION $version" >&2
+              exit 1
+            }
+          else
+            [[ "$GITHUB_REF_NAME" == "$tag" ]] || {
+              echo "Tag $GITHUB_REF_NAME does not match VERSION $version" >&2
+              exit 1
+            }
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Package collection
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          root="skills-${VERSION}"
+          mkdir -p "dist/staging/${root}"
+          cp -R skills docs install.py install.sh install.ps1 VERSION CHANGELOG.md README.md RELEASING.md "dist/staging/${root}/"
+          tar -C dist/staging -czf "dist/${root}.tar.gz" "$root"
+          (cd dist/staging && zip -qr "../${root}.zip" "$root")
+          (cd dist && sha256sum "${root}.tar.gz" "${root}.zip" > SHA256SUMS)
+          rm -rf dist/staging
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists" >&2
+            exit 1
+          fi
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "Skills $TAG" --generate-notes
+          else
+            gh release create "$TAG" dist/* --verify-tag --title "Skills $TAG" --generate-notes
+          fi
