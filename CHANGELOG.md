@@ -5,6 +5,17 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-15
+
+### Added
+
+- Interactive terminal setup for choosing installation scope, coding agents,
+  skills, copy or link mode, and optional Graphify configuration.
+- Responsive output that adapts to narrow terminals, with Unicode and color
+  enhancements only when the terminal supports them.
+- Review and confirmation screens, safe conflict backup prompts, and explicit
+  `--interactive`, `--non-interactive`, and `--no-color` controls.
+
 ## [0.2.0] - 2026-07-15
 
 ### Added

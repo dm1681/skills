@@ -12,8 +12,9 @@ self-contained under [`skills/`](skills/).
 
 ## Install
 
-The default install is user-scoped and uses `~/.agents/skills`, the shared
-location supported by Codex, Cursor, and GitHub Copilot:
+Run the installer without options to open the guided setup. It walks through
+scope, coding agents, skills, copy or link mode, optional Graphify setup, and a
+final review before changing anything:
 
 ```sh
 ./install.sh
@@ -24,6 +25,15 @@ On Windows PowerShell:
 ```powershell
 .\install.ps1
 ```
+
+The interface adapts to narrow terminals and automatically uses plain text when
+color or Unicode is unavailable. Its recommended default is a user-scoped copy
+in `~/.agents/skills`, the shared location supported by Codex, Cursor, and
+GitHub Copilot.
+
+Passing installer options keeps the command non-interactive, which makes it
+safe for scripts and CI. Use `--interactive` to open the wizard with preset
+options, or `--non-interactive` to explicitly suppress it.
 
 Install for every supported agent family. This writes one shared copy to
 `.agents/skills` and one Claude-specific copy to `.claude/skills`:
@@ -41,6 +51,9 @@ Useful options:
 --skill NAME                 repeatable; defaults to all skills
 --mode copy|link             copy is the cross-platform default
 --graphify                   install/upgrade Graphify and register its skill
+--interactive                force the guided setup wizard
+--non-interactive            never prompt; useful for scripts and CI
+--no-color                   disable interactive terminal colors
 --target PATH                override the resolved skills directory
 --force                      replace an existing differing skill after backup
 --dry-run
@@ -105,7 +118,7 @@ cd skills
 To pin a machine to a release, check out its tag first:
 
 ```sh
-git checkout v0.2.0
+git checkout v0.3.0
 ./install.sh --agent all
 ```
 
