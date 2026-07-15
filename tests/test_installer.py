@@ -33,7 +33,7 @@ class InstallerTests(unittest.TestCase):
             destination = home / ".agents" / "skills" / SKILL
             self.assertTrue((destination / "SKILL.md").is_file())
             receipt = json.loads((destination.parent / ".dm1681-skills.json").read_text())
-            self.assertEqual("0.1.0", receipt["version"])
+            self.assertEqual("0.2.0", receipt["version"])
 
     def test_all_agents_install_once_per_distinct_root(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -69,6 +69,23 @@ class InstallerTests(unittest.TestCase):
             result = self.run_installer("--home", str(home), "--dry-run")
             self.assertIn("would copy", result.stdout)
             self.assertFalse((home / ".agents").exists())
+
+    def test_graphify_dry_run_shows_external_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            result = self.run_installer(
+                "--home", str(home), "--agent", "codex", "--graphify", "--dry-run"
+            )
+            self.assertIn("uv tool install --upgrade graphifyy", result.stdout)
+            self.assertIn("graphify install --platform codex", result.stdout)
+            self.assertFalse((home / ".agents").exists())
+
+    def test_graphify_rejects_custom_target(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.run_installer(
+                "--target", directory, "--graphify", "--dry-run", expected=2
+            )
+            self.assertIn("cannot be combined with --target", result.stderr)
 
     @unittest.skipIf(os.name == "nt", "Windows symlinks may require Developer Mode")
     def test_link_mode(self) -> None:

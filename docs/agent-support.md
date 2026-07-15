@@ -20,3 +20,6 @@ Primary references:
 
 Agent discovery behavior changes over time. Keep this matrix and the installer
 mapping together, and update both in the same pull request.
+
+For the optional Graphify package and its separate platform mapping, see
+[`graphify.md`](graphify.md).

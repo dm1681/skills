@@ -40,6 +40,7 @@ Useful options:
 --project-dir PATH
 --skill NAME                 repeatable; defaults to all skills
 --mode copy|link             copy is the cross-platform default
+--graphify                   install/upgrade Graphify and register its skill
 --target PATH                override the resolved skills directory
 --force                      replace an existing differing skill after backup
 --dry-run
@@ -60,12 +61,35 @@ Examples:
 
 # Preview an update without changing files.
 ./install.sh --agent all --force --dry-run
+
+# Install this collection plus Graphify for shared agents and Claude Code.
+./install.sh --agent all --graphify
+
+# Install both into one project's Codex skill directory.
+./install.sh --agent codex --scope project --project-dir /path/to/repo --graphify
 ```
 
 Python 3.9 or newer is required. Existing differing installations are never
 overwritten silently. With `--force`, the old directory is moved into an
 adjacent `.skills-backups/` directory (outside the scanned skills root) before
 the new version is installed.
+
+### Optional Graphify installation
+
+`--graphify` is an explicit opt-in to third-party software installation. It
+requires [`uv`](https://docs.astral.sh/uv/) and runs:
+
+```sh
+uv tool install --upgrade graphifyy
+graphify install --platform <selected-platform>
+```
+
+The package is `graphifyy` (two “y” characters); the installed command is
+`graphify`. Project-scoped installs add `--project`. The installer uses
+Graphify's generic `agents` platform for the shared `.agents/skills` target and
+uses the explicit `codex`, `cursor`, `copilot`, or `claude` platform when that
+agent was selected. See [`docs/graphify.md`](docs/graphify.md) for the exact
+command matrix and boundaries.
 
 ## Sync on another machine
 
@@ -81,7 +105,7 @@ cd skills
 To pin a machine to a release, check out its tag first:
 
 ```sh
-git checkout v0.1.0
+git checkout v0.2.0
 ./install.sh --agent all
 ```
 

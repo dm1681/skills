@@ -5,6 +5,14 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-15
+
+### Added
+
+- Optional `--graphify` installation: installs or upgrades the official
+  `graphifyy` package with `uv` and registers Graphify for the selected coding
+  agents using its current platform-specific CLI.
+
 ## [0.1.0] - 2026-07-15
 
 ### Added

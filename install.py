@@ -8,7 +8,9 @@ import filecmp
 import json
 import os
 import re
+import shlex
 import shutil
+import subprocess
 import sys
 import tempfile
 from datetime import datetime, timezone
@@ -22,6 +24,14 @@ VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
 SHARED_AGENTS = {"universal", "agents", "codex", "cursor", "copilot"}
 KNOWN_AGENTS = SHARED_AGENTS | {"claude", "all"}
+GRAPHIFY_PLATFORMS = {
+    "universal": "agents",
+    "agents": "agents",
+    "codex": "codex",
+    "cursor": "cursor",
+    "copilot": "copilot",
+    "claude": "claude",
+}
 
 
 class InstallError(RuntimeError):
@@ -75,6 +85,98 @@ def resolve_roots(
         if root not in roots:
             roots.append(root)
     return roots
+
+
+def graphify_platforms(values: Iterable[str]) -> list[str]:
+    requested = list(values) or ["universal"]
+    unknown = sorted(set(requested) - KNOWN_AGENTS)
+    if unknown:
+        raise InstallError(f"unknown agent: {', '.join(unknown)}")
+    if "all" in requested:
+        return ["agents", "claude"]
+    shared = set(requested) & SHARED_AGENTS
+    use_generic_shared = bool(shared & {"universal", "agents"}) or len(shared) > 1
+    platforms: list[str] = []
+    for value in requested:
+        platform = (
+            "agents"
+            if value in SHARED_AGENTS and use_generic_shared
+            else GRAPHIFY_PLATFORMS[value]
+        )
+        if platform not in platforms:
+            platforms.append(platform)
+    return platforms
+
+
+def graphify_install_commands(
+    agents: Iterable[str], scope: str, executable: str = "graphify"
+) -> list[list[str]]:
+    commands: list[list[str]] = []
+    for platform in graphify_platforms(agents):
+        command = [executable, "install"]
+        if scope == "project":
+            command.append("--project")
+        command.extend(("--platform", platform))
+        commands.append(command)
+    return commands
+
+
+def _run(command: list[str], cwd: Path) -> None:
+    result = subprocess.run(command, cwd=cwd, check=False)
+    if result.returncode != 0:
+        raise InstallError(
+            f"command failed with exit code {result.returncode}: {shlex.join(command)}"
+        )
+
+
+def _find_graphify(uv: str, cwd: Path) -> Optional[str]:
+    executable = shutil.which("graphify")
+    if executable:
+        return executable
+    result = subprocess.run(
+        [uv, "tool", "dir", "--bin"],
+        cwd=cwd,
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    bin_dir = Path(result.stdout.strip())
+    for name in ("graphify.exe", "graphify"):
+        candidate = bin_dir / name
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
+def install_graphify(
+    agents: Iterable[str], scope: str, project_dir: Path, dry_run: bool
+) -> None:
+    cwd = project_dir.expanduser().resolve() if scope == "project" else REPO_ROOT
+    uv_command = ["uv", "tool", "install", "--upgrade", "graphifyy"]
+    if dry_run:
+        print(f"would run  {shlex.join(uv_command)}")
+        for command in graphify_install_commands(agents, scope):
+            location = f" (in {cwd})" if scope == "project" else ""
+            print(f"would run  {shlex.join(command)}{location}")
+        return
+
+    if scope == "project" and not cwd.is_dir():
+        raise InstallError(f"Graphify project directory does not exist: {cwd}")
+    uv = shutil.which("uv")
+    if not uv:
+        raise InstallError(
+            "--graphify requires uv; install it from https://docs.astral.sh/uv/ and rerun"
+        )
+    _run([uv, "tool", "install", "--upgrade", "graphifyy"], cwd)
+    graphify = _find_graphify(uv, cwd)
+    if not graphify:
+        raise InstallError(
+            "graphifyy was installed but the graphify executable could not be located"
+        )
+    for command in graphify_install_commands(agents, scope, graphify):
+        _run(command, cwd)
 
 
 def _same_file(left: Path, right: Path) -> bool:
@@ -192,6 +294,11 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--target", type=Path, help="override the resolved skills root")
     result.add_argument("--skill", action="append", default=[], metavar="NAME")
     result.add_argument("--mode", choices=("copy", "link"), default="copy")
+    result.add_argument(
+        "--graphify",
+        action="store_true",
+        help="install or upgrade graphifyy with uv and register its skill for selected agents",
+    )
     result.add_argument("--force", action="store_true")
     result.add_argument("--dry-run", action="store_true")
     result.add_argument("--list", action="store_true", help="list bundled skills and exit")
@@ -212,7 +319,24 @@ def main(argv: Optional[list[str]] = None) -> int:
             raise InstallError(f"unknown skill: {', '.join(unknown)}")
         if len(selected) != len(set(selected)):
             raise InstallError("a skill was selected more than once")
-        roots = resolve_roots(args.agent, args.scope, args.home, args.project_dir, args.target)
+        if args.graphify and args.target is not None:
+            raise InstallError(
+                "--graphify cannot be combined with --target; use --scope instead"
+            )
+        if args.graphify and not args.dry_run:
+            graphify_cwd = args.project_dir.expanduser().resolve()
+            if args.scope == "project" and not graphify_cwd.is_dir():
+                raise InstallError(
+                    f"Graphify project directory does not exist: {graphify_cwd}"
+                )
+            if not shutil.which("uv"):
+                raise InstallError(
+                    "--graphify requires uv; install it from "
+                    "https://docs.astral.sh/uv/ and rerun"
+                )
+        roots = resolve_roots(
+            args.agent, args.scope, args.home, args.project_dir, args.target
+        )
         for root in roots:
             for skill_name in selected:
                 print(
@@ -225,6 +349,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                     )
                 )
             write_receipt(root, selected, args.mode, args.dry_run)
+        if args.graphify:
+            install_graphify(args.agent, args.scope, args.project_dir, args.dry_run)
         return 0
     except InstallError as exc:
         print(f"error: {exc}", file=sys.stderr)
