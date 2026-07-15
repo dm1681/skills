@@ -118,7 +118,7 @@ cd skills
 To pin a machine to a release, check out its tag first:
 
 ```sh
-git checkout v0.3.0
+git checkout v1.0.0
 ./install.sh --agent all
 ```
 

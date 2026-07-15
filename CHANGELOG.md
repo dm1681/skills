@@ -5,7 +5,13 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
-## [0.3.0] - 2026-07-15
+## [1.0.0] - 2026-07-15
+
+### Changed
+
+- Running the installer without options in an interactive terminal now opens a
+  confirmation-based setup wizard. Non-terminal and option-based invocations
+  retain the existing non-interactive behavior.
 
 ### Added
 
