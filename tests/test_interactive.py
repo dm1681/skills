@@ -54,7 +54,7 @@ class InteractiveTests(unittest.TestCase):
                 output,
                 color=False,
                 unicode=False,
-                width=56,
+                width=32,
             )
             self.assertTrue(INSTALLER.run_wizard(args, [SKILL], console))
             self.assertEqual("user", args.scope)
@@ -64,7 +64,7 @@ class InteractiveTests(unittest.TestCase):
             self.assertTrue(args.graphify)
             self.assertIn("Skills setup", output.getvalue())
             self.assertIn("Review", output.getvalue())
-            self.assertLessEqual(max(map(len, output.getvalue().splitlines())), 56)
+            self.assertLessEqual(max(map(len, output.getvalue().splitlines())), 32)
 
     def test_project_wizard_uses_explicit_agent_and_link_mode(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -85,14 +85,14 @@ class InteractiveTests(unittest.TestCase):
             self.assertEqual("link", args.mode)
             self.assertFalse(args.graphify)
 
-    def test_status_output_wraps_long_paths_at_minimum_width(self) -> None:
+    def test_status_output_wraps_long_paths_in_very_narrow_terminal(self) -> None:
         output = TTYBuffer()
         console = INSTALLER.Console(
-            TTYBuffer(), output, color=False, unicode=False, width=40
+            TTYBuffer(), output, color=False, unicode=False, width=24
         )
         console.note("installed /a/very/long/path/that/cannot/fit/on/one/line")
         console.success("Setup complete at /another/extremely/long/destination")
-        self.assertLessEqual(max(map(len, output.getvalue().splitlines())), 40)
+        self.assertLessEqual(max(map(len, output.getvalue().splitlines())), 24)
 
     def test_cancel_returns_without_changes(self) -> None:
         args = INSTALLER.parser().parse_args([])

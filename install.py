@@ -77,9 +77,9 @@ class Console:
     @property
     def width(self) -> int:
         if self._width is not None:
-            return max(40, self._width)
+            return max(20, self._width)
         columns = shutil.get_terminal_size((88, 24)).columns
-        return max(40, min(columns, 100))
+        return max(20, min(columns, 100))
 
     def styled(self, text: str, *styles: str) -> str:
         if not self.color or not styles:
