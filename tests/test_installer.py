@@ -97,12 +97,15 @@ class InstallerTests(unittest.TestCase):
             self.assertIn("--skill '*'", result.stdout)
             self.assertIn("--agent codex --agent claude-code", result.stdout)
 
-    def test_matt_skills_rejects_custom_target(self) -> None:
+    def test_matt_skills_supports_custom_target_via_staging(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             result = self.run_installer(
-                "--target", directory, "--matt-skills", "--dry-run", expected=2
+                "--target", directory, "--matt-skills", "--dry-run"
             )
-            self.assertIn("cannot be combined with --target", result.stderr)
+            self.assertIn(
+                f"would copy all discovered Matt Pocock skills -> {Path(directory).resolve()}",
+                result.stdout,
+            )
 
     @unittest.skipIf(os.name == "nt", "Windows symlinks may require Developer Mode")
     def test_link_mode(self) -> None:

@@ -14,7 +14,8 @@ All notable changes to this repository are documented here. Versions follow
   orchestration depends on its implementation, TDD, and code-review workflows.
 - Scripted installs can opt in with `--matt-skills`; the installer uses the
   official cross-agent `skills` CLI, selects every skill including
-  `setup-matt-pocock-skills`, maps agent names, and supports dry-run previews.
+  `setup-matt-pocock-skills`, stages the result, safely copies it into the exact
+  selected agent roots, and supports dry-run previews.
 - The Olympus skill now declares and checks its Matt Pocock workflow
   prerequisites before mutating dispatch.
 

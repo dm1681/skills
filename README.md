@@ -122,7 +122,10 @@ npx --yes skills@latest add mattpocock/skills --skill '*' \
   --agent <selected-agent> --copy --yes
 ```
 
-User-scoped installs add `--global`. After installation, run
+The upstream CLI runs inside a temporary project. This installer then copies
+the discovered skills into the exact selected roots, including the preferred
+user-scoped `~/.agents/skills` directory, while applying the same conflict
+backup policy used for bundled skills. After installation, run
 `/setup-matt-pocock-skills` once inside the Olympus repository. See
 [`docs/matt-pocock-skills.md`](docs/matt-pocock-skills.md) for the agent mapping
 and operational boundary.

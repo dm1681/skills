@@ -38,10 +38,6 @@ GRAPHIFY_PLATFORMS = {
 MATT_SKILLS_SOURCE = "mattpocock/skills"
 MATT_SKILLS_AGENTS = {
     "universal": "codex",
-    "agents": "codex",
-    "codex": "codex",
-    "cursor": "cursor",
-    "copilot": "github-copilot",
     "claude": "claude-code",
 }
 
@@ -758,17 +754,18 @@ def install_graphify(
         _run(command, cwd)
 
 
-def matt_skills_agents(values: Iterable[str]) -> list[str]:
+def matt_skills_agents(agent_names: Iterable[str]) -> list[str]:
     """Map this installer's agent names to the skills CLI agent names."""
-    requested = list(values) or ["universal"]
+    requested = list(agent_names) or ["universal"]
     unknown = sorted(set(requested) - KNOWN_AGENTS)
     if unknown:
         raise InstallError(f"unknown agent: {', '.join(unknown)}")
     if "all" in requested:
         requested = ["universal", "claude"]
     mapped: list[str] = []
-    for value in requested:
-        agent = MATT_SKILLS_AGENTS[value]
+    for agent_name in requested:
+        canonical = "universal" if agent_name in SHARED_AGENTS else agent_name
+        agent = MATT_SKILLS_AGENTS[canonical]
         if agent not in mapped:
             mapped.append(agent)
     return mapped
@@ -776,10 +773,9 @@ def matt_skills_agents(values: Iterable[str]) -> list[str]:
 
 def matt_skills_install_command(
     agents: Iterable[str],
-    scope: str,
     executable: str = "npx",
 ) -> list[str]:
-    """Build the official cross-agent installation command for Matt's skills."""
+    """Build the official command used inside a temporary staging project."""
     command = [
         executable,
         "--yes",
@@ -791,36 +787,78 @@ def matt_skills_install_command(
     ]
     for agent in matt_skills_agents(agents):
         command.extend(("--agent", agent))
-    if scope == "user":
-        command.append("--global")
     command.extend(("--copy", "--yes"))
     return command
 
 
+def require_npx() -> str:
+    executable = shutil.which("npx")
+    if executable:
+        return executable
+    raise InstallError(
+        "--matt-skills requires npx (Node.js 18 or newer); install Node.js "
+        "from https://nodejs.org/ and rerun"
+    )
+
+
+def _staged_matt_root(staging_dir: Path, canonical_agent: str) -> Path:
+    if canonical_agent == "universal":
+        return staging_dir / ".agents" / "skills"
+    if canonical_agent == "claude":
+        return staging_dir / ".claude" / "skills"
+    raise InstallError(f"unsupported Matt skills staging agent: {canonical_agent}")
+
+
+def _matt_source_roots(
+    agents: Iterable[str], roots: list[Path], staging_dir: Path
+) -> list[Path]:
+    canonical_agents = expand_agents(agents)
+    if len(canonical_agents) == len(roots):
+        return [
+            _staged_matt_root(staging_dir, agent) for agent in canonical_agents
+        ]
+    if len(roots) == 1:
+        return [_staged_matt_root(staging_dir, canonical_agents[0])]
+    raise InstallError("Matt skills destinations do not match the selected agents")
+
+
 def install_matt_skills(
     agents: Iterable[str],
-    scope: str,
-    project_dir: Path,
+    roots: list[Path],
+    force: bool,
     dry_run: bool,
     emit: Callable[[str], None] = print,
+    executable: Optional[str] = None,
 ) -> None:
-    """Install the complete Matt Pocock skill set through the skills CLI."""
-    cwd = project_dir.expanduser().resolve() if scope == "project" else REPO_ROOT
-    command = matt_skills_install_command(agents, scope)
+    """Stage upstream skills, then copy them into the exact resolved roots."""
+    command = matt_skills_install_command(agents)
     if dry_run:
-        location = f" (in {cwd})" if scope == "project" else ""
-        emit(f"would run  {shlex.join(command)}{location}")
+        emit(f"would run  {shlex.join(command)}")
+        for root in roots:
+            emit(f"would copy all discovered Matt Pocock skills -> {root}")
         return
 
-    if scope == "project" and not cwd.is_dir():
-        raise InstallError(f"Matt skills project directory does not exist: {cwd}")
-    npx = shutil.which("npx")
-    if not npx:
-        raise InstallError(
-            "--matt-skills requires npx (Node.js 18 or newer); install Node.js "
-            "from https://nodejs.org/ and rerun"
-        )
-    _run(matt_skills_install_command(agents, scope, npx), cwd)
+    npx = executable or require_npx()
+    with tempfile.TemporaryDirectory(prefix="mattpocock-skills-") as directory:
+        staging_dir = Path(directory)
+        _run(matt_skills_install_command(agents, npx), staging_dir)
+        source_roots = _matt_source_roots(agents, roots, staging_dir)
+        for source_root, destination_root in zip(source_roots, roots):
+            sources = (
+                sorted(
+                    path
+                    for path in source_root.iterdir()
+                    if path.is_dir() and (path / "SKILL.md").is_file()
+                )
+                if source_root.is_dir()
+                else []
+            )
+            if not any(path.name == "setup-matt-pocock-skills" for path in sources):
+                raise InstallError(
+                    "upstream install did not include setup-matt-pocock-skills"
+                )
+            for source in sources:
+                emit(install_one(source, destination_root, "copy", force, False))
 
 
 def _same_file(left: Path, right: Path) -> bool:
@@ -1191,10 +1229,11 @@ def execute_install(
             )
         install_matt_skills(
             args.agent,
-            args.scope,
-            args.project_dir,
+            roots,
+            args.force,
             args.dry_run,
             console.note if console else print,
+            getattr(args, "matt_npx", None),
         )
     if args.graphify:
         if console:
@@ -1247,21 +1286,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             raise InstallError(
                 "--graphify cannot be combined with --target; use --scope instead"
             )
-        if args.matt_skills and args.target is not None:
-            raise InstallError(
-                "--matt-skills cannot be combined with --target; use --scope instead"
-            )
         if args.matt_skills and not args.dry_run:
-            matt_cwd = args.project_dir.expanduser().resolve()
-            if args.scope == "project" and not matt_cwd.is_dir():
-                raise InstallError(
-                    f"Matt skills project directory does not exist: {matt_cwd}"
-                )
-            if not shutil.which("npx"):
-                raise InstallError(
-                    "--matt-skills requires npx (Node.js 18 or newer); install "
-                    "Node.js from https://nodejs.org/ and rerun"
-                )
+            args.matt_npx = require_npx()
         if args.graphify and not args.dry_run:
             graphify_cwd = args.project_dir.expanduser().resolve()
             if args.scope == "project" and not graphify_cwd.is_dir():

@@ -31,53 +31,53 @@ class MattSkillsTests(unittest.TestCase):
                 "codex",
                 "--agent",
                 "claude-code",
-                "--global",
                 "--copy",
                 "--yes",
             ],
-            INSTALLER.matt_skills_install_command(["all"], "user"),
+            INSTALLER.matt_skills_install_command(["all"]),
         )
 
-    def test_agent_names_are_mapped_to_skills_cli(self) -> None:
+    def test_shared_agents_use_one_staging_target(self) -> None:
         self.assertEqual(
-            ["codex", "cursor", "github-copilot", "claude-code"],
+            ["codex"],
             INSTALLER.matt_skills_agents(
-                ["codex", "cursor", "copilot", "claude"]
+                ["codex", "cursor", "copilot"]
             ),
         )
-        self.assertEqual(["codex"], INSTALLER.matt_skills_agents(["universal"]))
+        self.assertEqual(
+            ["codex", "claude-code"],
+            INSTALLER.matt_skills_agents(["all"]),
+        )
 
-    def test_project_install_runs_in_selected_project(self) -> None:
+    def test_install_stages_then_copies_to_exact_resolved_root(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            project = Path(directory).resolve()
+            destination = Path(directory).resolve() / ".agents" / "skills"
+
+            def fake_run(command: list[str], cwd: Path) -> None:
+                source = cwd / ".agents" / "skills" / "setup-matt-pocock-skills"
+                source.mkdir(parents=True)
+                (source / "SKILL.md").write_text("---\nname: setup-matt-pocock-skills\n---\n")
+
             with (
                 mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/npx"),
-                mock.patch.object(INSTALLER, "_run") as run,
+                mock.patch.object(INSTALLER, "_run", side_effect=fake_run) as run,
             ):
                 INSTALLER.install_matt_skills(
-                    ["codex"], "project", project, dry_run=False
+                    ["universal"],
+                    [destination],
+                    force=False,
+                    dry_run=False,
+                    emit=lambda _: None,
                 )
-            run.assert_called_once_with(
-                [
-                    "/tools/npx",
-                    "--yes",
-                    "skills@latest",
-                    "add",
-                    "mattpocock/skills",
-                    "--skill",
-                    "*",
-                    "--agent",
-                    "codex",
-                    "--copy",
-                    "--yes",
-                ],
-                project,
+            self.assertEqual(1, run.call_count)
+            self.assertTrue(
+                (destination / "setup-matt-pocock-skills" / "SKILL.md").is_file()
             )
 
     def test_missing_npx_is_actionable(self) -> None:
         with mock.patch.object(INSTALLER.shutil, "which", return_value=None):
             with self.assertRaisesRegex(INSTALLER.InstallError, "requires npx"):
-                INSTALLER.install_matt_skills([], "user", ROOT, dry_run=False)
+                INSTALLER.install_matt_skills([], [ROOT], force=False, dry_run=False)
 
     def test_dry_run_prints_exact_command_without_requiring_npx(self) -> None:
         output = io.StringIO()
@@ -89,10 +89,15 @@ class MattSkillsTests(unittest.TestCase):
             ),
             contextlib.redirect_stdout(output),
         ):
-            INSTALLER.install_matt_skills(["all"], "user", ROOT, dry_run=True)
+            INSTALLER.install_matt_skills(
+                ["all"], [ROOT / ".agents" / "skills", ROOT / ".claude" / "skills"],
+                force=False, dry_run=True
+            )
         self.assertEqual(
             "would run  npx --yes skills@latest add mattpocock/skills "
-            "--skill '*' --agent codex --agent claude-code --global --copy --yes\n",
+            "--skill '*' --agent codex --agent claude-code --copy --yes\n"
+            f"would copy all discovered Matt Pocock skills -> {ROOT / '.agents' / 'skills'}\n"
+            f"would copy all discovered Matt Pocock skills -> {ROOT / '.claude' / 'skills'}\n",
             output.getvalue(),
         )
 

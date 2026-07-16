@@ -16,15 +16,18 @@ Scripted installs remain explicit:
 ```
 
 The installer invokes the upstream `skills` CLI with all skills selected,
-copies rather than links the result, and suppresses its nested prompts. It adds
-`--global` for user scope and runs from `--project-dir` for project scope.
+copies rather than links the result, and suppresses its nested prompts. The CLI
+runs in a disposable staging project; this installer then copies every
+discovered skill into the same resolved roots used for the bundled Olympus
+skill. That preserves `~/.agents/skills` for shared user installs and applies
+the installer's existing backup-before-replace policy.
 
 | This installer | Upstream `skills` CLI |
 | --- | --- |
-| `universal` / `agents` | `codex` (seeds the shared `.agents/skills` store) |
-| `codex` | `codex` |
-| `cursor` | `cursor` |
-| `copilot` | `github-copilot` |
+| `universal` / `agents` | `codex` staging, then selected `.agents/skills` root |
+| `codex` | `codex` staging, then selected `.agents/skills` root |
+| `cursor` | `codex` staging, then selected `.agents/skills` root |
+| `copilot` | `codex` staging, then selected `.agents/skills` root |
 | `claude` | `claude-code` |
 | `all` | `codex` and `claude-code` |
 
@@ -36,9 +39,10 @@ npx --yes skills@latest add mattpocock/skills --skill '*' \
 ```
 
 Node.js 18 or newer is required because the upstream installer is distributed
-through `npx`. `--dry-run` prints the exact command without requiring Node.js or
-network access. A custom `--target` is rejected because the upstream CLI owns
-its destination resolution; use user or project scope instead.
+through `npx`. `--dry-run` prints the exact staging command and final
+destinations without requiring Node.js or network access. Custom `--target`
+paths are supported because destination resolution remains under this
+installer's control.
 
 ## One-time repository setup
 
