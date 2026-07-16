@@ -25,9 +25,10 @@ For each requested exact head:
 4. Enforce the agentic-documentation contract for changed public contracts and
    non-obvious invariants. Never author documentation or mutate the branch;
    assign material documentation fixes to the Worker.
-5. Enforce `graphify-lifecycle.md`: verify the Graphify disposition and block
-   CLEAN when a required public refresh, tracked artifact, health/privacy
-   evidence, or aggregate test is missing or stale at the exact head.
+5. Enforce `graphify-lifecycle.md`: verify structural and presentation
+   dispositions, fast-path eligibility, hook-suppression evidence, and the one
+   final public refresh. Block CLEAN when the structural graph, required full
+   output, health/privacy evidence, or aggregate test is missing or stale.
 6. For each new substantive external PR comment or review item, reply in its
    original thread with AGREE or DISAGREE, concise evidence-based reasoning,
    and Worker SENT with a finding ID or NOT SENT with a reason. Promote only

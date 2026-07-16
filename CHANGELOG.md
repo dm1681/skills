@@ -5,6 +5,29 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+## [6.5.0] - 2026-07-16
+
+### Added
+
+- Added separate Graphify structural and presentation freshness dispositions.
+  Eligible code-only PRs use `graphify update . --no-cluster`; semantic and
+  material architecture changes continue to require the full public refresh.
+- Added safe worktree cache seeding rules keyed to the same repository, exact
+  starting SHA, and Graphify version. Mutable graph and presentation outputs
+  are never shared across branches.
+
+### Changed
+
+- The Worker suppresses Graphify's post-commit hook for intermediate and
+  generated-artifact commits, then runs exactly one synchronous final refresh
+  per proposed head instead of duplicating background and explicit rebuilds.
+- Deferred report, label, and HTML regeneration is truthful and non-blocking
+  only when no acceptance or PR evidence depends on it. Autonomous queues
+  close accumulated presentation work in one reviewed maintenance PR.
+- `GRAPHIFY_MAX_WORKERS` remains an optional per-command optimization that
+  requires repository-local timing and stability evidence; no global override
+  is forced, including on Windows.
+
 ## [6.4.0] - 2026-07-16
 
 ### Added

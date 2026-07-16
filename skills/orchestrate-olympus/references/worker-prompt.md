@@ -38,10 +38,13 @@ public installation/runbook commands when materially affected. Update generated
 artifacts only through supported public tooling.
 
 Apply `graphify-lifecycle.md`. When tracked `graphify-out/` exists and indexed
-files changed, finish ordinary tests, run the public incremental Graphify
-refresh, verify health/privacy/freshness, run repository Graphify aggregate
-tests, and include the artifacts before the final pre-push review and push.
-Record `GRAPHIFY_NOT_REQUIRED` with evidence when the gate does not apply.
+files changed, suppress duplicate commit-hook rebuilds, finish ordinary tests,
+then run exactly one final public Graphify refresh. Use
+`graphify update . --no-cluster` only for eligible code-only work; otherwise
+run the full public incremental path. Verify health, privacy, structural
+freshness, aggregate tests, and whether presentation artifacts are CURRENT or
+DEFERRED before the final pre-push review. Record `GRAPHIFY_NOT_REQUIRED` with
+evidence when the gate does not apply.
 
 Author or update precise, explicit, concise documentation comments and durable
 docs required by the canonical brief and `agentic-documentation.md`. Remove
@@ -80,8 +83,9 @@ instruction. Run required verification, push the new exact head, update the
 shared disposition, and notify Reviewer {REVIEWER_TASK_ID}. Never reply to the
 external commenter, merge, or resolve Reviewer-owned threads.
 
-If the repair changes indexed files after the last Graphify refresh, repeat the
-Graphify lifecycle before pushing.
+If the repair changes indexed files after the last Graphify refresh, run one
+new final Graphify lifecycle before pushing; do not allow the commit hook and
+explicit command to rebuild the same head twice.
 ```
 
 ## Signature

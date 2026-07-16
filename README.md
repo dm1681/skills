@@ -40,11 +40,13 @@ It is not assigned or marked `ready-for-agent`, and it cannot widen or block
 the current PR.
 
 When tracked `graphify-out/` exists and an Olympus lane changes indexed files,
-the Worker runs the public incremental Graphify refresh after ordinary tests
-and before the final push. The Reviewer verifies freshness, graph health,
-privacy, and tracked output at that exact head. Post-merge Graphify handling is
-verification-only; unexpected final-`main` drift uses a separate maintenance
-lane rather than a direct write to `main`.
+the Worker suppresses duplicate commit-hook rebuilds and runs one final public
+Graphify refresh after ordinary tests. Eligible code-only work uses the fast
+structural path without clustering; semantic or material architecture changes
+still refresh every presentation artifact. The Reviewer verifies structural
+freshness and requires any deferred report/HTML views to be disclosed. An
+autonomous queue closes accumulated presentation work in one reviewed
+maintenance PR, never by writing directly to `main`.
 
 Olympus also treats documentation as an agent navigation layer. Planners
 identify material documentation surfaces, Workers author concise contract
@@ -203,7 +205,7 @@ uv sync
 To pin a machine to a release, check out its tag first:
 
 ```sh
-git checkout v6.4.0
+git checkout v6.5.0
 ./install.sh --agent all
 ```
 

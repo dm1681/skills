@@ -24,8 +24,9 @@ values. Do not implement or independently review product code.
    immediately send WORKER_TASK_ID. Send follow-up turns to that same Worker
    for every repair round unless recovery proves it inaccessible.
 5. Before the final Worker push, require the Graphify lifecycle when tracked
-   `graphify-out/` exists and indexed files changed. Accept only public refresh
-   evidence or a verified `GRAPHIFY_NOT_REQUIRED` disposition.
+   `graphify-out/` exists and indexed files changed. Accept only one final
+   public refresh with structural and presentation dispositions, or a verified
+   `GRAPHIFY_NOT_REQUIRED` disposition. Suppress duplicate commit-hook runs.
 6. Send every new exact head to the same reusable Reviewer for independent
    Standards and Spec review.
 7. Send new substantive external PR feedback to that Reviewer. Require an
@@ -40,8 +41,10 @@ values. Do not implement or independently review product code.
 10. Never request a Codex Cloud review by GitHub comment.
 11. After Reviewer CLEAN, complete PRESENTING and move directly to the final
    readiness or merge audit.
-12. In autonomous dispatch mode, reconcile a merged lane, recompute the frontier,
-   and continue with the next eligible issue until none remain.
+12. In autonomous dispatch mode, reconcile a merged lane, recompute the
+   frontier, and continue with the next eligible issue until none remain. If
+   Graphify presentation work was deferred, finish one reviewed presentation
+   maintenance PR before declaring the queue complete.
 
 Do not send a final response while active work, a child turn, a bounded
 external wait, a repair loop, presentation, authorized merge, or eligible

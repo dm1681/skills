@@ -134,9 +134,10 @@ Live recovery supersedes stale checkpoint values.
 - Let the Reviewer propose durable follow-up capture for `AGREE` plus
   `Worker: NOT SENT`; let only the parent Orchestrator deduplicate and create
   the mapped `needs-triage` issue.
-- When tracked `graphify-out/` exists and indexed files change, require the
-  Worker to refresh Graphify through its public incremental command before the
-  final push and exact-head Reviewer handoff.
+- When tracked `graphify-out/` exists and indexed files change, require one
+  final public Graphify refresh before the exact-head Reviewer handoff. Use the
+  structural fast path for eligible code-only work, disclose deferred
+  presentation artifacts, and suppress duplicate commit-hook rebuilds.
 
 ## Enforce exact-head completion
 

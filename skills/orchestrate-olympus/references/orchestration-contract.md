@@ -75,8 +75,9 @@ presentation, an authorized merge, or an eligible autonomous queue remains.
 When `graphify-out/` exists, use `$graphify` first for architecture,
 file-relationship, or project-content questions. Read
 `graphify-lifecycle.md` when a lane may change indexed files. Treat tracked
-output as derived evidence and refresh it only through supported public
-tooling.
+output as derived evidence, distinguish structural from presentation
+freshness, suppress duplicate commit-hook rebuilds, and refresh only through
+supported public tooling.
 
 Before every mutation:
 
@@ -251,8 +252,9 @@ Readiness requires:
 - explicit shared disposition for every blocking finding;
 - required checks successful, including new repository-owned suites in any documented aggregate;
 - documented setup/runbook commands verified at their real public seam when materially affected;
-- a verified Graphify disposition and, when required, refreshed tracked
-  artifacts from the current exact head;
+- verified Graphify structural and presentation dispositions and, when
+  required, a refreshed structural graph plus every required full artifact at
+  the current exact head;
 - no unresolved blocking conversation or review state;
 - every substantive external PR feedback item through the readiness audit has a
   published Reviewer AGREE or DISAGREE assessment and Worker dispatch
@@ -303,10 +305,17 @@ safely preserved.
 ## 9. Post-merge reconciliation
 
 After merge, verify the PR merged, the issue closed when applicable, and `main`
-advanced to the expected commit. Verify tracked Graphify artifacts or other
-derived evidence against the reviewed head. Never regenerate or commit
-directly on `main`; use a separately authorized maintenance lane if unexpected
-final-main drift remains.
+advanced to the expected commit. Verify tracked Graphify structural artifacts,
+the disclosed presentation state, and other derived evidence against the
+reviewed head. Never regenerate or commit directly on `main`; use a separate
+maintenance lane if unexpected final-main drift remains.
+
+In autonomous dispatch mode, accumulated Graphify presentation deferrals
+authorize one batch-close maintenance lane after the eligible issue frontier
+becomes empty. Create a branch and PR from current `main`, regenerate clustered
+views through the public command, obtain exact-head Reviewer CLEAN, and apply
+the existing merge authority. This is derived-artifact housekeeping only and
+must not change product code or bypass the one-lane WIP limit.
 
 Archive completed one-shot tasks, update the checkpoint, recompute the frontier
 according to dispatch mode, and keep owner-paused lanes paused. In autonomous
