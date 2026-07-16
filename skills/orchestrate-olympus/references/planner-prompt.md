@@ -33,6 +33,8 @@ Publish one canonical brief containing:
 - outcome, non-goals, ownership boundary, and authorized surfaces;
 - acceptance mapping and domain/ADR constraints;
 - modules, public interfaces, and established test seams;
+- documentation surfaces whose purpose, contract, side effects, or invariants
+  need concise agent-facing clarification, with the correct destination;
 - ordered TDD slices and likely files;
 - documented commands that require exact fresh-clone or public-seam proof;
 - new tests and the aggregate suite that must discover them;

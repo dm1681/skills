@@ -26,6 +26,11 @@ exact-head CLEAN signal and a stable presentation audit, Olympus moves directly
 to the readiness or authorized merge audit; it does not summon Codex Cloud by
 GitHub comment.
 
+Olympus also treats documentation as an agent navigation layer. Planners
+identify material documentation surfaces, Workers author concise contract
+comments and durable docs, and the Reviewer blocks only missing or misleading
+documentation that creates a material risk of agent misuse.
+
 ## Install
 
 Run the installer without options to open the guided setup. It walks through
@@ -178,7 +183,7 @@ uv sync
 To pin a machine to a release, check out its tag first:
 
 ```sh
-git checkout v6.0.0
+git checkout v6.1.0
 ./install.sh --agent all
 ```
 

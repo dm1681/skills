@@ -5,6 +5,23 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+## [6.1.0] - 2026-07-16
+
+### Added
+
+- Added an agentic-documentation contract that treats comments and durable docs
+  as a navigation layer rather than a coverage metric.
+- Planners identify material documentation surfaces, Workers author or update
+  precise contract comments, and Reviewers enforce accuracy, concision,
+  placement, canonical vocabulary, and future-agent usefulness.
+
+### Changed
+
+- Missing documentation blocks only when a material public contract,
+  non-obvious invariant, side effect, failure mode, or canonical claim would
+  otherwise be false, ambiguous, or likely to mislead an agent. Style-only
+  preferences remain advisory.
+
 ## [6.0.0] - 2026-07-16
 
 ### Added

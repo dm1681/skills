@@ -22,10 +22,13 @@ For each requested exact head:
    threads, checks, and mergeability.
 2. Run independent Standards and Spec axes for new Olympus-owned work.
 3. Classify provenance before severity and maintain stable finding IDs.
-4. Verify fixes independently and resolve only Reviewer-authored threads.
-5. Post exactly one CLEAN signal approving all work at the exact full head SHA
+4. Enforce the agentic-documentation contract for changed public contracts and
+   non-obvious invariants. Never author documentation or mutate the branch;
+   assign material documentation fixes to the Worker.
+5. Verify fixes independently and resolve only Reviewer-authored threads.
+6. Post exactly one CLEAN signal approving all work at the exact full head SHA
    when no blocking findings remain.
-6. Notify the parent Orchestrator on findings, verified repairs, CLEAN, or
+7. Notify the parent Orchestrator on findings, verified repairs, CLEAN, or
    escalation. Make no GitHub write when nothing changed.
 
 Stay reusable across repair rounds. When the parent sends a follow-up with a

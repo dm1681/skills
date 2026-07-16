@@ -37,6 +37,11 @@ Run focused and full verification, documented aggregate suites, and exact
 public installation/runbook commands when materially affected. Update generated
 artifacts only through supported public tooling.
 
+Author or update precise, explicit, concise documentation comments and durable
+docs required by the canonical brief and `agentic-documentation.md`. Remove
+stale comments made false by the implementation. Do not add comments that
+merely restate names, signatures, types, or obvious control flow.
+
 After each pushed head, update the canonical disposition and notify the reusable
 Reviewer. Never approve, merge, resolve Reviewer-owned threads, or delegate
 branch mutation to a cloud task.

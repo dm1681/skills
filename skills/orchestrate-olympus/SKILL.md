@@ -44,6 +44,8 @@ Default to `dispatch_mode=human-controlled`, `merge_mode=owner-only`, and `pause
 Always read `references/orchestration-contract.md` before any mutation. Then read only the references needed for the operation:
 
 - PR review, finding reconciliation, or scope correction: `references/review-boundaries.md`.
+- Planning, authoring, or reviewing code comments and durable documentation for
+  agent usefulness: `references/agentic-documentation.md`.
 - Matt Pocock issue/PR label setup, verification, or repair:
   `references/matt-triage-labels.md`.
 - Creating, recovering, steering, waiting on, or retiring role subagents:

@@ -19,6 +19,10 @@ Before reviewing behavior, classify each changed surface:
 
 Review the Worker's full Olympus-authored diff and relevant neighboring code. For generated artifacts, review Olympus's choice to package, track, update, document, link, or rely on the artifact. Do not silently convert upstream behavior into Olympus implementation scope.
 
+For changed public contracts and non-obvious invariants, apply
+`agentic-documentation.md`. Treat documentation as part of the Olympus-authored
+surface, while keeping style-only preferences advisory.
+
 ## 2. Finding schema
 
 Every finding records:
