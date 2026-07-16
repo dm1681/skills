@@ -8,7 +8,7 @@ collection.
 1. Update `VERSION` to `MAJOR.MINOR.PATCH` without a `v` prefix.
 2. Move the relevant `CHANGELOG.md` entries from `Unreleased` into a heading
    named `## [MAJOR.MINOR.PATCH] - YYYY-MM-DD`.
-3. Run the repository validator and tests.
+3. Run `uv sync --locked`, the repository validator, and tests through `uv run`.
 4. Merge the version change to `main`.
 
 ## Publish

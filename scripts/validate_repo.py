@@ -37,6 +37,19 @@ def validate() -> list[str]:
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     if f"## [{version}]" not in changelog:
         errors.append(f"CHANGELOG.md has no heading for {version}")
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    project_version = re.search(
+        r'^version = "([^"]+)"$', pyproject, re.MULTILINE
+    )
+    if project_version is None:
+        errors.append("pyproject.toml has no project version")
+    elif project_version.group(1) != version:
+        errors.append("pyproject.toml project version must match VERSION")
+    if not (ROOT / "uv.lock").is_file():
+        errors.append("uv.lock is missing")
+    python_version = (ROOT / ".python-version").read_text(encoding="utf-8").strip()
+    if not re.fullmatch(r"3\.\d+", python_version):
+        errors.append(".python-version must contain a Python 3 minor version")
 
     skills_root = ROOT / "skills"
     skills = sorted(path for path in skills_root.iterdir() if path.is_dir())

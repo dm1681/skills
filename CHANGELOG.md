@@ -5,6 +5,17 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-07-15
+
+### Changed
+
+- Converted the collection into a locked uv project with Python 3.12 as the
+  development and launcher default.
+- POSIX and PowerShell launchers now prefer `uv` and let it provision Python,
+  while retaining direct system-Python fallbacks.
+- CI and releases now sync and test the locked uv environment on macOS, Linux,
+  and Windows; release archives include all uv project metadata.
+
 ## [1.0.0] - 2026-07-15
 
 ### Changed

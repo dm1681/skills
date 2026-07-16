@@ -25,13 +25,14 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           python-version: "3.12"
       - name: Validate and test
         run: |
-          python scripts/validate_repo.py
-          python -m unittest discover -s tests -v
+          uv sync --locked
+          uv run --frozen python scripts/validate_repo.py
+          uv run --frozen python -m unittest discover -s tests -v
       - name: Resolve release version
         id: version
         shell: bash
@@ -63,7 +64,7 @@ jobs:
           set -euo pipefail
           root="skills-${VERSION}"
           mkdir -p "dist/staging/${root}"
-          cp -R skills docs install.py install.sh install.ps1 VERSION CHANGELOG.md README.md RELEASING.md "dist/staging/${root}/"
+          cp -R skills docs install.py install.sh install.ps1 pyproject.toml uv.lock .python-version VERSION CHANGELOG.md README.md RELEASING.md "dist/staging/${root}/"
           tar -C dist/staging -czf "dist/${root}.tar.gz" "$root"
           (cd dist/staging && zip -qr "../${root}.zip" "$root")
           (cd dist && sha256sum "${root}.tar.gz" "${root}.zip" > SHA256SUMS)

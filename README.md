@@ -26,6 +26,11 @@ On Windows PowerShell:
 .\install.ps1
 ```
 
+Both launchers prefer `uv`, which automatically uses or provisions Python 3.12
+and syncs the locked environment. If `uv` is unavailable, they fall back to an
+installed Python 3.9 or newer. A separate system Python installation is not
+required when `uv` is present.
+
 The interface adapts to narrow terminals and automatically uses plain text when
 color or Unicode is unavailable. Its recommended default is a user-scoped copy
 in `~/.agents/skills`, the shared location supported by Codex, Cursor, and
@@ -82,10 +87,10 @@ Examples:
 ./install.sh --agent codex --scope project --project-dir /path/to/repo --graphify
 ```
 
-Python 3.9 or newer is required. Existing differing installations are never
-overwritten silently. With `--force`, the old directory is moved into an
-adjacent `.skills-backups/` directory (outside the scanned skills root) before
-the new version is installed.
+`uv` is recommended; Python 3.9 or newer can be used as a fallback. Existing
+differing installations are never overwritten silently. With `--force`, the
+old directory is moved into an adjacent `.skills-backups/` directory (outside
+the scanned skills root) before the new version is installed.
 
 ### Optional Graphify installation
 
@@ -112,13 +117,14 @@ For this private repository, authenticate GitHub CLI and install from a clone:
 gh auth login
 gh repo clone dm1681/skills
 cd skills
+uv sync
 ./install.sh --agent all
 ```
 
 To pin a machine to a release, check out its tag first:
 
 ```sh
-git checkout v1.0.0
+git checkout v2.0.0
 ./install.sh --agent all
 ```
 
@@ -131,8 +137,9 @@ primary documentation links.
 ## Develop and validate
 
 ```sh
-python3 scripts/validate_repo.py
-python3 -m unittest discover -s tests -v
+uv sync --locked
+uv run python scripts/validate_repo.py
+uv run python -m unittest discover -s tests -v
 ```
 
 See [`RELEASING.md`](RELEASING.md) for the version and release process.
