@@ -5,6 +5,24 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+## [6.3.0] - 2026-07-16
+
+### Added
+
+- Added an explicit Graphify lifecycle spanning Planner impact assessment,
+  Worker pre-review refresh, Reviewer generated-artifact validation, final-base
+  drift checks, and post-merge verification.
+
+### Changed
+
+- When tracked `graphify-out/` exists and indexed files change, the Worker must
+  run the public incremental Graphify command after ordinary tests and before
+  the final push. Required refresh failures or unsafe, stale, or corrupt output
+  block Reviewer handoff and CLEAN.
+- Post-merge Graphify handling is verification-only. Unexpected final-`main`
+  drift requires a separately authorized maintenance lane rather than a
+  direct regeneration or commit on `main`.
+
 ## [6.2.0] - 2026-07-16
 
 ### Added

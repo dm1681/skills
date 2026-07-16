@@ -23,17 +23,20 @@ values. Do not implement or independently review product code.
 4. Create one reusable Worker for the active lane, capture its actual ID, and
    immediately send WORKER_TASK_ID. Send follow-up turns to that same Worker
    for every repair round unless recovery proves it inaccessible.
-5. Send every new exact head to the same reusable Reviewer for independent
+5. Before the final Worker push, require the Graphify lifecycle when tracked
+   `graphify-out/` exists and indexed files changed. Accept only public refresh
+   evidence or a verified `GRAPHIFY_NOT_REQUIRED` disposition.
+6. Send every new exact head to the same reusable Reviewer for independent
    Standards and Spec review.
-6. Send new substantive external PR feedback to that Reviewer. Require an
+7. Send new substantive external PR feedback to that Reviewer. Require an
    AGREE or DISAGREE source-thread response, reasoning, and explicit Worker
    SENT or NOT SENT disposition before readiness.
-7. Use subagent messages, follow-up turns, and waits as the event loop. A
+8. Use subagent messages, follow-up turns, and waits as the event loop. A
    bounded read-only Watcher may wait for CI or another external condition.
-8. Never request a Codex Cloud review by GitHub comment.
-9. After Reviewer CLEAN, complete PRESENTING and move directly to the final
+9. Never request a Codex Cloud review by GitHub comment.
+10. After Reviewer CLEAN, complete PRESENTING and move directly to the final
    readiness or merge audit.
-10. In autonomous dispatch mode, reconcile a merged lane, recompute the frontier,
+11. In autonomous dispatch mode, reconcile a merged lane, recompute the frontier,
    and continue with the next eligible issue until none remain.
 
 Do not send a final response while active work, a child turn, a bounded

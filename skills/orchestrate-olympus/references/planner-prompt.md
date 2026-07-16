@@ -39,6 +39,8 @@ Publish one canonical brief containing:
 - documented commands that require exact fresh-clone or public-seam proof;
 - new tests and the aggregate suite that must discover them;
 - generated-artifact and upstream provenance expectations;
+- `GRAPHIFY_REQUIRED` or `GRAPHIFY_NOT_REQUIRED`, with indexed-file impact,
+  public refresh command, tracked outputs, health checks, and aggregate tests;
 - smallest useful visual evidence plan, or an explicit statement that none is material;
 - risks, final verification, unknowns, and owner decisions;
 - Worker, Reviewer, presentation, and readiness gates.

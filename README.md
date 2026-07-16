@@ -32,6 +32,13 @@ concise reasoning, and whether the item was **SENT** to the Worker as a tracked
 finding. The Worker acts only on promoted findings and does not reply directly
 to external commenters.
 
+When tracked `graphify-out/` exists and an Olympus lane changes indexed files,
+the Worker runs the public incremental Graphify refresh after ordinary tests
+and before the final push. The Reviewer verifies freshness, graph health,
+privacy, and tracked output at that exact head. Post-merge Graphify handling is
+verification-only; unexpected final-`main` drift uses a separate maintenance
+lane rather than a direct write to `main`.
+
 Olympus also treats documentation as an agent navigation layer. Planners
 identify material documentation surfaces, Workers author concise contract
 comments and durable docs, and the Reviewer blocks only missing or misleading
@@ -189,7 +196,7 @@ uv sync
 To pin a machine to a release, check out its tag first:
 
 ```sh
-git checkout v6.2.0
+git checkout v6.3.0
 ./install.sh --agent all
 ```
 

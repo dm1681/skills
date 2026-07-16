@@ -72,7 +72,11 @@ The parent must remain resident and must not send a final response while
 active work, an actionable child turn, a bounded external wait, a repair loop,
 presentation, an authorized merge, or an eligible autonomous queue remains.
 
-When `graphify-out/` exists, use `$graphify` first for architecture, file-relationship, or project-content questions. Treat its tracked output as derived evidence: refresh it only through supported public tooling and apply the generated-artifact review boundary.
+When `graphify-out/` exists, use `$graphify` first for architecture,
+file-relationship, or project-content questions. Read
+`graphify-lifecycle.md` when a lane may change indexed files. Treat tracked
+output as derived evidence and refresh it only through supported public
+tooling.
 
 Before every mutation:
 
@@ -245,6 +249,8 @@ Readiness requires:
 - explicit shared disposition for every blocking finding;
 - required checks successful, including new repository-owned suites in any documented aggregate;
 - documented setup/runbook commands verified at their real public seam when materially affected;
+- a verified Graphify disposition and, when required, refreshed tracked
+  artifacts from the current exact head;
 - no unresolved blocking conversation or review state;
 - every substantive external PR feedback item through the readiness audit has a
   published Reviewer AGREE or DISAGREE assessment and Worker dispatch
@@ -287,7 +293,11 @@ safely preserved.
 
 ## 9. Post-merge reconciliation
 
-After merge, verify the PR merged, the issue closed when applicable, and `main` advanced to the expected commit. Inspect tracked Graphify artifacts or other derived evidence for final-main drift; refresh through supported public tooling in a separately authorized change if needed rather than silently writing to `main`.
+After merge, verify the PR merged, the issue closed when applicable, and `main`
+advanced to the expected commit. Verify tracked Graphify artifacts or other
+derived evidence against the reviewed head. Never regenerate or commit
+directly on `main`; use a separately authorized maintenance lane if unexpected
+final-main drift remains.
 
 Archive completed one-shot tasks, update the checkpoint, recompute the frontier
 according to dispatch mode, and keep owner-paused lanes paused. In autonomous
