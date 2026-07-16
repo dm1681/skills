@@ -14,7 +14,9 @@ self-contained under [`skills/`](skills/).
 
 Run the installer without options to open the guided setup. It walks through
 scope, coding agents, skills, copy or link mode, optional Graphify setup, and a
-final review before changing anything:
+final review before changing anything. It also offers to install the Matt
+Pocock engineering skills required by Olympus, with **Yes** as the recommended
+default:
 
 ```sh
 ./install.sh
@@ -60,6 +62,8 @@ Useful options:
 --project-dir PATH
 --skill NAME                 repeatable; defaults to all skills
 --mode copy|link             copy is the cross-platform default
+--matt-skills                install all Matt Pocock skills required by Olympus
+--no-matt-skills             preset the interactive prerequisite choice to No
 --graphify                   install/upgrade Graphify and register its skill
 --interactive                force the guided setup wizard
 --non-interactive            never prompt; useful for scripts and CI
@@ -88,6 +92,9 @@ Examples:
 # Install this collection plus Graphify for shared agents and Claude Code.
 ./install.sh --agent all --graphify
 
+# Non-interactively install Olympus and all required Matt Pocock skills.
+./install.sh --agent all --matt-skills
+
 # Install both into one project's Codex skill directory.
 ./install.sh --agent codex --scope project --project-dir /path/to/repo --graphify
 ```
@@ -96,6 +103,29 @@ Examples:
 differing installations are never overwritten silently. With `--force`, the
 old directory is moved into an adjacent `.skills-backups/` directory (outside
 the scanned skills root) before the new version is installed.
+
+### Required Olympus engineering skills
+
+Olympus orchestration uses Matt Pocock's `implement`, `tdd`, and `code-review`
+workflows. The guided installer therefore asks to install the complete
+[`mattpocock/skills`](https://github.com/mattpocock/skills) collection and
+defaults to **Yes**. Declining is allowed so the installer never forces a
+third-party download, but Olympus orchestration remains incomplete until these
+skills are installed.
+
+For scripts and CI, opt in explicitly with `--matt-skills`. This requires
+Node.js 18 or newer and runs the upstream cross-agent installer non-
+interactively:
+
+```sh
+npx --yes skills@latest add mattpocock/skills --skill '*' \
+  --agent <selected-agent> --copy --yes
+```
+
+User-scoped installs add `--global`. After installation, run
+`/setup-matt-pocock-skills` once inside the Olympus repository. See
+[`docs/matt-pocock-skills.md`](docs/matt-pocock-skills.md) for the agent mapping
+and operational boundary.
 
 ### Optional Graphify installation
 
@@ -129,7 +159,7 @@ uv sync
 To pin a machine to a release, check out its tag first:
 
 ```sh
-git checkout v3.0.1
+git checkout v4.0.0
 ./install.sh --agent all
 ```
 

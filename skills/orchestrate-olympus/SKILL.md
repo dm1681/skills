@@ -7,6 +7,19 @@ description: Create, resume, pause, recover, inspect, or operate the Olympus mul
 
 Operate one visible, recoverable delivery control plane. Keep inference in Codex tasks, use GitHub as the durable audit ledger, and keep mutable heartbeat state smaller than the stable policy in this skill.
 
+## Verify prerequisites
+
+This orchestration contract depends on the complete
+[`mattpocock/skills`](https://github.com/mattpocock/skills) engineering set. In
+particular, Worker and Reviewer flows require `implement`, `tdd`, and
+`code-review`. `setup-matt-pocock-skills` must also have been run once in the
+Olympus repository so its issue tracker and project conventions are configured.
+
+Before starting or resuming a mutating lane, verify those skills are available
+to the active coding agents. If any are missing, pause before dispatch and use
+this collection's interactive installer or its `--matt-skills` option. Do not
+silently substitute an ad hoc implementation or review process.
+
 ## Route the operation
 
 Classify the request before acting:

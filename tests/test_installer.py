@@ -88,6 +88,22 @@ class InstallerTests(unittest.TestCase):
             )
             self.assertIn("cannot be combined with --target", result.stderr)
 
+    def test_matt_skills_dry_run_shows_external_command(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.run_installer(
+                "--home", directory, "--agent", "all", "--matt-skills", "--dry-run"
+            )
+            self.assertIn("npx --yes skills@latest add mattpocock/skills", result.stdout)
+            self.assertIn("--skill '*'", result.stdout)
+            self.assertIn("--agent codex --agent claude-code", result.stdout)
+
+    def test_matt_skills_rejects_custom_target(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.run_installer(
+                "--target", directory, "--matt-skills", "--dry-run", expected=2
+            )
+            self.assertIn("cannot be combined with --target", result.stderr)
+
     @unittest.skipIf(os.name == "nt", "Windows symlinks may require Developer Mode")
     def test_link_mode(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

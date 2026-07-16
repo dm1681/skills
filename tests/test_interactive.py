@@ -118,6 +118,7 @@ class InteractiveTests(unittest.TestCase):
                     "enter",  # shared agents
                     "down",
                     "enter",  # link mode
+                    "enter",  # Matt Pocock skills yes
                     "up",
                     "enter",  # Graphify yes
                     "enter",  # apply
@@ -127,6 +128,7 @@ class InteractiveTests(unittest.TestCase):
             self.assertEqual("user", args.scope)
             self.assertEqual(["universal"], args.agent)
             self.assertEqual("link", args.mode)
+            self.assertTrue(args.matt_skills)
             self.assertTrue(args.graphify)
 
     def test_windows_extended_arrow_codes_are_normalized(self) -> None:
@@ -164,10 +166,10 @@ class InteractiveTests(unittest.TestCase):
     def test_default_wizard_configures_shared_user_install(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             args = INSTALLER.parser().parse_args(["--home", directory])
-            # scope, agents, mode, graphify=yes, proceed
+            # scope, agents, mode, Matt skills=yes, Graphify=yes, proceed
             output = TTYBuffer()
             console = INSTALLER.Console(
-                TTYBuffer("\n\n\ny\n\n"),
+                TTYBuffer("\n\n\n\ny\ny\n"),
                 output,
                 color=False,
                 unicode=False,
@@ -178,6 +180,7 @@ class InteractiveTests(unittest.TestCase):
             self.assertEqual(["universal"], args.agent)
             self.assertEqual([SKILL], args.skill)
             self.assertEqual("copy", args.mode)
+            self.assertTrue(args.matt_skills)
             self.assertTrue(args.graphify)
             self.assertIn("Skills setup", output.getvalue())
             self.assertIn("Review", output.getvalue())
@@ -186,8 +189,8 @@ class InteractiveTests(unittest.TestCase):
     def test_project_wizard_uses_explicit_agent_and_link_mode(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             args = INSTALLER.parser().parse_args([])
-            # project, path, Codex, link, no Graphify, proceed
-            answers = f"2\n{directory}\n2\n2\nn\ny\n"
+            # project, path, Codex, link, no Matt skills, no Graphify, proceed
+            answers = f"2\n{directory}\n2\n2\nn\nn\ny\n"
             console = INSTALLER.Console(
                 TTYBuffer(answers),
                 TTYBuffer(),
@@ -200,6 +203,7 @@ class InteractiveTests(unittest.TestCase):
             self.assertEqual(Path(directory).resolve(), args.project_dir)
             self.assertEqual(["codex"], args.agent)
             self.assertEqual("link", args.mode)
+            self.assertFalse(args.matt_skills)
             self.assertFalse(args.graphify)
 
     def test_status_output_wraps_long_paths_in_very_narrow_terminal(self) -> None:
@@ -213,10 +217,10 @@ class InteractiveTests(unittest.TestCase):
 
     def test_cancel_returns_without_changes(self) -> None:
         args = INSTALLER.parser().parse_args([])
-        # default scope, agent, mode, no Graphify, cancel at review
+        # default scope, agent, mode, no Matt skills, no Graphify, cancel at review
         output = TTYBuffer()
         console = INSTALLER.Console(
-            TTYBuffer("\n\n\n\nn\n"),
+            TTYBuffer("\n\n\nn\nn\nn\n"),
             output,
             color=False,
             unicode=False,
@@ -224,6 +228,20 @@ class InteractiveTests(unittest.TestCase):
         )
         self.assertFalse(INSTALLER.run_wizard(args, [SKILL], console))
         self.assertIn("No changes made", output.getvalue())
+
+    def test_declining_matt_skills_warns_that_olympus_is_incomplete(self) -> None:
+        args = INSTALLER.parser().parse_args([])
+        output = TTYBuffer()
+        console = INSTALLER.Console(
+            TTYBuffer("\n\n\nn\nn\ny\n"),
+            output,
+            color=False,
+            unicode=False,
+            width=72,
+        )
+        self.assertTrue(INSTALLER.run_wizard(args, [SKILL], console))
+        self.assertFalse(args.matt_skills)
+        self.assertIn("required by Olympus", output.getvalue())
 
 
 if __name__ == "__main__":

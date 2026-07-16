@@ -5,6 +5,24 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-07-15
+
+### Added
+
+- The guided installer now asks whether to install the complete
+  `mattpocock/skills` engineering set and recommends **Yes** because Olympus
+  orchestration depends on its implementation, TDD, and code-review workflows.
+- Scripted installs can opt in with `--matt-skills`; the installer uses the
+  official cross-agent `skills` CLI, selects every skill including
+  `setup-matt-pocock-skills`, maps agent names, and supports dry-run previews.
+- The Olympus skill now declares and checks its Matt Pocock workflow
+  prerequisites before mutating dispatch.
+
+### Changed
+
+- Completing an interactive Matt skills install now points to the required
+  one-time `/setup-matt-pocock-skills` repository setup step.
+
 ## [3.0.1] - 2026-07-15
 
 ### Fixed

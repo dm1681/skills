@@ -35,6 +35,15 @@ GRAPHIFY_PLATFORMS = {
     "copilot": "copilot",
     "claude": "claude",
 }
+MATT_SKILLS_SOURCE = "mattpocock/skills"
+MATT_SKILLS_AGENTS = {
+    "universal": "codex",
+    "agents": "codex",
+    "codex": "codex",
+    "cursor": "cursor",
+    "copilot": "github-copilot",
+    "claude": "claude-code",
+}
 
 
 class InstallError(RuntimeError):
@@ -749,6 +758,71 @@ def install_graphify(
         _run(command, cwd)
 
 
+def matt_skills_agents(values: Iterable[str]) -> list[str]:
+    """Map this installer's agent names to the skills CLI agent names."""
+    requested = list(values) or ["universal"]
+    unknown = sorted(set(requested) - KNOWN_AGENTS)
+    if unknown:
+        raise InstallError(f"unknown agent: {', '.join(unknown)}")
+    if "all" in requested:
+        requested = ["universal", "claude"]
+    mapped: list[str] = []
+    for value in requested:
+        agent = MATT_SKILLS_AGENTS[value]
+        if agent not in mapped:
+            mapped.append(agent)
+    return mapped
+
+
+def matt_skills_install_command(
+    agents: Iterable[str],
+    scope: str,
+    executable: str = "npx",
+) -> list[str]:
+    """Build the official cross-agent installation command for Matt's skills."""
+    command = [
+        executable,
+        "--yes",
+        "skills@latest",
+        "add",
+        MATT_SKILLS_SOURCE,
+        "--skill",
+        "*",
+    ]
+    for agent in matt_skills_agents(agents):
+        command.extend(("--agent", agent))
+    if scope == "user":
+        command.append("--global")
+    command.extend(("--copy", "--yes"))
+    return command
+
+
+def install_matt_skills(
+    agents: Iterable[str],
+    scope: str,
+    project_dir: Path,
+    dry_run: bool,
+    emit: Callable[[str], None] = print,
+) -> None:
+    """Install the complete Matt Pocock skill set through the skills CLI."""
+    cwd = project_dir.expanduser().resolve() if scope == "project" else REPO_ROOT
+    command = matt_skills_install_command(agents, scope)
+    if dry_run:
+        location = f" (in {cwd})" if scope == "project" else ""
+        emit(f"would run  {shlex.join(command)}{location}")
+        return
+
+    if scope == "project" and not cwd.is_dir():
+        raise InstallError(f"Matt skills project directory does not exist: {cwd}")
+    npx = shutil.which("npx")
+    if not npx:
+        raise InstallError(
+            "--matt-skills requires npx (Node.js 18 or newer); install Node.js "
+            "from https://nodejs.org/ and rerun"
+        )
+    _run(matt_skills_install_command(agents, scope, npx), cwd)
+
+
 def _same_file(left: Path, right: Path) -> bool:
     return filecmp.cmp(left, right, shallow=False)
 
@@ -877,6 +951,22 @@ def run_wizard(
         ],
         args.mode,
     )
+    console.section("Olympus prerequisites")
+    console.note(
+        "Matt Pocock's engineering skills provide the implement, TDD, and "
+        "two-axis code-review workflows used by Olympus orchestration."
+    )
+    matt_default = True if args.matt_skills is None else args.matt_skills
+    args.matt_skills = _confirm(
+        console,
+        "Install all mattpocock/skills for the selected agents?",
+        matt_default,
+    )
+    if not args.matt_skills:
+        console.warning(
+            "These workflows are required by Olympus; orchestration will be "
+            "incomplete until mattpocock/skills are installed."
+        )
     args.graphify = _confirm(
         console,
         "Install Graphify and configure it for the selected agents?",
@@ -914,6 +1004,10 @@ def run_wizard(
             ("Skills", ", ".join(args.skill)),
             ("Mode", args.mode),
             ("Destination", ", ".join(str(root) for root in roots)),
+            (
+                "Matt skills",
+                "install all (required by Olympus)" if args.matt_skills else "skip",
+            ),
             ("Graphify", "install and configure" if args.graphify else "skip"),
         ]
     )
@@ -1024,6 +1118,20 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="install or upgrade graphifyy with uv and register its skill for selected agents",
     )
+    matt_skills = result.add_mutually_exclusive_group()
+    matt_skills.add_argument(
+        "--matt-skills",
+        dest="matt_skills",
+        action="store_true",
+        help="install all mattpocock/skills required by Olympus orchestration",
+    )
+    matt_skills.add_argument(
+        "--no-matt-skills",
+        dest="matt_skills",
+        action="store_false",
+        help="skip Matt Pocock skills in the interactive wizard",
+    )
+    result.set_defaults(matt_skills=None)
     interaction = result.add_mutually_exclusive_group()
     interaction.add_argument(
         "--interactive",
@@ -1074,6 +1182,20 @@ def execute_install(
             else:
                 print(result)
         write_receipt(root, selected, args.mode, args.dry_run)
+    if args.matt_skills:
+        if console:
+            console.section("Matt Pocock skills")
+            console.note(
+                "Installing the complete engineering skill set, including "
+                "setup-matt-pocock-skills."
+            )
+        install_matt_skills(
+            args.agent,
+            args.scope,
+            args.project_dir,
+            args.dry_run,
+            console.note if console else print,
+        )
     if args.graphify:
         if console:
             console.section("Graphify")
@@ -1088,6 +1210,11 @@ def execute_install(
     if console:
         console.write()
         console.success("Preview complete." if args.dry_run else "Setup complete.")
+        if args.matt_skills and not args.dry_run:
+            console.note(
+                "Next: run /setup-matt-pocock-skills once inside the Olympus "
+                "repository before starting orchestration."
+            )
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -1120,6 +1247,21 @@ def main(argv: Optional[list[str]] = None) -> int:
             raise InstallError(
                 "--graphify cannot be combined with --target; use --scope instead"
             )
+        if args.matt_skills and args.target is not None:
+            raise InstallError(
+                "--matt-skills cannot be combined with --target; use --scope instead"
+            )
+        if args.matt_skills and not args.dry_run:
+            matt_cwd = args.project_dir.expanduser().resolve()
+            if args.scope == "project" and not matt_cwd.is_dir():
+                raise InstallError(
+                    f"Matt skills project directory does not exist: {matt_cwd}"
+                )
+            if not shutil.which("npx"):
+                raise InstallError(
+                    "--matt-skills requires npx (Node.js 18 or newer); install "
+                    "Node.js from https://nodejs.org/ and rerun"
+                )
         if args.graphify and not args.dry_run:
             graphify_cwd = args.project_dir.expanduser().resolve()
             if args.scope == "project" and not graphify_cwd.is_dir():
