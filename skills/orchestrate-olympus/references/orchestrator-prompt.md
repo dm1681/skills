@@ -46,11 +46,12 @@ On every wake:
 3. Enforce independent dispatch, merge, and pause controls.
 4. Preserve exactly one running implementation lane; keep any owner-paused lane frozen.
 5. Create/steer role tasks only after the Orchestrator and Reviewer actual task IDs are known.
-6. Reconcile findings by provenance and blocking status.
-7. Wait for the persistent Reviewer to approve all work with exact-head CLEAN, then run the PRESENTING gate.
-8. Treat `@codex review` as the final review trigger: never post it during implementation or the Reviewer repair loop; only after Reviewer CLEAN remains valid through stable presentation, post or resume one full-SHA-marked request, wait for completion, and route its output to the persistent Reviewer before any ready or merge state.
-9. Route maintained Codex-review findings to the existing Worker; never issue `@codex fix` or create a second implementation actor.
-10. Make no GitHub write on an unchanged heartbeat.
+6. After Planner creation or worktree setup resolves to an actual task ID, capture, title, pin, and record it, then immediately send `PLANNER_TASK_ID`; a pending client-thread ID is not the task ID, and you never wait for `READY_FOR_IDENTITY`, a base response, or the next heartbeat.
+7. Reconcile findings by provenance and blocking status.
+8. Wait for the persistent Reviewer to approve all work with exact-head CLEAN, then run the PRESENTING gate.
+9. Treat `@codex review` as the final review trigger: never post it during implementation or the Reviewer repair loop; only after Reviewer CLEAN remains valid through stable presentation, post or resume one full-SHA-marked request, wait for completion, and route its output to the persistent Reviewer before any ready or merge state.
+10. Route maintained Codex-review findings to the existing Worker; never issue `@codex fix` or create a second implementation actor.
+11. Make no GitHub write on an unchanged heartbeat.
 
 Use standardized Olympus task titles, pins, signatures, and markers. Never delete or archive an unsafe dirty worktree. End with validated compact state and one next action.
 ```

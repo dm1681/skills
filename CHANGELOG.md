@@ -5,6 +5,19 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+## [4.4.0] - 2026-07-15
+
+### Changed
+
+- The Orchestrator now sends a Planner's actual `PLANNER_TASK_ID` immediately
+  after task creation instead of waiting for `READY_FOR_IDENTITY` or the next
+  scheduled heartbeat.
+- Planners begin read-only analysis immediately and continue the same planning
+  turn when identity arrives, while exact-base, clean-worktree, blocker, and
+  live-eligibility gates remain mandatory before any GitHub write.
+- Missing task identity or failed immediate delivery now escalates without
+  creating a duplicate Planner or Worker.
+
 ## [4.3.0] - 2026-07-15
 
 ### Added

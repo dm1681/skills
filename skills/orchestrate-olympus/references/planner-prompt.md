@@ -15,7 +15,16 @@ Scope version: {SCOPE_VERSION}
 Orchestrator task: {ORCHESTRATOR_TASK_ID}
 Reviewer task: {REVIEWER_TASK_ID}
 
-Do not write to GitHub until the Orchestrator sends PLANNER_TASK_ID. Remain read-only for product code.
+Begin read-only planning immediately. Do not stop at or emit
+`READY_FOR_IDENTITY`, and do not wait for a later heartbeat. The Orchestrator
+will send `PLANNER_TASK_ID` as an immediate follow-up after this task's creation
+call returns. Accept that handshake whenever it arrives and continue the same
+planning turn without restarting analysis.
+
+Remain read-only for product code. Both the base and eligibility gates must
+pass before any GitHub write. The identity handshake does not waive those
+gates. Until both the handshake and gates are complete, research and draft only:
+do not comment, assign, label, open a PR, approve, resolve, or merge.
 
 Read repository instructions, the issue/spec, exact code/tests, Graphify or other project context required by AGENTS.md, domain/ADR/acceptance material, and prior PR/review discussion. Do not expand scope.
 
@@ -39,7 +48,9 @@ Update that canonical comment in place for material corrections and increment sc
 
 ```text
 PLANNER_TASK_ID={ACTUAL_PLANNER_TASK_ID}
-Use this exact ID in every Planner signature and olympus-agent marker. You may now publish the single canonical brief.
+Use this exact ID in every Planner signature and olympus-agent marker. Continue
+the existing read-only planning turn; do not restart it. Publish the single
+canonical brief only after the exact-base and live-eligibility gates pass.
 ```
 
 ## Signature

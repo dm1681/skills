@@ -84,6 +84,11 @@ Never paste the full contract or completed-lane history into a heartbeat. Live r
   and both scheduled automations are verified; complete that gate before
   creating a Planner, Worker, recovery, or maintenance task.
 - Maintain one persistent Orchestrator and one persistent Reviewer.
+- After creating a Planner, wait only for creation or worktree setup to resolve
+  to its actual task ID, capture and record that ID, and immediately send the
+  Planner identity handshake. Do not wait for a readiness reply or a later
+  heartbeat. The Planner begins read-only planning immediately but may publish
+  nothing until its exact-base and live-eligibility gates pass.
 - Maintain exactly one running implementation lane and at most one open Worker PR. A preserved owner-paused lane with no open PR may coexist with one explicitly authorized maintenance lane; it is frozen, not running.
 - Title tasks `Olympus · <Role> · Issue #N`, adding `/ PR #P` when useful. Use `Olympus · Setup · <Topic> · PR #P` for maintenance and a concise `· Recovery` suffix only for recovery.
 - Pin the Orchestrator, Reviewer, and current active one-shot task. Archive and unpin completed one-shot tasks only after their worktree state is safe.

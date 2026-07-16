@@ -114,6 +114,33 @@ Never batch or parallel-create the Orchestrator with another role. If dependent
 tasks survive but their Orchestrator is inaccessible, leave them stopped,
 preserve their state, and establish the replacement Orchestrator first.
 
+### Planner creation and identity order
+
+When a Planner is authorized, create exactly one Planner and wait for that
+creation call to return. Capture, title, pin, and record its actual task ID,
+then send `PLANNER_TASK_ID` immediately after the creation call returns. Do not
+wait for `READY_FOR_IDENTITY`, a base-gate response, a heartbeat, or any other
+Planner message before sending the identity handshake.
+
+If worktree creation first returns only a pending client-thread identifier,
+wait for that same creation to resolve to the actual task ID, then send the
+handshake immediately. This expected setup interval is not a Planner-readiness
+wait and is not an escalation by itself. Never send a pending client ID as
+`PLANNER_TASK_ID`.
+
+The Planner starts read-only planning as soon as its task begins and continues
+when the handshake arrives; it does not restart or pause merely for identity.
+The identity authorizes only the eventual signed canonical brief. Before any
+GitHub write, the Planner must independently verify the required exact base,
+clean worktree, current issue/PR eligibility, blockers, and scope version. If a
+gate fails, it reports exact recovery evidence and makes no GitHub write even
+though its task ID is known.
+
+If Planner creation or worktree setup fails to resolve to an actual task ID, or
+the immediate follow-up cannot be delivered, enter `ESCALATED`, preserve the
+task/worktree, and do not create a replacement Planner or Worker until live
+recovery proves whether the original task received authorization.
+
 ## 4. State machine
 
 Normal lane:
