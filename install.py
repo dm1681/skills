@@ -66,6 +66,7 @@ class Console:
         self.stdin = stdin
         self.stdout = stdout
         self._width = width
+        self._written_lines = 0
         tty = _isatty(stdout)
         self.color = (
             color
@@ -103,6 +104,7 @@ class Console:
         return "".join(styles) + text + self.RESET
 
     def write(self, text: str = "") -> None:
+        self._written_lines += text.count("\n") + 1
         self.stdout.write(text + "\n")
         self.stdout.flush()
 
@@ -113,11 +115,12 @@ class Console:
         indent: int = 0,
         subsequent: Optional[int] = None,
         break_long_words: bool = False,
+        right_margin: int = 0,
     ) -> None:
         later = indent if subsequent is None else subsequent
         rendered = textwrap.fill(
             text,
-            width=self.width,
+            width=max(10, self.width - right_margin),
             initial_indent=" " * indent,
             subsequent_indent=" " * later,
             break_long_words=break_long_words,
@@ -373,7 +376,8 @@ def _render_navigation(
     selected: set[int],
     multiple: bool,
     warning: Optional[str] = None,
-) -> None:
+) -> int:
+    starting_line = console._written_lines
     for index, (_, label, _) in enumerate(options):
         focused = index == current
         pointer = "›" if console.unicode and focused else ">" if focused else " "
@@ -388,17 +392,32 @@ def _render_navigation(
             console.styled(f"{pointer} {mark} {label}", *style),
             indent=2,
             subsequent=6,
+            right_margin=1,
         )
     description = options[current][2]
     if description:
-        console.wrap(description, indent=5)
+        console.wrap(description, indent=5, right_margin=1)
     action = "toggle" if multiple else "select"
     hint = f"↑/↓ move · Space {action} · Enter confirm" if console.unicode else (
         f"Up/Down move · Space {action} · Enter confirm"
     )
-    console.wrap(console.styled(hint, console.DIM), indent=5)
+    console.wrap(console.styled(hint, console.DIM), indent=5, right_margin=1)
     if warning:
-        console.warning(warning)
+        console.wrap(
+            console.styled(f"! {warning}", console.YELLOW),
+            indent=2,
+            subsequent=4,
+            break_long_words=True,
+            right_margin=1,
+        )
+    return console._written_lines - starting_line
+
+
+def _erase_navigation(console: Console, rendered_lines: int) -> None:
+    if rendered_lines <= 0:
+        return
+    console.stdout.write(f"\033[{rendered_lines}F\033[J")
+    console.stdout.flush()
 
 
 def _navigate_options(
@@ -410,13 +429,14 @@ def _navigate_options(
     selected = set(defaults)
     current = min(selected) if selected else 0
     warning: Optional[str] = None
-    console.stdout.write("\033[?25l\033[s")
+    rendered_lines = 0
+    console.stdout.write("\033[?25l")
     console.stdout.flush()
     try:
         with console.navigation_keys() as read_key:
             while True:
-                console.stdout.write("\033[u\033[J")
-                _render_navigation(
+                _erase_navigation(console, rendered_lines)
+                rendered_lines = _render_navigation(
                     console,
                     options,
                     current,
@@ -445,7 +465,7 @@ def _navigate_options(
                         break
                     warning = "Select at least one option before continuing."
     finally:
-        console.stdout.write("\033[u\033[J")
+        _erase_navigation(console, rendered_lines)
         _render_navigation(console, options, current, selected, multiple)
         console.stdout.write("\033[?25h")
         console.stdout.flush()

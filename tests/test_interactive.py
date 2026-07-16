@@ -73,6 +73,22 @@ class InteractiveTests(unittest.TestCase):
         self.assertIn("Space", output.getvalue())
         self.assertIn("Enter", output.getvalue())
 
+    def test_navigation_redraws_relative_to_rendered_rows(self) -> None:
+        console, output = self.navigable_console(["down", "enter"])
+        INSTALLER._select_one(
+            console,
+            "Install mode",
+            [
+                ("copy", "Copy files", "Stable local copy."),
+                ("link", "Create links", "Live checkout changes."),
+            ],
+            "copy",
+        )
+        rendered = output.getvalue()
+        self.assertNotIn("\033[s", rendered)
+        self.assertNotIn("\033[u", rendered)
+        self.assertRegex(rendered, r"\033\[\d+F\033\[J")
+
     def test_space_toggles_multiple_options_before_enter(self) -> None:
         console, _ = self.navigable_console(
             ["space", "down", "space", "down", "space", "enter"]

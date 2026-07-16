@@ -5,6 +5,16 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-07-15
+
+### Fixed
+
+- Windows option menus now redraw relative to their measured rendered height,
+  preventing a new menu copy from appearing after every arrow-key press when
+  the initial render scrolls the terminal viewport.
+- Navigation leaves one column of right margin to avoid implicit terminal
+  wrapping from throwing off redraw row counts.
+
 ## [3.0.0] - 2026-07-15
 
 ### Changed
