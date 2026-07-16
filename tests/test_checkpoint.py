@@ -16,7 +16,7 @@ class CheckpointTests(unittest.TestCase):
     @staticmethod
     def idle_checkpoint() -> dict[str, object]:
         return {
-            "schema_version": 2,
+            "schema_version": 3,
             "repository": "dm1681/Olympus",
             "dispatch_mode": "human-controlled",
             "merge_mode": "owner-only",
@@ -123,7 +123,31 @@ class CheckpointTests(unittest.TestCase):
             mismatch.stderr,
         )
 
-    def test_codex_reviewing_requires_reviewer_clean_at_current_head(self) -> None:
+    def test_ready_for_human_merge_requires_reviewer_clean_at_current_head(self) -> None:
+        head = "a" * 40
+        data = self.idle_checkpoint()
+        data.update(
+            {
+                "lane_kind": "repair",
+                "phase": "READY_FOR_HUMAN_MERGE",
+                "pr": 35,
+                "head": head,
+                "orchestrator_task": "11111111-1111-1111-1111-111111111111",
+                "reviewer_task": "22222222-2222-2222-2222-222222222222",
+            }
+        )
+        missing_clean = self.run_checkpoint(data)
+        self.assertNotEqual(0, missing_clean.returncode)
+        self.assertIn(
+            "READY_FOR_HUMAN_MERGE requires Reviewer CLEAN at current head",
+            missing_clean.stderr,
+        )
+
+        data["clean_signal"] = head
+        validated = self.run_checkpoint(data)
+        self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
+
+    def test_legacy_codex_cloud_review_state_is_rejected(self) -> None:
         head = "a" * 40
         data = self.idle_checkpoint()
         data.update(
@@ -132,8 +156,7 @@ class CheckpointTests(unittest.TestCase):
                 "phase": "CODEX_REVIEWING",
                 "pr": 35,
                 "head": head,
-                "orchestrator_task": "11111111-1111-1111-1111-111111111111",
-                "reviewer_task": "22222222-2222-2222-2222-222222222222",
+                "clean_signal": head,
                 "codex_review": {
                     "head": head,
                     "request_comment_id": 123,
@@ -144,16 +167,10 @@ class CheckpointTests(unittest.TestCase):
                 },
             }
         )
-        missing_clean = self.run_checkpoint(data)
-        self.assertNotEqual(0, missing_clean.returncode)
-        self.assertIn(
-            "CODEX_REVIEWING requires Reviewer CLEAN at current head",
-            missing_clean.stderr,
-        )
-
-        data["clean_signal"] = head
-        validated = self.run_checkpoint(data)
-        self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
+        legacy = self.run_checkpoint(data)
+        self.assertNotEqual(0, legacy.returncode)
+        self.assertIn("CODEX_REVIEWING", legacy.stderr)
+        self.assertIn("codex_review was removed", legacy.stderr)
 
 
 if __name__ == "__main__":

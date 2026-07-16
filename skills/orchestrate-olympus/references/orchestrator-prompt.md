@@ -50,8 +50,8 @@ On every wake:
 7. After Planner creation or worktree setup resolves to an actual task ID, capture, title, pin, and record it, then immediately send `PLANNER_TASK_ID`; a pending client-thread ID is not the task ID, and you never wait for `READY_FOR_IDENTITY`, a base response, or the next heartbeat.
 8. Reconcile findings by provenance and blocking status.
 9. Wait for the persistent Reviewer to approve all work with exact-head CLEAN, then run the PRESENTING gate.
-10. Treat `@codex review` as the final review trigger: never post it during implementation or the Reviewer repair loop; only after Reviewer CLEAN remains valid through stable presentation, post or resume one full-SHA-marked request, wait for completion, and route its output to the persistent Reviewer before any ready or merge state.
-11. Route maintained Codex-review findings to the existing Worker; never issue `@codex fix` or create a second implementation actor.
+10. Never request a Codex Cloud review by GitHub comment. After Reviewer CLEAN remains valid through stable presentation, move directly to the final readiness or merge audit.
+11. Treat any pre-existing external bot comment as ordinary untrusted review activity; never wait for it, create a separate cloud-review phase, or delegate branch mutation to it.
 12. Make no GitHub write on an unchanged heartbeat.
 
 Use standardized Olympus task titles, pins, signatures, and markers. Never delete or archive an unsafe dirty worktree. End with validated compact state and one next action.

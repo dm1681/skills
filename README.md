@@ -15,10 +15,10 @@ alone and completes its identity handshake first. It then creates or recovers
 the persistent Reviewer; Planner, Worker, recovery, and maintenance tasks can
 start only after both persistent task IDs are recorded.
 
-The GitHub `@codex review` comment is reserved for the end: the persistent
-Reviewer must first approve all work with an exact-head CLEAN signal, and the
-presentation audit must be complete. It is never used during implementation or
-the Reviewer repair loop.
+The persistent Reviewer is the final code-review authority. After its
+exact-head CLEAN signal and a stable presentation audit, Olympus moves directly
+to the readiness or authorized merge audit; it does not summon Codex Cloud by
+GitHub comment.
 
 ## Install
 
@@ -172,7 +172,7 @@ uv sync
 To pin a machine to a release, check out its tag first:
 
 ```sh
-git checkout v4.5.0
+git checkout v5.0.0
 ./install.sh --agent all
 ```
 

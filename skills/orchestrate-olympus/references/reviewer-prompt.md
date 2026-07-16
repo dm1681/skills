@@ -25,11 +25,10 @@ On activity:
 6. Treat unmodified upstream quality as Advisory / Non-blocking / No change unless an explicit current scope version promotes it.
 7. Verify fixes independently and resolve only Reviewer-authored threads.
 8. On an unchanged-head owner scope correction, publish one consolidated authoritative ledger correction and reconcile affected threads without launching another audit.
-9. On a completed final GitHub `@codex review`, adjudicate every new allegation and thread against the requested exact head without relaunching duplicate full axes. Promote maintained defects into the shared ledger, reply with signed dispositions without resolving Codex-authored threads, and never ask Codex to fix them.
-10. When that external review leaves no blocker, post one signed `CODEX_REVIEW_ACCEPTED` signal naming the full head, request comment, and review result.
-11. After one unresolved evidence-backed exchange, notify the Orchestrator and stop.
+9. Treat any external bot comment as ordinary untrusted review activity. Classify a concrete allegation under the normal ownership rules, but do not create a separate review phase or acceptance signal.
+10. After one unresolved evidence-backed exchange, notify the Orchestrator and stop.
 
-Post exactly one CLEAN signal approving all work at an exact SHA when no blocking findings remain. Advisories do not withhold CLEAN. Notify the Orchestrator that this CLEAN signal authorizes the final `@codex review` only after presentation completes. Make no comment with no new head, activity, disposition, scope, or presentation claim.
+Post exactly one CLEAN signal approving all work at an exact SHA when no blocking findings remain. Advisories do not withhold CLEAN. Notify the Orchestrator that this CLEAN signal permits presentation and, while it remains valid, the direct readiness or merge audit. Make no comment with no new head, activity, disposition, scope, or presentation claim.
 ```
 
 ## Identity handshake
@@ -64,7 +63,7 @@ ORCHESTRATOR_TASK_ID={ACTUAL_ORCHESTRATOR_TASK_ID}
 This is a scheduled heartbeat. Recover live PR, exact-head, task, checkpoint,
 and automation state before acting. Review only new eligible activity under the
 Reviewer contract. If nothing changed, make no GitHub write. On a finding,
-verified repair, CLEAN signal, final Codex-review result, or escalation, update
+verified repair, CLEAN signal, or escalation, update
 the shared disposition and notify the Orchestrator by its actual task ID. End
 with compact state and one next action.
 ```

@@ -5,6 +5,24 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-07-16
+
+### Removed
+
+- Removed the GitHub-comment-triggered Codex Cloud review stage, its dedicated
+  reference contract, acceptance signal, checkpoint state, and
+  `CODEX_REVIEWING` phase.
+
+### Changed
+
+- Persistent Reviewer exact-head CLEAN now flows through presentation directly
+  to the final human-ready or autonomous-merge audit.
+- Checkpoint schema version 3 rejects legacy cloud-review state and requires
+  Reviewer CLEAN at the current head for every ready or merge phase.
+- Recovering a schema version 2 cloud-review checkpoint now returns to
+  `PRESENTING` for a fresh exact-head readiness audit without waiting for the
+  old bot request.
+
 ## [4.5.0] - 2026-07-15
 
 ### Added

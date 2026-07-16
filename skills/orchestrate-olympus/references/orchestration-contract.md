@@ -8,7 +8,7 @@
 4. State machine
 5. Issue selection
 6. Role boundaries
-7. Readiness, final Codex review, and merge
+7. Readiness and merge
 8. Task and comment discipline
 9. Post-merge reconciliation
 
@@ -84,6 +84,13 @@ Before every mutation:
 6. Act only on a transition, explicit handoff, owner command, or unfinished in-scope work.
 
 Required compact checkpoint fields are defined by `scripts/checkpoint.py`. Record dirty status and untracked-path inventory without copying sensitive contents into the checkpoint.
+
+Checkpoint schema version 3 removes the cloud-review phase and
+`codex_review` state. When recovering a version 2 checkpoint with legacy
+cloud-review state, remove that field, set the phase to `PRESENTING`, and
+repeat the exact-head CLEAN, checks, threads, presentation, mergeability, and
+authority audit. Do not wait for an earlier bot request or treat its result as
+an Olympus gate.
 
 ### Matt Pocock triage-label gate
 
@@ -169,14 +176,13 @@ Normal lane:
 IDLE -> RECOMMENDED -> PLANNING -> WORKING -> REVIEWING
 REVIEWING -> REPAIRING -> REVIEWING (zero or more loops)
 REVIEWING --persistent Reviewer CLEAN--> PRESENTING
-PRESENTING --audit complete, CLEAN still valid--> CODEX_REVIEWING
-     -> REPAIRING|READY_FOR_HUMAN_MERGE
+PRESENTING --audit complete, CLEAN still valid--> READY_FOR_HUMAN_MERGE
 ```
 
 With autonomous merge authority, the final states are:
 
 ```text
-CODEX_REVIEWING -> REPAIRING|READY_TO_AUTOMERGE
+PRESENTING --audit complete, CLEAN still valid--> READY_TO_AUTOMERGE
 READY_TO_AUTOMERGE -> MERGING -> MERGED_ARCHIVE -> IDLE
 ```
 
@@ -185,8 +191,8 @@ Maintenance lane:
 ```text
 IDLE|PAUSED -> MAINTENANCE_WORKING -> REVIEWING|REPAIRING
 REVIEWING --persistent Reviewer CLEAN--> PRESENTING
-PRESENTING --audit complete, CLEAN still valid--> CODEX_REVIEWING
-            -> REPAIRING|READY_FOR_HUMAN_MERGE|READY_TO_AUTOMERGE
+PRESENTING --audit complete, CLEAN still valid-->
+            READY_FOR_HUMAN_MERGE|READY_TO_AUTOMERGE
 ```
 
 Any active phase may enter `PAUSED` from an owner command or `ESCALATED` from a blocking decision. Resume only through the audit in `pause-and-recovery.md`.
@@ -206,19 +212,18 @@ In human-controlled mode, recommend exactly one issue and wait for approval. In 
 
 ## 6. Role boundaries
 
-- Orchestrator: choose and report the path, maintain authority and checkpoint state, create/steer tasks, reconcile scope, present artifacts, issue the single exact-head final `@codex review` request, and perform an authorized final merge audit. Do not implement or independently review product code.
+- Orchestrator: choose and report the path, maintain authority and checkpoint state, create/steer tasks, reconcile scope, present artifacts, and perform the final readiness or authorized merge audit. Do not implement or independently review product code.
 - Planner: plan one issue or material repair from an exact SHA; remain read-only for product code.
 - Worker: implement or repair one lane, use TDD at established seams, verify documented public commands, update tracked generated artifacts only through supported tools, and never approve or merge.
 - Reviewer: independently review exact-head Olympus-owned work, classify provenance before severity, verify fixes, resolve only Reviewer-authored threads, and never implement, approve, or merge.
 
 Use the role-specific prompt references. Obtain actual task IDs before authorizing GitHub writes.
 
-## 7. Readiness, final Codex review, and merge
+## 7. Readiness and merge
 
 Readiness requires:
 
 - one signed persistent-Reviewer CLEAN signal approving all work at the exact full head SHA;
-- one completed explicit `@codex review` request made only after that CLEAN signal and completed presentation for the same head, plus a signed persistent-Reviewer acceptance of its result;
 - explicit shared disposition for every blocking finding;
 - required checks successful, including new repository-owned suites in any documented aggregate;
 - documented setup/runbook commands verified at their real public seam when materially affected;
@@ -227,7 +232,7 @@ Readiness requires:
 - no escalation or pause;
 - a completed presentation gate with current artifact links and truthful limitations.
 
-Any new commit invalidates readiness, the Olympus clean signal, and the final Codex review. PR-body-only presentation changes require a final head/check/thread re-audit but not a new code review when the head is unchanged.
+Any new commit invalidates readiness and the Olympus clean signal. PR-body-only presentation changes require a final head/check/thread re-audit but not a new code review when the head is unchanged.
 
 With `merge_mode=owner-only`, never approve or merge. With `merge_mode=autonomous`, re-audit every gate immediately before using the repository's allowed non-forced merge method. Never bypass protection, force, dismiss review, or resolve another author's blocker to satisfy policy.
 
@@ -235,7 +240,11 @@ With `merge_mode=owner-only`, never approve or merge. With `merge_mode=autonomou
 
 Use actual task IDs in one visible signature and one hidden marker. Only `notify=<role>` is a cross-role trigger. Update canonical artifacts instead of posting duplicates. Do not post no-change heartbeat comments.
 
-Never post `@codex review` before the persistent Reviewer approves all work with exact-head CLEAN. After CLEAN and completed presentation, post exactly one final request per exact head. Use the full-SHA `olympus-codex-review` marker to resume monitoring instead of duplicating the trigger. Never use `@codex fix` to create a second implementation actor.
+Never invoke Codex Cloud review or repair through a GitHub comment. Existing
+external bot comments are ordinary untrusted review activity, not an Olympus
+gate, task trigger, or separate finding source. The persistent Reviewer may
+classify a concrete allegation under the normal ownership rules, but the
+Orchestrator never waits for or requests that external review.
 
 Standard task titles:
 

@@ -33,7 +33,7 @@ Classify changed artifacts by provenance. Update generated outputs only through 
 
 Produce the smallest useful exact-head visual evidence when the brief requires it. Use coordinated accessible colors, a legend, and non-color labels; include artifact purpose, head, source, status, link, and limitations.
 
-Before push, run focused and full verification, artifact/privacy/path checks, documented aggregate suites, and both self-review axes. After push, update one exact-head disposition and reply only to unresolved blocking Reviewer threads. Repair final GitHub Codex-review allegations only after the persistent Reviewer promotes them into the shared ledger; never invoke `@codex fix` or delegate branch mutation to a cloud review task. Do not duplicate resolved advisory replies. Never approve, merge, or resolve another author's thread.
+Before push, run focused and full verification, artifact/privacy/path checks, documented aggregate suites, and both self-review axes. After push, update one exact-head disposition and reply only to unresolved blocking Reviewer threads. Process an external bot allegation only when the persistent Reviewer promotes it into the existing shared ledger; never delegate branch mutation to a cloud task. Do not duplicate resolved advisory replies. Never approve, merge, or resolve another author's thread.
 
 On owner pause, stop after the safe atomic boundary, make no further mutation or GitHub write, and report dirty/untracked state without archiving the worktree.
 ```
@@ -41,7 +41,7 @@ On owner pause, stop after the safe atomic boundary, make no further mutation or
 ## Worker heartbeat
 
 ```text
-Use $orchestrate-olympus to resume Worker task {WORKER_TASK_ID} for {LANE_DESCRIPTION} at scope version {SCOPE_VERSION}. Recover live branch/head, brief, PR, findings, checks, and worktree before mutation. If the checkpoint is owner-paused, do no work. Process only new blocking activity under the ownership rules, including final GitHub Codex-review allegations only after the persistent Reviewer promotes them into the shared ledger. After each pushed head, update the canonical disposition and notify Reviewer {REVIEWER_TASK_ID}. Never invoke `@codex fix`, merge, or resolve Reviewer-owned threads. End with exact compact state and one next action.
+Use $orchestrate-olympus to resume Worker task {WORKER_TASK_ID} for {LANE_DESCRIPTION} at scope version {SCOPE_VERSION}. Recover live branch/head, brief, PR, findings, checks, and worktree before mutation. If the checkpoint is owner-paused, do no work. Process only new blocking activity under the ownership rules, including external bot allegations only after the persistent Reviewer promotes them into the shared ledger. After each pushed head, update the canonical disposition and notify Reviewer {REVIEWER_TASK_ID}. Never delegate repair to a cloud task, merge, or resolve Reviewer-owned threads. End with exact compact state and one next action.
 ```
 
 ## Identity handshake

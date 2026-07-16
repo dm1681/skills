@@ -1,6 +1,6 @@
 [project]
 name = "dm1681-skills"
-version = "4.5.0"
+version = "5.0.0"
 description = "Version-controlled coding-agent skills with a cross-platform installer"
 readme = "README.md"
 requires-python = ">=3.9"

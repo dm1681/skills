@@ -28,7 +28,6 @@ PHASES = {
     "REVIEWING",
     "REPAIRING",
     "PRESENTING",
-    "CODEX_REVIEWING",
     "READY_FOR_HUMAN_MERGE",
     "READY_TO_AUTOMERGE",
     "MERGING",
@@ -75,7 +74,6 @@ DISPOSITIONS = {
 }
 PROMOTERS = {"none", "orchestrator", "owner"}
 ARTIFACT_STATUSES = {"planned", "active", "verified", "stale", "failed"}
-CODEX_REVIEW_STATUSES = {"pending", "in-progress", "findings", "accepted", "stale", "blocked"}
 AUTOMATION_STATUSES = {"running", "paused"}
 AUTOMATION_NAMES = {
     "orchestrator": "olympus-work-orchestrator",
@@ -224,35 +222,6 @@ def _validate_lane_snapshot(errors: list[str], value: Any, prefix: str) -> None:
         errors.append(f"{prefix}.next must be a non-empty string")
 
 
-def _validate_codex_review(errors: list[str], value: Any, current_head: Any) -> None:
-    prefix = "codex_review"
-    if not isinstance(value, dict):
-        errors.append(f"{prefix} must be an object")
-        return
-    required = {"head", "request_comment_id", "request_url", "review_id", "status", "accepted_head"}
-    missing = sorted(required - value.keys())
-    if missing:
-        errors.append(f"{prefix} missing fields: {', '.join(missing)}")
-        return
-    _sha(errors, f"{prefix}.head", value["head"])
-    if not isinstance(value["request_comment_id"], int) or isinstance(value["request_comment_id"], bool) or value["request_comment_id"] <= 0:
-        errors.append(f"{prefix}.request_comment_id must be a positive integer")
-    if not isinstance(value["request_url"], str) or not value["request_url"].strip():
-        errors.append(f"{prefix}.request_url must be a non-empty string")
-    _nullable_nonempty_string(errors, f"{prefix}.review_id", value["review_id"])
-    _enum(errors, f"{prefix}.status", value["status"], CODEX_REVIEW_STATUSES)
-    _nullable_sha(errors, f"{prefix}.accepted_head", value["accepted_head"])
-    if value["status"] == "accepted":
-        if value["review_id"] is None:
-            errors.append(f"{prefix}.accepted requires review_id")
-        if value["accepted_head"] != value["head"]:
-            errors.append(f"{prefix}.accepted_head must equal codex_review.head when accepted")
-    elif value["accepted_head"] is not None:
-        errors.append(f"{prefix}.accepted_head must be null unless status=accepted")
-    if value["status"] != "stale" and current_head is not None and value["head"] != current_head:
-        errors.append(f"{prefix}.head must equal current head unless status=stale")
-
-
 def validate_data(data: Any) -> list[str]:
     errors: list[str] = []
     if not isinstance(data, dict):
@@ -263,15 +232,23 @@ def validate_data(data: Any) -> list[str]:
         errors.append(f"missing fields: {', '.join(missing)}")
         return errors
 
-    if data["schema_version"] != 2:
-        errors.append("schema_version must be 2")
+    if data["schema_version"] != 3:
+        errors.append("schema_version must be 3")
     if data["repository"] != "dm1681/Olympus":
         errors.append("repository must be dm1681/Olympus")
     _enum(errors, "dispatch_mode", data["dispatch_mode"], DISPATCH_MODES)
     _enum(errors, "merge_mode", data["merge_mode"], MERGE_MODES)
     _enum(errors, "pause_mode", data["pause_mode"], PAUSE_MODES)
     _enum(errors, "lane_kind", data["lane_kind"], LANE_KINDS)
-    _enum(errors, "phase", data["phase"], PHASES)
+    if data["phase"] == "CODEX_REVIEWING":
+        errors.append(
+            "CODEX_REVIEWING was removed; migrate the checkpoint to PRESENTING "
+            "and repeat the exact-head readiness audit"
+        )
+    else:
+        _enum(errors, "phase", data["phase"], PHASES)
+    if "codex_review" in data:
+        errors.append("codex_review was removed from checkpoint schema version 3")
 
     if not isinstance(data["scope_version"], int) or isinstance(data["scope_version"], bool) or data["scope_version"] < 1:
         errors.append("scope_version must be a positive integer")
@@ -296,7 +273,7 @@ def validate_data(data: Any) -> list[str]:
         errors.append("issue is required for lane_kind=issue")
     if data["lane_kind"] == "repair" and data["pr"] is None:
         errors.append("pr is required for lane_kind=repair")
-    if data["phase"] in {"PRESENTING", "CODEX_REVIEWING", "READY_FOR_HUMAN_MERGE", "READY_TO_AUTOMERGE", "MERGING"} and data["pr"] is None:
+    if data["phase"] in {"PRESENTING", "READY_FOR_HUMAN_MERGE", "READY_TO_AUTOMERGE", "MERGING"} and data["pr"] is None:
         errors.append(f"pr is required in phase {data['phase']}")
     if data["phase"] == "MAINTENANCE_WORKING" and data["lane_kind"] != "maintenance":
         errors.append("MAINTENANCE_WORKING requires lane_kind=maintenance")
@@ -398,21 +375,9 @@ def validate_data(data: Any) -> list[str]:
         if isinstance(paused_lane, dict) and data["pr"] is not None and paused_lane.get("pr") is not None:
             errors.append("running maintenance and paused lane cannot both have an open Worker PR")
 
-    codex_review = data.get("codex_review")
-    if codex_review is not None:
-        _validate_codex_review(errors, codex_review, data["head"])
-    if data["phase"] == "CODEX_REVIEWING":
-        if data["clean_signal"] != data["head"]:
-            errors.append("CODEX_REVIEWING requires Reviewer CLEAN at current head")
-        if codex_review is None:
-            errors.append("CODEX_REVIEWING requires codex_review state")
-        elif isinstance(codex_review, dict) and codex_review.get("status") not in {"pending", "in-progress"}:
-            errors.append("CODEX_REVIEWING requires pending or in-progress codex_review status")
     if data["phase"] in {"READY_FOR_HUMAN_MERGE", "READY_TO_AUTOMERGE", "MERGING"}:
-        if not isinstance(codex_review, dict) or codex_review.get("status") != "accepted":
-            errors.append(f"{data['phase']} requires accepted codex_review state")
-        elif codex_review.get("accepted_head") != data["head"]:
-            errors.append(f"{data['phase']} requires codex_review accepted at current head")
+        if data["clean_signal"] != data["head"]:
+            errors.append(f"{data['phase']} requires Reviewer CLEAN at current head")
 
     if not isinstance(data["checks"], str):
         errors.append("checks must be a string")
@@ -487,12 +452,6 @@ def render_state(data: dict[str, Any]) -> str:
             f"paused_lane={paused['lane_kind']} issue={_fmt(paused['issue'])} pr={_fmt(paused['pr'])} "
             f"worker={_fmt(paused['worker_task'])} dirty={_fmt(paused['worker_dirty'])}"
         )
-    if data.get("codex_review") is not None:
-        review = data["codex_review"]
-        lines.append(
-            f"codex_review={review['status']} head={review['head']} request={review['request_comment_id']} "
-            f"review={_fmt(review['review_id'])} accepted_head={_fmt(review['accepted_head'])}"
-        )
     if data.get("automations") is not None:
         automations = data["automations"]
         for role in ("orchestrator", "reviewer"):
@@ -521,7 +480,7 @@ Follow the skill's core contract and load only the conditional references needed
 def sample_checkpoint() -> dict[str, Any]:
     sha = "a" * 40
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "repository": "dm1681/Olympus",
         "dispatch_mode": "human-controlled",
         "merge_mode": "owner-only",
@@ -584,49 +543,26 @@ def self_test() -> None:
     bad_merge["phase"] = "READY_TO_AUTOMERGE"
     assert any("owner-only" in error for error in validate_data(bad_merge))
 
-    codex_pending = copy.deepcopy(valid)
-    codex_pending.update(
-        {
-            "pr": 35,
-            "phase": "CODEX_REVIEWING",
-            "clean_signal": "a" * 40,
-            "codex_review": {
-                "head": "a" * 40,
-                "request_comment_id": 123,
-                "request_url": "https://github.com/dm1681/Olympus/pull/35#issuecomment-123",
-                "review_id": None,
-                "status": "pending",
-                "accepted_head": None,
-            },
-        }
-    )
-    assert validate_data(codex_pending) == []
-
-    codex_missing = copy.deepcopy(valid)
-    codex_missing.update({"pr": 35, "phase": "CODEX_REVIEWING"})
-    assert any("requires codex_review" in error for error in validate_data(codex_missing))
-
     ready = copy.deepcopy(valid)
     ready.update(
         {
             "pr": 35,
             "phase": "READY_FOR_HUMAN_MERGE",
             "clean_signal": "a" * 40,
-            "codex_review": {
-                "head": "a" * 40,
-                "request_comment_id": 123,
-                "request_url": "https://github.com/dm1681/Olympus/pull/35#issuecomment-123",
-                "review_id": "PRR_example",
-                "status": "accepted",
-                "accepted_head": "a" * 40,
-            },
         }
     )
     assert validate_data(ready) == []
 
-    ready_without_codex = copy.deepcopy(ready)
-    del ready_without_codex["codex_review"]
-    assert any("requires accepted codex_review" in error for error in validate_data(ready_without_codex))
+    ready_without_clean = copy.deepcopy(ready)
+    ready_without_clean["clean_signal"] = None
+    assert any("requires Reviewer CLEAN" in error for error in validate_data(ready_without_clean))
+
+    legacy_cloud_review = copy.deepcopy(ready)
+    legacy_cloud_review["phase"] = "CODEX_REVIEWING"
+    legacy_cloud_review["codex_review"] = {}
+    legacy_errors = validate_data(legacy_cloud_review)
+    assert any("CODEX_REVIEWING was removed" in error for error in legacy_errors)
+    assert any("codex_review was removed" in error for error in legacy_errors)
 
     bad_upstream = copy.deepcopy(valid)
     bad_upstream["findings"] = [

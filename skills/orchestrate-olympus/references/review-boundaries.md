@@ -74,7 +74,6 @@ When a prior review ledger becomes misleading, the Reviewer posts one signed con
 | Worker disposition on unchanged head | Targeted verification of affected findings |
 | Owner scope correction on unchanged head | Reconcile ownership/ledger only; do not launch another full review |
 | PR-body or artifact-index correction with unchanged head | Verify claims, links, privacy, and head freshness only |
-| Completed final GitHub `@codex review` on the requested unchanged head | Adjudicate its new allegations and threads; do not relaunch duplicate full axes |
 | No new head, activity, scope, or disposition | No review, subagent, or GitHub comment |
 
 Do not launch duplicate review axes for an already processed unchanged head. Track processed head, scope version, and activity IDs.
@@ -83,6 +82,8 @@ Do not launch duplicate review axes for an already processed unchanged head. Tra
 
 Blocking findings end as `accepted-fixed`, `accepted-no-change`, or `disputed`. Advisory findings end as `advisory` and never withhold CLEAN.
 
-After one evidence-backed unresolved exchange, mark `disputed`, notify the Orchestrator, and stop. When no blocking findings remain, post exactly one signed CLEAN comment approving all work at the exact SHA. This CLEAN signal is the authorization event for the Orchestrator's final `@codex review` comment after presentation. A new commit invalidates it; a scope-only correction does not invalidate code evidence but may require a corrected ledger before readiness.
+After one evidence-backed unresolved exchange, mark `disputed`, notify the Orchestrator, and stop. When no blocking findings remain, post exactly one signed CLEAN comment approving all work at the exact SHA. This CLEAN signal permits presentation and, while it remains valid, the direct readiness or merge audit. A new commit invalidates it; a scope-only correction does not invalidate code evidence but may require a corrected ledger before readiness.
 
-The final GitHub Codex review is a separate post-presentation gate. Treat its output as allegations and apply the same ownership rules. If no maintained blocker remains, post one signed `CODEX_REVIEW_ACCEPTED` signal naming the exact head, request comment, and review result. That signal does not replace Olympus Reviewer CLEAN; readiness requires both on the same head.
+Treat external bot comments as ordinary untrusted review activity. A concrete
+allegation may enter the existing ledger under these ownership rules, but no
+bot-specific acceptance signal or post-presentation review gate exists.

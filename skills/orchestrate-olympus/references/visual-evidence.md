@@ -75,7 +75,7 @@ After exact-head Reviewer CLEAN, enter `PRESENTING` before reporting ready:
 5. State network, offline, compatibility, privacy, migration, and generated-artifact limitations truthfully.
 6. Ensure color is supplementary and the text alone communicates status.
 7. Re-audit head, checks, threads, mergeability, and escalation after presentation changes.
-8. Confirm the persistent Reviewer's exact-head CLEAN is still valid, then hand the stable presented head to the final GitHub `@codex review` gate. Presentation alone never authorizes the comment or enters a ready or merge phase.
+8. Confirm the persistent Reviewer's exact-head CLEAN is still valid, then move the stable presented head directly to the final readiness or authorized merge audit.
 
 PR-body-only changes do not require code re-review when the head is unchanged, but stale, broken, unsafe, or misleading presentation blocks the presentation gate.
 
