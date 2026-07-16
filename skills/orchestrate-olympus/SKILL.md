@@ -13,7 +13,8 @@ This orchestration contract depends on the complete
 [`mattpocock/skills`](https://github.com/mattpocock/skills) engineering set. In
 particular, Worker and Reviewer flows require `implement`, `tdd`, and
 `code-review`. `setup-matt-pocock-skills` must also have been run once in the
-Olympus repository so its issue tracker and project conventions are configured.
+Olympus repository so its issue tracker, triage-label vocabulary, and project
+conventions are configured.
 
 Before starting or resuming a mutating lane, verify those skills are available
 to the active coding agents. If any are missing, pause before dispatch and use
@@ -42,6 +43,8 @@ Always read `references/orchestration-contract.md` before any mutation. Then rea
 
 - PR review, finding reconciliation, or scope correction: `references/review-boundaries.md`.
 - Final pre-merge GitHub `@codex review`: `references/codex-github-review.md`.
+- Matt Pocock issue/PR label setup, verification, or repair:
+  `references/matt-triage-labels.md`.
 - Creating, recovering, pausing, or resuming Codex scheduled heartbeat
   automations: `references/scheduled-automations.md`.
 - Owner pause/resume, stalled task, dirty worktree, missing worktree, or base drift: `references/pause-and-recovery.md`.
@@ -84,6 +87,10 @@ Never paste the full contract or completed-lane history into a heartbeat. Live r
   and both scheduled automations are verified; complete that gate before
   creating a Planner, Worker, recovery, or maintenance task.
 - Maintain one persistent Orchestrator and one persistent Reviewer.
+- After both persistent roles and scheduled automations are verified, validate
+  the configured Matt Pocock triage labels against the live repository and
+  create only missing mapped labels before dispatching a Planner or Worker.
+  GitHub uses one repository-wide label set for issues and PRs.
 - After creating a Planner, wait only for creation or worktree setup to resolve
   to its actual task ID, capture and record that ID, and immediately send the
   Planner identity handshake. Do not wait for a readiness reply or a later

@@ -5,6 +5,23 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+## [4.5.0] - 2026-07-15
+
+### Added
+
+- Olympus startup and resume now verify the Matt Pocock triage-label mapping
+  from `docs/agents/triage-labels.md` against the complete live GitHub
+  repository label set before dispatching a Planner or Worker.
+- Missing mapped labels are created with stable Olympus defaults and re-listed
+  for verification. Existing labels, descriptions, and colors are preserved.
+
+### Changed
+
+- The orchestration contract now makes explicit that GitHub labels are
+  repository-wide and therefore shared by issues and pull requests.
+- Missing or malformed mappings and failed label verification now escalate
+  without dispatching new implementation work.
+
 ## [4.4.0] - 2026-07-15
 
 ### Changed

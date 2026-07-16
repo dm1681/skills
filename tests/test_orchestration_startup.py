@@ -53,6 +53,43 @@ class OrchestrationStartupTests(unittest.TestCase):
             normalized,
         )
 
+    def test_matt_triage_label_gate_covers_issues_and_prs(self) -> None:
+        policy = (SKILL_ROOT / "references" / "matt-triage-labels.md").read_text(
+            encoding="utf-8"
+        )
+        normalized = " ".join(policy.split())
+        for label in (
+            "needs-triage",
+            "needs-info",
+            "ready-for-agent",
+            "ready-for-human",
+            "wontfix",
+        ):
+            self.assertIn(f"`{label}`", policy)
+        self.assertIn("GitHub labels are repository-wide", normalized)
+        self.assertIn("both issues and pull requests", normalized)
+        self.assertIn("`docs/agents/triage-labels.md`", normalized)
+        self.assertIn(
+            "gh label list --repo dm1681/Olympus --limit 1000 --json name",
+            normalized,
+        )
+        self.assertIn("Create only missing mapped labels", normalized)
+        self.assertIn("Never rename, delete, or overwrite", normalized)
+
+    def test_label_gate_precedes_lane_dispatch(self) -> None:
+        contract = (SKILL_ROOT / "references" / "orchestration-contract.md").read_text(
+            encoding="utf-8"
+        )
+        prompt = (SKILL_ROOT / "references" / "orchestrator-prompt.md").read_text(
+            encoding="utf-8"
+        )
+        normalized_contract = " ".join(contract.split())
+        normalized_prompt = " ".join(prompt.split())
+        self.assertIn("### Matt Pocock triage-label gate", contract)
+        self.assertIn("before dispatching any Planner or Worker", normalized_contract)
+        self.assertIn("enter `ESCALATED`", normalized_contract)
+        self.assertIn("verify the Matt Pocock triage-label gate", normalized_prompt)
+
 
 if __name__ == "__main__":
     unittest.main()

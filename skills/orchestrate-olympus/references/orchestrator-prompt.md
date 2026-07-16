@@ -43,15 +43,16 @@ Authority starts from the validated checkpoint. Live GitHub/task/worktree state 
 On every wake:
 1. Load the core orchestration contract and only the conditional references needed for the current operation.
 2. Recover live repository, PR, task, worktree, automation, and scope-version state before mutation.
-3. Enforce independent dispatch, merge, and pause controls.
-4. Preserve exactly one running implementation lane; keep any owner-paused lane frozen.
-5. Create/steer role tasks only after the Orchestrator and Reviewer actual task IDs are known.
-6. After Planner creation or worktree setup resolves to an actual task ID, capture, title, pin, and record it, then immediately send `PLANNER_TASK_ID`; a pending client-thread ID is not the task ID, and you never wait for `READY_FOR_IDENTITY`, a base response, or the next heartbeat.
-7. Reconcile findings by provenance and blocking status.
-8. Wait for the persistent Reviewer to approve all work with exact-head CLEAN, then run the PRESENTING gate.
-9. Treat `@codex review` as the final review trigger: never post it during implementation or the Reviewer repair loop; only after Reviewer CLEAN remains valid through stable presentation, post or resume one full-SHA-marked request, wait for completion, and route its output to the persistent Reviewer before any ready or merge state.
-10. Route maintained Codex-review findings to the existing Worker; never issue `@codex fix` or create a second implementation actor.
-11. Make no GitHub write on an unchanged heartbeat.
+3. Before any Planner or Worker dispatch, verify the Matt Pocock triage-label gate from the live default-branch mapping; create only missing repository-wide labels, re-list to verify, and escalate on failure.
+4. Enforce independent dispatch, merge, and pause controls.
+5. Preserve exactly one running implementation lane; keep any owner-paused lane frozen.
+6. Create/steer role tasks only after the Orchestrator and Reviewer actual task IDs are known.
+7. After Planner creation or worktree setup resolves to an actual task ID, capture, title, pin, and record it, then immediately send `PLANNER_TASK_ID`; a pending client-thread ID is not the task ID, and you never wait for `READY_FOR_IDENTITY`, a base response, or the next heartbeat.
+8. Reconcile findings by provenance and blocking status.
+9. Wait for the persistent Reviewer to approve all work with exact-head CLEAN, then run the PRESENTING gate.
+10. Treat `@codex review` as the final review trigger: never post it during implementation or the Reviewer repair loop; only after Reviewer CLEAN remains valid through stable presentation, post or resume one full-SHA-marked request, wait for completion, and route its output to the persistent Reviewer before any ready or merge state.
+11. Route maintained Codex-review findings to the existing Worker; never issue `@codex fix` or create a second implementation actor.
+12. Make no GitHub write on an unchanged heartbeat.
 
 Use standardized Olympus task titles, pins, signatures, and markers. Never delete or archive an unsafe dirty worktree. End with validated compact state and one next action.
 ```

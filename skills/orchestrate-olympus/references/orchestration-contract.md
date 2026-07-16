@@ -85,6 +85,24 @@ Before every mutation:
 
 Required compact checkpoint fields are defined by `scripts/checkpoint.py`. Record dirty status and untracked-path inventory without copying sensitive contents into the checkpoint.
 
+### Matt Pocock triage-label gate
+
+After both persistent roles and their scheduled automations are verified, read
+`references/matt-triage-labels.md` and verify the configured repository-wide
+label vocabulary before dispatching any Planner or Worker. The same GitHub
+labels apply to issues and pull requests.
+
+Use the live default-branch `docs/agents/triage-labels.md` mapping created by
+`setup-matt-pocock-skills`; do not assume custom tracker names equal the five
+canonical role names. Inspect the complete live repository label set, create
+only missing mapped labels, and verify the result. Never rename, delete, force
+update, or otherwise normalize existing labels.
+
+If the mapping is missing or invalid, or label listing, creation, or final
+verification fails, enter `ESCALATED`, preserve state, and dispatch no Planner
+or Worker. A cached or previously successful check never overrides current
+live label evidence.
+
 ### Orchestrator-first startup order
 
 Use this sequence for every cold start or role recovery:
@@ -106,9 +124,11 @@ Use this sequence for every cold start or role recovery:
 7. Create or recover `olympus-pr-review-watcher` with the native Codex
    automation tool, target that actual Reviewer task ID, schedule it every 10
    minutes, and verify it before sending the Reviewer identity handshake.
-8. Create a Planner, Worker, recovery, or maintenance task only after both
+8. Verify the Matt Pocock triage-label gate against the live default-branch
+   mapping and repository-wide GitHub labels.
+9. Create a Planner, Worker, recovery, or maintenance task only after both
    persistent task IDs and both scheduled automation IDs are known and
-   recorded.
+   recorded and the label gate passes.
 
 Never batch or parallel-create the Orchestrator with another role. If dependent
 tasks survive but their Orchestrator is inaccessible, leave them stopped,
