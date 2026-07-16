@@ -15,6 +15,11 @@ alone and completes its identity handshake first. It then creates or recovers
 the persistent Reviewer; Planner, Worker, recovery, and maintenance tasks can
 start only after both persistent task IDs are recorded.
 
+The GitHub `@codex review` comment is reserved for the end: the persistent
+Reviewer must first approve all work with an exact-head CLEAN signal, and the
+presentation audit must be complete. It is never used during implementation or
+the Reviewer repair loop.
+
 ## Install
 
 Run the installer without options to open the guided setup. It walks through
@@ -167,7 +172,7 @@ uv sync
 To pin a machine to a release, check out its tag first:
 
 ```sh
-git checkout v4.1.0
+git checkout v4.2.0
 ./install.sh --agent all
 ```
 

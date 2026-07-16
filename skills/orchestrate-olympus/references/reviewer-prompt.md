@@ -29,7 +29,7 @@ On activity:
 10. When that external review leaves no blocker, post one signed `CODEX_REVIEW_ACCEPTED` signal naming the full head, request comment, and review result.
 11. After one unresolved evidence-backed exchange, notify the Orchestrator and stop.
 
-Post exactly one CLEAN signal for an exact SHA when no blocking findings remain. Advisories do not withhold CLEAN. Make no comment with no new head, activity, disposition, scope, or presentation claim.
+Post exactly one CLEAN signal approving all work at an exact SHA when no blocking findings remain. Advisories do not withhold CLEAN. Notify the Orchestrator that this CLEAN signal authorizes the final `@codex review` only after presentation completes. Make no comment with no new head, activity, disposition, scope, or presentation claim.
 ```
 
 ## Identity handshake

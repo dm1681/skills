@@ -86,6 +86,38 @@ class CheckpointTests(unittest.TestCase):
         validated = self.run_checkpoint(data)
         self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
 
+    def test_codex_reviewing_requires_reviewer_clean_at_current_head(self) -> None:
+        head = "a" * 40
+        data = self.idle_checkpoint()
+        data.update(
+            {
+                "lane_kind": "repair",
+                "phase": "CODEX_REVIEWING",
+                "pr": 35,
+                "head": head,
+                "orchestrator_task": "11111111-1111-1111-1111-111111111111",
+                "reviewer_task": "22222222-2222-2222-2222-222222222222",
+                "codex_review": {
+                    "head": head,
+                    "request_comment_id": 123,
+                    "request_url": "https://github.com/dm1681/Olympus/pull/35#issuecomment-123",
+                    "review_id": None,
+                    "status": "pending",
+                    "accepted_head": None,
+                },
+            }
+        )
+        missing_clean = self.run_checkpoint(data)
+        self.assertNotEqual(0, missing_clean.returncode)
+        self.assertIn(
+            "CODEX_REVIEWING requires Reviewer CLEAN at current head",
+            missing_clean.stderr,
+        )
+
+        data["clean_signal"] = head
+        validated = self.run_checkpoint(data)
+        self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

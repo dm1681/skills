@@ -5,6 +5,18 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-07-15
+
+### Changed
+
+- The Orchestrator now posts `@codex review` only as the final review trigger,
+  after the persistent Reviewer approves all work with exact-head CLEAN and the
+  presentation audit is complete.
+- Planning, implementation, Reviewer review/repair, and incomplete presentation
+  phases now explicitly forbid the Codex review comment.
+- Checkpoint validation now rejects `CODEX_REVIEWING` unless the current head
+  has the matching Reviewer CLEAN signal.
+
 ## [4.1.0] - 2026-07-15
 
 ### Changed

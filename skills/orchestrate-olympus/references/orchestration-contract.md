@@ -93,8 +93,9 @@ Normal lane:
 
 ```text
 IDLE -> RECOMMENDED -> PLANNING -> WORKING -> REVIEWING
-     -> REPAIRING -> REVIEWING (zero or more loops)
-     -> PRESENTING -> CODEX_REVIEWING
+REVIEWING -> REPAIRING -> REVIEWING (zero or more loops)
+REVIEWING --persistent Reviewer CLEAN--> PRESENTING
+PRESENTING --audit complete, CLEAN still valid--> CODEX_REVIEWING
      -> REPAIRING|READY_FOR_HUMAN_MERGE
 ```
 
@@ -109,7 +110,8 @@ Maintenance lane:
 
 ```text
 IDLE|PAUSED -> MAINTENANCE_WORKING -> REVIEWING|REPAIRING
-            -> PRESENTING -> CODEX_REVIEWING
+REVIEWING --persistent Reviewer CLEAN--> PRESENTING
+PRESENTING --audit complete, CLEAN still valid--> CODEX_REVIEWING
             -> REPAIRING|READY_FOR_HUMAN_MERGE|READY_TO_AUTOMERGE
 ```
 
@@ -141,8 +143,8 @@ Use the role-specific prompt references. Obtain actual task IDs before authorizi
 
 Readiness requires:
 
-- one signed Reviewer CLEAN signal naming the exact full head SHA;
-- one completed explicit `@codex review` request made after presentation for that same head, plus a signed persistent-Reviewer acceptance of its result;
+- one signed persistent-Reviewer CLEAN signal approving all work at the exact full head SHA;
+- one completed explicit `@codex review` request made only after that CLEAN signal and completed presentation for the same head, plus a signed persistent-Reviewer acceptance of its result;
 - explicit shared disposition for every blocking finding;
 - required checks successful, including new repository-owned suites in any documented aggregate;
 - documented setup/runbook commands verified at their real public seam when materially affected;
@@ -159,7 +161,7 @@ With `merge_mode=owner-only`, never approve or merge. With `merge_mode=autonomou
 
 Use actual task IDs in one visible signature and one hidden marker. Only `notify=<role>` is a cross-role trigger. Update canonical artifacts instead of posting duplicates. Do not post no-change heartbeat comments.
 
-Post exactly one `@codex review` request per exact head after presentation. Use the full-SHA `olympus-codex-review` marker to resume monitoring instead of duplicating the trigger. Never use `@codex fix` to create a second implementation actor.
+Never post `@codex review` before the persistent Reviewer approves all work with exact-head CLEAN. After CLEAN and completed presentation, post exactly one final request per exact head. Use the full-SHA `olympus-codex-review` marker to resume monitoring instead of duplicating the trigger. Never use `@codex fix` to create a second implementation actor.
 
 Standard task titles:
 

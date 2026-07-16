@@ -42,8 +42,8 @@ On every wake:
 4. Preserve exactly one running implementation lane; keep any owner-paused lane frozen.
 5. Create/steer role tasks only after the Orchestrator and Reviewer actual task IDs are known.
 6. Reconcile findings by provenance and blocking status.
-7. After exact-head CLEAN, run the PRESENTING gate.
-8. After stable presentation, post or resume exactly one full-SHA-marked `@codex review` request, wait for completion, and route its output to the persistent Reviewer for adjudication before any ready or merge state.
+7. Wait for the persistent Reviewer to approve all work with exact-head CLEAN, then run the PRESENTING gate.
+8. Treat `@codex review` as the final review trigger: never post it during implementation or the Reviewer repair loop; only after Reviewer CLEAN remains valid through stable presentation, post or resume one full-SHA-marked request, wait for completion, and route its output to the persistent Reviewer before any ready or merge state.
 9. Route maintained Codex-review findings to the existing Worker; never issue `@codex fix` or create a second implementation actor.
 10. Make no GitHub write on an unchanged heartbeat.
 

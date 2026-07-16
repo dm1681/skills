@@ -13,7 +13,14 @@
 
 Run this gate after exact-head Olympus Reviewer CLEAN and the completed `PRESENTING` audit, but before `READY_FOR_HUMAN_MERGE`, `READY_TO_AUTOMERGE`, or any merge mutation.
 
-Require an open, non-draft, mergeable PR whose current head equals the Olympus clean signal and presented artifact head. Require `pause_mode=running`, no maintained blocker, and unchanged merge authority. Re-read the PR conversation, reviews, inline threads, status checks, workflow runs, and existing Olympus Codex-review markers before writing.
+Reviewer CLEAN is the authorization event for this final review trigger. Do not
+post `@codex review` during `PLANNING`, `WORKING`, `REVIEWING`, `REPAIRING`, or
+before the `PRESENTING` audit is complete. Passing checks, a Worker completion
+claim, partial Reviewer feedback, or presentation alone does not authorize the
+comment. Treat it as the last review request for an approved release candidate,
+not as an incremental review-loop trigger.
+
+Require an open, non-draft, mergeable PR whose current head equals the signed persistent-Reviewer clean signal and presented artifact head. Require `pause_mode=running`, no maintained blocker, and unchanged merge authority. Re-read the CLEAN comment, PR conversation, reviews, inline threads, status checks, workflow runs, and existing Olympus Codex-review markers before writing. If CLEAN is absent, stale, unsigned, or names another head, stop without posting.
 
 ## 2. Request contract
 
@@ -22,7 +29,7 @@ Use the configured GitHub integration to post exactly one top-level PR comment f
 ```markdown
 @codex review
 
-Final pre-merge review for exact head `<FULL_SHA>`. Follow the repository `AGENTS.md` guidance and report actionable defects in the current PR diff.
+The persistent Olympus Reviewer approved all work at exact head `<FULL_SHA>`. Perform the final pre-merge review. Follow the repository `AGENTS.md` guidance and report actionable defects in the current PR diff.
 
 ---
 _Olympus Orchestrator · Codex task `<ORCHESTRATOR_TASK_ID>`_
@@ -54,7 +61,7 @@ The Reviewer must:
 4. Promote each maintained defect into the shared ledger with a stable `PR<PR>-CODEX-<NNN>` ID, exact reviewed head, severity, scope, required actor, evidence, and required outcome.
 5. Reply with a signed disposition where useful without resolving threads authored by the Codex integration.
 
-If any blocking finding remains, clear the Olympus clean signal, mark the Codex review as `findings`, enter `REPAIRING`, and notify the existing high-effort Worker. Never post `@codex fix`, create a cloud repair task, or allow the external Reviewer to mutate the branch. After a Worker commit, repeat Olympus exact-head review, presentation, and a new one-per-head `@codex review` request.
+If any blocking finding remains, clear the Olympus clean signal, mark the Codex review as `findings`, enter `REPAIRING`, and notify the existing high-effort Worker. Never post `@codex fix`, create a cloud repair task, or allow the external Reviewer to mutate the branch. After a Worker commit, repeat Olympus exact-head review and wait for a new persistent-Reviewer CLEAN, then complete presentation again before posting a new one-per-head final request.
 
 If no blocking finding remains, the persistent Reviewer posts exactly one signed top-level acceptance naming the full head, request comment, review submission or no-finding reaction, and disposition summary. Mark the Codex review `accepted`; only then may the Orchestrator perform the final readiness and merge audit.
 

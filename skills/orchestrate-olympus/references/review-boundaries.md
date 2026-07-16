@@ -83,6 +83,6 @@ Do not launch duplicate review axes for an already processed unchanged head. Tra
 
 Blocking findings end as `accepted-fixed`, `accepted-no-change`, or `disputed`. Advisory findings end as `advisory` and never withhold CLEAN.
 
-After one evidence-backed unresolved exchange, mark `disputed`, notify the Orchestrator, and stop. When no blocking findings remain, post exactly one signed CLEAN comment for the exact SHA. A new commit invalidates it; a scope-only correction does not invalidate code evidence but may require a corrected ledger before readiness.
+After one evidence-backed unresolved exchange, mark `disputed`, notify the Orchestrator, and stop. When no blocking findings remain, post exactly one signed CLEAN comment approving all work at the exact SHA. This CLEAN signal is the authorization event for the Orchestrator's final `@codex review` comment after presentation. A new commit invalidates it; a scope-only correction does not invalidate code evidence but may require a corrected ledger before readiness.
 
 The final GitHub Codex review is a separate post-presentation gate. Treat its output as allegations and apply the same ownership rules. If no maintained blocker remains, post one signed `CODEX_REVIEW_ACCEPTED` signal naming the exact head, request comment, and review result. That signal does not replace Olympus Reviewer CLEAN; readiness requires both on the same head.

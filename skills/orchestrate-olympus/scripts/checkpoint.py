@@ -360,6 +360,8 @@ def validate_data(data: Any) -> list[str]:
     if codex_review is not None:
         _validate_codex_review(errors, codex_review, data["head"])
     if data["phase"] == "CODEX_REVIEWING":
+        if data["clean_signal"] != data["head"]:
+            errors.append("CODEX_REVIEWING requires Reviewer CLEAN at current head")
         if codex_review is None:
             errors.append("CODEX_REVIEWING requires codex_review state")
         elif isinstance(codex_review, dict) and codex_review.get("status") not in {"pending", "in-progress"}:
@@ -536,6 +538,7 @@ def self_test() -> None:
         {
             "pr": 35,
             "phase": "CODEX_REVIEWING",
+            "clean_signal": "a" * 40,
             "codex_review": {
                 "head": "a" * 40,
                 "request_comment_id": 123,

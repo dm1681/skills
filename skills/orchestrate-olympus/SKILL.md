@@ -30,7 +30,9 @@ Classify the request before acting:
 4. **Maintenance** — run an explicitly authorized repository-management lane while any normal lane is idle or safely owner-paused.
 5. **Recover** — preserve and restore stalled, inaccessible, dirty, or base-drifted work.
 6. **Present** — refresh exact-head PR evidence, visual progress, artifacts, and owner handoff without changing product code.
-7. **Final Codex review** — request and adjudicate one exact-head GitHub `@codex review` after presentation and before any ready or merge state.
+7. **Final Codex review** — only after the persistent Reviewer approves all work
+   with exact-head CLEAN and presentation is complete, request and adjudicate
+   one GitHub `@codex review` before any ready or merge state.
 
 Default to `dispatch_mode=human-controlled`, `merge_mode=owner-only`, and `pause_mode=running`. Never infer broader authority from silence or a general request to continue.
 
@@ -85,9 +87,9 @@ Never paste the full contract or completed-lane history into a heartbeat. Live r
 
 ## Enforce exact-head completion
 
-Every finding needs a shared disposition under the ownership rules. A new commit invalidates the clean signal. After Reviewer CLEAN, enter `PRESENTING`: refresh exact-head artifact links, visual status, limitations, and owner action; then re-audit that the head and readiness gates remain unchanged.
+Every finding needs a shared disposition under the ownership rules. A new commit invalidates the clean signal. The persistent Reviewer's exact-head CLEAN signal is the authorization event for the final Codex review; passing checks, a Worker handoff, or partial review is insufficient. After Reviewer CLEAN, enter `PRESENTING`: refresh exact-head artifact links, visual status, limitations, and owner action; then re-audit that the head and readiness gates remain unchanged.
 
-After presentation is stable, follow `references/codex-github-review.md`: post exactly one explicit `@codex review` request for the current head, enter `CODEX_REVIEWING`, wait for the GitHub review to complete, and have the persistent Reviewer adjudicate its output. Route maintained findings back to the existing Worker; never use `@codex fix` as a substitute Worker. Do not enter a ready or merge phase until the current-head Codex review is accepted. A new commit invalidates both the prior clean signal and the prior Codex review.
+Do not post `@codex review` during planning, implementation, the Reviewer repair loop, or an incomplete presentation. Only after exact-head Reviewer CLEAN remains valid through the completed presentation audit, follow `references/codex-github-review.md`: post exactly one final review request for the current head, enter `CODEX_REVIEWING`, wait for completion, and have the persistent Reviewer adjudicate its output. Route maintained findings back to the existing Worker; never use `@codex fix` as a substitute Worker. After any repair commit, require a new exact-head Reviewer CLEAN before another final request. Do not enter a ready or merge phase until the current-head Codex review is accepted.
 
 Merge behavior follows `merge_mode` independently from dispatch:
 
