@@ -76,6 +76,11 @@ DISPOSITIONS = {
 PROMOTERS = {"none", "orchestrator", "owner"}
 ARTIFACT_STATUSES = {"planned", "active", "verified", "stale", "failed"}
 CODEX_REVIEW_STATUSES = {"pending", "in-progress", "findings", "accepted", "stale", "blocked"}
+AUTOMATION_STATUSES = {"running", "paused"}
+AUTOMATION_NAMES = {
+    "orchestrator": "olympus-work-orchestrator",
+    "reviewer": "olympus-pr-review-watcher",
+}
 ACCEPTED_BLOCKING = {"accepted-fixed", "accepted-no-change"}
 
 REQUIRED_FIELDS = {
@@ -136,6 +141,41 @@ def _nullable_task(errors: list[str], field: str, value: Any) -> None:
 def _nullable_positive_int(errors: list[str], field: str, value: Any) -> None:
     if value is not None and (not isinstance(value, int) or isinstance(value, bool) or value <= 0):
         errors.append(f"{field} must be null or a positive integer")
+
+
+def _validate_automations(errors: list[str], value: Any, data: dict[str, Any]) -> None:
+    prefix = "automations"
+    if not isinstance(value, dict):
+        errors.append(f"{prefix} must be an object")
+        return
+    for role, expected_name in AUTOMATION_NAMES.items():
+        automation = value.get(role)
+        if automation is None:
+            continue
+        field = f"{prefix}.{role}"
+        if not isinstance(automation, dict):
+            errors.append(f"{field} must be null or an object")
+            continue
+        required = {"id", "name", "target_task", "interval_minutes", "status"}
+        missing = sorted(required - automation.keys())
+        if missing:
+            errors.append(f"{field} missing fields: {', '.join(missing)}")
+            continue
+        if not isinstance(automation["id"], str) or not automation["id"].strip():
+            errors.append(f"{field}.id must be a non-empty string")
+        if automation["name"] != expected_name:
+            errors.append(f"{field}.name must be {expected_name}")
+        _nullable_task(errors, f"{field}.target_task", automation["target_task"])
+        task_field = f"{role}_task"
+        if automation["target_task"] != data[task_field]:
+            errors.append(f"{field}.target_task must equal {task_field}")
+        if (
+            not isinstance(automation["interval_minutes"], int)
+            or isinstance(automation["interval_minutes"], bool)
+            or automation["interval_minutes"] <= 0
+        ):
+            errors.append(f"{field}.interval_minutes must be a positive integer")
+        _enum(errors, f"{field}.status", automation["status"], AUTOMATION_STATUSES)
 
 
 def _validate_lane_snapshot(errors: list[str], value: Any, prefix: str) -> None:
@@ -245,6 +285,8 @@ def validate_data(data: Any) -> list[str]:
     for field in ("reviewer_task", "planner_task", "worker_task"):
         if data[field] is not None and data["orchestrator_task"] is None:
             errors.append(f"{field} requires orchestrator_task")
+    if data.get("automations") is not None:
+        _validate_automations(errors, data["automations"], data)
 
     _nullable_nonempty_string(errors, "branch", data["branch"])
     _nullable_nonempty_string(errors, "worker_worktree", data["worker_worktree"])
@@ -451,6 +493,15 @@ def render_state(data: dict[str, Any]) -> str:
             f"codex_review={review['status']} head={review['head']} request={review['request_comment_id']} "
             f"review={_fmt(review['review_id'])} accepted_head={_fmt(review['accepted_head'])}"
         )
+    if data.get("automations") is not None:
+        automations = data["automations"]
+        for role in ("orchestrator", "reviewer"):
+            automation = automations.get(role)
+            if automation is not None:
+                lines.append(
+                    f"automation.{role}={automation['id']} target={automation['target_task']} "
+                    f"interval={automation['interval_minutes']}m status={automation['status']}"
+                )
     lines.append(f"next={data['next']}")
     return "\n".join(lines)
 

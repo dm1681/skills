@@ -43,6 +43,32 @@ heartbeat. You may now perform the review-only GitHub writes authorized by the
 Reviewer contract.
 ```
 
+## Reviewer heartbeat
+
+Create or recover `olympus-pr-review-watcher` only after the actual Reviewer
+task ID is known and before sending the identity handshake. Use the native
+Codex automation tool, target that exact persistent Reviewer task, schedule a
+local heartbeat every 10 minutes, and verify the saved automation. Its compact
+prompt must name both persistent task IDs, recover live exact-head PR activity,
+apply the Reviewer contract only to new activity, and make no write when
+nothing changed.
+
+Use this compact scheduled prompt:
+
+```text
+Use $orchestrate-olympus and the code-review workflow as the persistent Reviewer for dm1681/Olympus.
+
+REVIEWER_TASK_ID={ACTUAL_REVIEWER_TASK_ID}
+ORCHESTRATOR_TASK_ID={ACTUAL_ORCHESTRATOR_TASK_ID}
+
+This is a scheduled heartbeat. Recover live PR, exact-head, task, checkpoint,
+and automation state before acting. Review only new eligible activity under the
+Reviewer contract. If nothing changed, make no GitHub write. On a finding,
+verified repair, CLEAN signal, final Codex-review result, or escalation, update
+the shared disposition and notify the Orchestrator by its actual task ID. End
+with compact state and one next action.
+```
+
 ## Signature
 
 ```markdown

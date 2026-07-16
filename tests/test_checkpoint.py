@@ -86,6 +86,43 @@ class CheckpointTests(unittest.TestCase):
         validated = self.run_checkpoint(data)
         self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
 
+    def test_persistent_automation_targets_must_match_role_tasks(self) -> None:
+        orchestrator = "11111111-1111-1111-1111-111111111111"
+        reviewer = "22222222-2222-2222-2222-222222222222"
+        data = self.idle_checkpoint()
+        data.update(
+            {
+                "orchestrator_task": orchestrator,
+                "reviewer_task": reviewer,
+                "automations": {
+                    "orchestrator": {
+                        "id": "automation-orchestrator",
+                        "name": "olympus-work-orchestrator",
+                        "target_task": orchestrator,
+                        "interval_minutes": 10,
+                        "status": "running",
+                    },
+                    "reviewer": {
+                        "id": "automation-reviewer",
+                        "name": "olympus-pr-review-watcher",
+                        "target_task": reviewer,
+                        "interval_minutes": 10,
+                        "status": "running",
+                    },
+                },
+            }
+        )
+        validated = self.run_checkpoint(data)
+        self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
+
+        data["automations"]["reviewer"]["target_task"] = orchestrator
+        mismatch = self.run_checkpoint(data)
+        self.assertNotEqual(0, mismatch.returncode)
+        self.assertIn(
+            "automations.reviewer.target_task must equal reviewer_task",
+            mismatch.stderr,
+        )
+
     def test_codex_reviewing_requires_reviewer_clean_at_current_head(self) -> None:
         head = "a" * 40
         data = self.idle_checkpoint()

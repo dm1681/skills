@@ -17,8 +17,10 @@ and wait for the identity handshake from the controller that created you.
 ```
 
 The controller must wait for this task creation to return, capture the actual
-task ID, pin and record it, then send the handshake below. Do not create any
-other role in parallel with the bootstrap.
+task ID, pin and record it, create or recover the Orchestrator's Codex scheduled
+heartbeat automation, verify it, and only then send the handshake below. Create
+that automation only after its actual task ID is known. Do not create any other
+role in parallel with the bootstrap.
 
 ## Identity handshake
 
@@ -28,10 +30,13 @@ ORCHESTRATOR_TASK_ID={ACTUAL_ORCHESTRATOR_TASK_ID}
 Use this exact ID in every Orchestrator signature, marker, checkpoint, and
 heartbeat. You are now the live persistent Orchestrator.
 
-Create or recover the persistent Reviewer next. Wait for its creation call,
-capture its actual task ID, complete its identity handshake, and record both
-persistent IDs before creating any Planner, Worker, recovery, or maintenance
-task or authorizing GitHub writes.
+The controller has verified the `olympus-work-orchestrator` Codex scheduled
+heartbeat automation for this exact task ID. Create or recover the persistent
+Reviewer next. Wait for its creation call, capture its actual task ID, create
+or recover and verify `olympus-pr-review-watcher` for that exact Reviewer task,
+then complete its identity handshake. Record both task IDs and both automation
+IDs before creating any Planner, Worker, recovery, or maintenance task or
+authorizing GitHub writes.
 
 Authority starts from the validated checkpoint. Live GitHub/task/worktree state supersedes cached values. Do not implement or independently review product code.
 
@@ -59,6 +64,11 @@ python3 scripts/checkpoint.py render-heartbeat checkpoint.json
 ```
 
 The rendered prompt must remain a compact cache. Before updating an existing automation, preserve its ID, target task, interval, destination, model settings, and paused/running status unless the owner changes them.
+
+Use the native Codex automation tool to create or update the heartbeat. Inspect
+the stable automation name first, target the exact persistent task, use the
+10-minute default cadence, and verify the saved result. Never substitute cron,
+launchd, systemd, Windows Task Scheduler, or direct automation-file edits.
 
 ## Signature
 

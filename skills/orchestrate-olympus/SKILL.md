@@ -42,6 +42,8 @@ Always read `references/orchestration-contract.md` before any mutation. Then rea
 
 - PR review, finding reconciliation, or scope correction: `references/review-boundaries.md`.
 - Final pre-merge GitHub `@codex review`: `references/codex-github-review.md`.
+- Creating, recovering, pausing, or resuming Codex scheduled heartbeat
+  automations: `references/scheduled-automations.md`.
 - Owner pause/resume, stalled task, dirty worktree, missing worktree, or base drift: `references/pause-and-recovery.md`.
 - Visual evidence, artifact publication, presentation gate, or final report: `references/visual-evidence.md`.
 - Creating or materially changing a role task: read that role's prompt file only:
@@ -74,10 +76,13 @@ Never paste the full contract or completed-lane history into a heartbeat. Live r
 
 - Start or resume the persistent Orchestrator task first. On a cold start,
   create it as the only role task, capture and record its actual task ID, and
-  complete its identity handshake before creating the Reviewer. Never batch or
-  parallel-create the Orchestrator with any other role. Create no Planner,
-  Worker, recovery, or maintenance task until the live Orchestrator has created
-  or recovered the persistent Reviewer.
+  create or recover its Codex scheduled heartbeat automation before completing
+  its identity handshake or creating the Reviewer. Never batch or
+  parallel-create the Orchestrator with any other role. Create or recover the
+  Reviewer's scheduled heartbeat after its actual task ID is known. Create no
+  Planner, Worker, recovery, or maintenance task until both persistent tasks
+  and both scheduled automations are verified; complete that gate before
+  creating a Planner, Worker, recovery, or maintenance task.
 - Maintain one persistent Orchestrator and one persistent Reviewer.
 - Maintain exactly one running implementation lane and at most one open Worker PR. A preserved owner-paused lane with no open PR may coexist with one explicitly authorized maintenance lane; it is frozen, not running.
 - Title tasks `Olympus · <Role> · Issue #N`, adding `/ PR #P` when useful. Use `Olympus · Setup · <Topic> · PR #P` for maintenance and a concise `· Recovery` suffix only for recovery.

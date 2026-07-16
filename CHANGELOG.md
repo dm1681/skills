@@ -5,6 +5,26 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+## [4.3.0] - 2026-07-15
+
+### Added
+
+- Olympus cold starts now explicitly create or recover native Codex scheduled
+  heartbeat automations for the persistent Orchestrator and Reviewer after
+  their exact task IDs are known.
+- The stable `olympus-work-orchestrator` and
+  `olympus-pr-review-watcher` automations default to 10-minute local
+  heartbeats, are verified before dependent role dispatch, and are recorded in
+  the compact checkpoint.
+- Checkpoint validation supports structured persistent-automation state and
+  rejects an automation that targets the wrong role task.
+
+### Changed
+
+- Automation creation failures now escalate and preserve state instead of
+  silently falling back to cron, launchd, systemd, Windows Task Scheduler, or
+  direct automation-file edits.
+
 ## [4.2.0] - 2026-07-15
 
 ### Changed

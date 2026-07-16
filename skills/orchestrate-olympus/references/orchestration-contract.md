@@ -51,6 +51,27 @@ GitHub is the durable audit ledger. Codex task IDs, worktree paths, pins, heartb
 
 Keep the heartbeat prompt minimal: role identity, stable skill name, Reviewer/Orchestrator task IDs, and a validated compact checkpoint. Do not duplicate this contract in automation prompts.
 
+### Codex scheduled heartbeat automations
+
+For each persistent role, create a Codex scheduled heartbeat automation. Use
+the native Codex automation tool, not an operating-system scheduler or direct
+edits to automation files.
+
+- `olympus-work-orchestrator`: target the exact persistent Orchestrator task.
+- `olympus-pr-review-watcher`: target the exact persistent Reviewer task.
+
+Create each automation only after its target's actual task ID is known. Default
+both to a local heartbeat every 10 minutes, with a compact role-specific prompt
+and status matching `pause_mode`. Inspect by stable name before creation; reuse
+or update a matching automation instead of duplicating it. Verify the saved
+name, target task, cadence, prompt, destination, and running/paused status, then
+record its automation ID in the checkpoint.
+
+If the native Codex automation tool is unavailable or creation cannot be
+verified, enter `ESCALATED`, preserve state, and do not dispatch a Planner,
+Worker, recovery, or maintenance task. Never substitute cron, launchd, systemd,
+Windows Task Scheduler, or a handwritten automation file.
+
 When `graphify-out/` exists, use `$graphify` first for architecture, file-relationship, or project-content questions. Treat its tracked output as derived evidence: refresh it only through supported public tooling and apply the generated-artifact review boundary.
 
 Before every mutation:
@@ -76,12 +97,18 @@ Use this sequence for every cold start or role recovery:
 3. Wait for the Orchestrator creation call to return. Capture its actual task
    ID, title it `Olympus · Orchestrator · Persistent`, pin it, and record it in
    the checkpoint.
-4. Send the Orchestrator identity handshake and confirm that task is live.
-5. Have the live Orchestrator create or recover the persistent Reviewer next.
-   Capture, pin, and record the Reviewer's actual task ID before either role
-   authorizes GitHub writes.
-6. Create a Planner, Worker, recovery, or maintenance task only after both
-   persistent task IDs are known and recorded.
+4. Create or recover `olympus-work-orchestrator` with the native Codex
+   automation tool, target that actual task ID, schedule it every 10 minutes,
+   and verify it before sending the Orchestrator identity handshake.
+5. Send the Orchestrator identity handshake and confirm that task is live.
+6. Have the live Orchestrator create or recover the persistent Reviewer next.
+   Capture, pin, and record the Reviewer's actual task ID.
+7. Create or recover `olympus-pr-review-watcher` with the native Codex
+   automation tool, target that actual Reviewer task ID, schedule it every 10
+   minutes, and verify it before sending the Reviewer identity handshake.
+8. Create a Planner, Worker, recovery, or maintenance task only after both
+   persistent task IDs and both scheduled automation IDs are known and
+   recorded.
 
 Never batch or parallel-create the Orchestrator with another role. If dependent
 tasks survive but their Orchestrator is inaccessible, leave them stopped,
