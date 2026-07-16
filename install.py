@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 import filecmp
 import json
 import os
@@ -60,6 +61,7 @@ class Console:
         unicode: Optional[bool] = None,
         width: Optional[int] = None,
         key_reader: Optional[Callable[[], str]] = None,
+        terminal_restore: Optional[Callable[[], None]] = None,
     ) -> None:
         self.stdin = stdin
         self.stdout = stdout
@@ -76,11 +78,17 @@ class Console:
         unicode_capable = _can_encode(encoding, "◆✓›")
         self.unicode = unicode if unicode is not None else tty and unicode_capable
         self._key_reader = key_reader
-        self.supports_navigation = key_reader is not None or (
-            _isatty(stdin)
-            and tty
-            and _terminal_navigation_supported(stdin, stdout)
-        )
+        self._terminal_restore = terminal_restore
+        if key_reader is not None:
+            self.supports_navigation = True
+        elif _isatty(stdin) and tty:
+            supported, restore = _prepare_terminal_navigation(stdin, stdout)
+            self.supports_navigation = supported
+            self._terminal_restore = restore
+        else:
+            self.supports_navigation = False
+        if self._terminal_restore is not None:
+            atexit.register(self._terminal_restore)
 
     @property
     def width(self) -> int:
@@ -214,6 +222,16 @@ class Console:
         with _terminal_key_reader(self.stdin) as reader:
             yield reader
 
+    def close(self) -> None:
+        if self._terminal_restore is None:
+            return
+        restore = self._terminal_restore
+        self._terminal_restore = None
+        try:
+            restore()
+        finally:
+            atexit.unregister(restore)
+
 
 def _isatty(stream: TextIO) -> bool:
     try:
@@ -230,22 +248,27 @@ def _can_encode(encoding: str, value: str) -> bool:
         return False
 
 
-def _terminal_navigation_supported(stdin: TextIO, stdout: TextIO) -> bool:
+def _prepare_terminal_navigation(
+    stdin: TextIO, stdout: TextIO
+) -> tuple[bool, Optional[Callable[[], None]]]:
     try:
         input_fd = stdin.fileno()
         output_fd = stdout.fileno()
         if not os.isatty(input_fd) or not os.isatty(output_fd):
-            return False
+            return False, None
     except (AttributeError, OSError):
-        return False
+        return False, None
     if os.name != "nt":
-        return os.environ.get("TERM", "") != "dumb"
-    return _enable_windows_virtual_terminal(stdout)
+        return os.environ.get("TERM", "") != "dumb", None
+    restore = _enable_windows_virtual_terminal(stdout)
+    return restore is not None, restore
 
 
-def _enable_windows_virtual_terminal(stdout: TextIO) -> bool:
+def _enable_windows_virtual_terminal(
+    stdout: TextIO,
+) -> Optional[Callable[[], None]]:
     if os.name != "nt":
-        return True
+        return None
     try:
         import ctypes
         import msvcrt
@@ -264,11 +287,18 @@ def _enable_windows_virtual_terminal(stdout: TextIO) -> bool:
         set_console_mode.argtypes = [wintypes.HANDLE, wintypes.DWORD]
         set_console_mode.restype = wintypes.BOOL
         if not get_console_mode(handle, ctypes.byref(mode)):
-            return False
+            return None
+        previous = mode.value
         enabled = mode.value | 0x0004  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
-        return bool(set_console_mode(handle, enabled))
+        if not set_console_mode(handle, enabled):
+            return None
+
+        def restore() -> None:
+            set_console_mode(handle, previous)
+
+        return restore
     except (AttributeError, OSError, ValueError):
-        return False
+        return None
 
 
 def _normalize_posix_key(sequence: bytes) -> str:
@@ -1104,6 +1134,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         else:
             print(f"error: {exc}", file=sys.stderr)
         return 1
+    finally:
+        if console:
+            console.close()
 
 
 if __name__ == "__main__":

@@ -119,6 +119,19 @@ class InteractiveTests(unittest.TestCase):
         self.assertEqual("space", INSTALLER._normalize_windows_key(" "))
         self.assertEqual("enter", INSTALLER._normalize_windows_key("\r"))
 
+    def test_terminal_restore_runs_once_when_console_closes(self) -> None:
+        restored: list[bool] = []
+        console = INSTALLER.Console(
+            io.StringIO(),
+            io.StringIO(),
+            color=False,
+            unicode=False,
+            terminal_restore=lambda: restored.append(True),
+        )
+        console.close()
+        console.close()
+        self.assertEqual([True], restored)
+
     def test_string_stream_keeps_numbered_prompt_fallback(self) -> None:
         console = INSTALLER.Console(
             TTYBuffer("2\n"), TTYBuffer(), color=False, unicode=False
