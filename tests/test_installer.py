@@ -33,7 +33,8 @@ class InstallerTests(unittest.TestCase):
             destination = home / ".agents" / "skills" / SKILL
             self.assertTrue((destination / "SKILL.md").is_file())
             receipt = json.loads((destination.parent / ".dm1681-skills.json").read_text())
-            self.assertEqual("2.0.0", receipt["version"])
+            expected_version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+            self.assertEqual(expected_version, receipt["version"])
 
     def test_all_agents_install_once_per_distinct_root(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

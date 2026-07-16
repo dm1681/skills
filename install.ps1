@@ -7,18 +7,27 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
 }
 
 if (Get-Command py -ErrorAction SilentlyContinue) {
-    & py -3 $Installer @args
-    exit $LASTEXITCODE
+    & py -3 -c 'import sys; raise SystemExit(sys.version_info < (3, 9))' *> $null
+    if ($LASTEXITCODE -eq 0) {
+        & py -3 $Installer @args
+        exit $LASTEXITCODE
+    }
 }
 
 if (Get-Command python3 -ErrorAction SilentlyContinue) {
-    & python3 $Installer @args
-    exit $LASTEXITCODE
+    & python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 9))' *> $null
+    if ($LASTEXITCODE -eq 0) {
+        & python3 $Installer @args
+        exit $LASTEXITCODE
+    }
 }
 
 if (Get-Command python -ErrorAction SilentlyContinue) {
-    & python $Installer @args
-    exit $LASTEXITCODE
+    & python -c 'import sys; raise SystemExit(sys.version_info < (3, 9))' *> $null
+    if ($LASTEXITCODE -eq 0) {
+        & python $Installer @args
+        exit $LASTEXITCODE
+    }
 }
 
 Write-Error "uv or Python 3.9 or newer is required."

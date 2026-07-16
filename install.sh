@@ -7,11 +7,13 @@ if command -v uv >/dev/null 2>&1; then
   exec uv run --project "$SCRIPT_DIR" --python 3.12 "$SCRIPT_DIR/install.py" "$@"
 fi
 
-if command -v python3 >/dev/null 2>&1; then
+if command -v python3 >/dev/null 2>&1 \
+  && python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 9))' >/dev/null 2>&1; then
   exec python3 "$SCRIPT_DIR/install.py" "$@"
 fi
 
-if command -v python >/dev/null 2>&1; then
+if command -v python >/dev/null 2>&1 \
+  && python -c 'import sys; raise SystemExit(sys.version_info < (3, 9))' >/dev/null 2>&1; then
   exec python "$SCRIPT_DIR/install.py" "$@"
 fi
 

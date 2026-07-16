@@ -5,11 +5,13 @@ collection.
 
 ## Prepare a release
 
-1. Update `VERSION` to `MAJOR.MINOR.PATCH` without a `v` prefix.
-2. Move the relevant `CHANGELOG.md` entries from `Unreleased` into a heading
+1. Update `VERSION` and `project.version` in `pyproject.toml` to the same
+   `MAJOR.MINOR.PATCH` value without a `v` prefix.
+2. Run `uv lock` to refresh the locked project version.
+3. Move the relevant `CHANGELOG.md` entries from `Unreleased` into a heading
    named `## [MAJOR.MINOR.PATCH] - YYYY-MM-DD`.
-3. Run `uv sync --locked`, the repository validator, and tests through `uv run`.
-4. Merge the version change to `main`.
+4. Run `uv sync --locked`, the repository validator, and tests through `uv run`.
+5. Merge the version change to `main`.
 
 ## Publish
 

@@ -26,8 +26,18 @@ class UvProjectTests(unittest.TestCase):
         powershell = (ROOT / "install.ps1").read_text(encoding="utf-8")
         self.assertLess(posix.index("command -v uv"), posix.index("command -v python3"))
         self.assertIn('uv run --project "$SCRIPT_DIR"', posix)
+        self.assertIn("sys.version_info < (3, 9)", posix)
         self.assertLess(powershell.index("Get-Command uv"), powershell.index("Get-Command py"))
         self.assertIn("uv run --project $PSScriptRoot", powershell)
+        self.assertIn("sys.version_info < (3, 9)", powershell)
+
+    def test_ci_recreates_windows_uv_only_install(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("windows-uv-launcher:", workflow)
+        self.assertIn("Confirm Python commands are hidden", workflow)
+        self.assertIn(".\\install.ps1 --list", workflow)
 
     def test_release_archives_include_uv_project_files(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
