@@ -14,9 +14,10 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Iterable, Mapping, Optional, TextIO
+from typing import Callable, Iterable, Iterator, Mapping, Optional, TextIO
 
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -58,6 +59,7 @@ class Console:
         color: Optional[bool] = None,
         unicode: Optional[bool] = None,
         width: Optional[int] = None,
+        key_reader: Optional[Callable[[], str]] = None,
     ) -> None:
         self.stdin = stdin
         self.stdout = stdout
@@ -73,6 +75,12 @@ class Console:
         encoding = getattr(stdout, "encoding", None) or "utf-8"
         unicode_capable = _can_encode(encoding, "◆✓›")
         self.unicode = unicode if unicode is not None else tty and unicode_capable
+        self._key_reader = key_reader
+        self.supports_navigation = key_reader is not None or (
+            _isatty(stdin)
+            and tty
+            and _terminal_navigation_supported(stdin, stdout)
+        )
 
     @property
     def width(self) -> int:
@@ -198,6 +206,14 @@ class Console:
                 self.write(self.styled(f"  {label}", self.DIM))
                 self.wrap(value, indent=4, break_long_words=True)
 
+    @contextmanager
+    def navigation_keys(self) -> Iterator[Callable[[], str]]:
+        if self._key_reader is not None:
+            yield self._key_reader
+            return
+        with _terminal_key_reader(self.stdin) as reader:
+            yield reader
+
 
 def _isatty(stream: TextIO) -> bool:
     try:
@@ -214,6 +230,188 @@ def _can_encode(encoding: str, value: str) -> bool:
         return False
 
 
+def _terminal_navigation_supported(stdin: TextIO, stdout: TextIO) -> bool:
+    try:
+        input_fd = stdin.fileno()
+        output_fd = stdout.fileno()
+        if not os.isatty(input_fd) or not os.isatty(output_fd):
+            return False
+    except (AttributeError, OSError):
+        return False
+    if os.name != "nt":
+        return True
+    return _enable_windows_virtual_terminal(stdout)
+
+
+def _enable_windows_virtual_terminal(stdout: TextIO) -> bool:
+    if os.name != "nt":
+        return True
+    try:
+        import ctypes
+        import msvcrt
+
+        handle = msvcrt.get_osfhandle(stdout.fileno())
+        mode = ctypes.c_ulong()
+        kernel32 = ctypes.windll.kernel32
+        if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            return False
+        enabled = mode.value | 0x0004  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+        return bool(kernel32.SetConsoleMode(handle, enabled))
+    except (AttributeError, OSError, ValueError):
+        return False
+
+
+def _normalize_posix_key(sequence: bytes) -> str:
+    if sequence in {b"\r", b"\n"}:
+        return "enter"
+    if sequence == b" ":
+        return "space"
+    if sequence == b"\x03":
+        raise KeyboardInterrupt
+    if sequence.startswith(b"\x1b") and sequence.endswith(b"A"):
+        return "up"
+    if sequence.startswith(b"\x1b") and sequence.endswith(b"B"):
+        return "down"
+    return ""
+
+
+def _normalize_windows_key(character: str, extended: str = "") -> str:
+    if character in {"\x00", "\xe0"}:
+        return {"H": "up", "P": "down"}.get(extended, "")
+    if character in {"\r", "\n"}:
+        return "enter"
+    if character == " ":
+        return "space"
+    if character == "\x03":
+        raise KeyboardInterrupt
+    return ""
+
+
+@contextmanager
+def _terminal_key_reader(stdin: TextIO) -> Iterator[Callable[[], str]]:
+    if os.name == "nt":
+        import msvcrt
+
+        def read_windows_key() -> str:
+            character = msvcrt.getwch()
+            if character in {"\x00", "\xe0"}:
+                extended = msvcrt.getwch()
+                return _normalize_windows_key(character, extended)
+            return _normalize_windows_key(character)
+
+        yield read_windows_key
+        return
+
+    import select
+    import termios
+    import tty
+
+    file_descriptor = stdin.fileno()
+    previous = termios.tcgetattr(file_descriptor)
+    tty.setcbreak(file_descriptor)
+
+    def read_posix_key() -> str:
+        sequence = os.read(file_descriptor, 1)
+        if sequence == b"\x1b":
+            for _ in range(2):
+                readable, _, _ = select.select([file_descriptor], [], [], 0.05)
+                if not readable:
+                    break
+                sequence += os.read(file_descriptor, 1)
+        return _normalize_posix_key(sequence)
+
+    try:
+        yield read_posix_key
+    finally:
+        termios.tcsetattr(file_descriptor, termios.TCSADRAIN, previous)
+
+
+def _render_navigation(
+    console: Console,
+    options: list[tuple[str, str, str]],
+    current: int,
+    selected: set[int],
+    multiple: bool,
+    warning: Optional[str] = None,
+) -> None:
+    for index, (_, label, _) in enumerate(options):
+        focused = index == current
+        pointer = "›" if console.unicode and focused else ">" if focused else " "
+        if console.unicode:
+            mark = ("■" if index in selected else "□") if multiple else (
+                "●" if index in selected else "○"
+            )
+        else:
+            mark = "[x]" if index in selected else "[ ]"
+        style = (console.CYAN, console.BOLD) if focused else ()
+        console.wrap(
+            console.styled(f"{pointer} {mark} {label}", *style),
+            indent=2,
+            subsequent=6,
+        )
+    description = options[current][2]
+    if description:
+        console.wrap(description, indent=5)
+    hint = "↑/↓ move · Space toggle · Enter confirm" if console.unicode else (
+        "Up/Down move · Space toggle · Enter confirm"
+    )
+    console.wrap(console.styled(hint, console.DIM), indent=5)
+    if warning:
+        console.warning(warning)
+
+
+def _navigate_options(
+    console: Console,
+    options: list[tuple[str, str, str]],
+    defaults: set[int],
+    multiple: bool,
+) -> set[int]:
+    selected = set(defaults)
+    current = min(selected) if selected else 0
+    warning: Optional[str] = None
+    console.stdout.write("\033[?25l\033[s")
+    console.stdout.flush()
+    try:
+        with console.navigation_keys() as read_key:
+            while True:
+                console.stdout.write("\033[u\033[J")
+                _render_navigation(
+                    console,
+                    options,
+                    current,
+                    selected,
+                    multiple,
+                    warning,
+                )
+                warning = None
+                key = read_key()
+                if key == "up":
+                    current = (current - 1) % len(options)
+                elif key == "down":
+                    current = (current + 1) % len(options)
+                elif key == "space":
+                    if multiple:
+                        if current in selected:
+                            selected.remove(current)
+                        else:
+                            selected.add(current)
+                    else:
+                        selected = {current}
+                elif key == "enter":
+                    if not multiple:
+                        selected = {current}
+                    if selected:
+                        break
+                    warning = "Select at least one option before continuing."
+    finally:
+        console.stdout.write("\033[u\033[J")
+        _render_navigation(console, options, current, selected, multiple)
+        console.stdout.write("\033[?25h")
+        console.stdout.flush()
+        console.write()
+    return selected
+
+
 def _select_one(
     console: Console,
     title: str,
@@ -221,6 +419,18 @@ def _select_one(
     default_value: str,
 ) -> str:
     console.section(title)
+    if console.supports_navigation:
+        default_index = next(
+            (
+                index
+                for index, (value, _, _) in enumerate(options)
+                if value == default_value
+            ),
+            0,
+        )
+        selected = _navigate_options(console, options, {default_index}, False)
+        return options[next(iter(selected))][0]
+
     default_index = 1
     for index, (value, label, description) in enumerate(options, start=1):
         recommended = value == default_value
@@ -244,6 +454,19 @@ def _select_many(
     defaults: list[str],
 ) -> list[str]:
     console.section(title)
+    if console.supports_navigation:
+        default_indexes = {
+            index
+            for index, (value, _, _) in enumerate(options)
+            if value in defaults
+        }
+        selected = _navigate_options(console, options, default_indexes, True)
+        return [
+            value
+            for index, (value, _, _) in enumerate(options)
+            if index in selected
+        ]
+
     indexes: list[str] = []
     for index, (value, label, description) in enumerate(options, start=1):
         recommended = value in defaults
@@ -279,6 +502,17 @@ def _select_many(
 
 
 def _confirm(console: Console, question: str, default: bool) -> bool:
+    if console.supports_navigation:
+        console.section("Confirm")
+        console.wrap(question, indent=2)
+        options = [
+            ("yes", "Yes", "Continue with this action."),
+            ("no", "No", "Leave the current state unchanged."),
+        ]
+        default_index = 0 if default else 1
+        selected = _navigate_options(console, options, {default_index}, False)
+        return next(iter(selected)) == 0
+
     hint = "Y/n" if default else "y/N"
     while True:
         answer = console.ask(

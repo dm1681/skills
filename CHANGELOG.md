@@ -5,6 +5,17 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-07-15
+
+### Changed
+
+- Interactive terminals now use keyboard-native option menus: Up and Down move
+  focus, Space toggles selections, and Enter confirms.
+- Single-choice, multi-choice, and confirmation prompts share the same
+  responsive navigation model on Windows, macOS, and Linux.
+- Non-terminal and redirected input retain the numbered prompt fallback for
+  scripting, testing, and accessibility.
+
 ## [2.0.0] - 2026-07-15
 
 ### Changed

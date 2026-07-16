@@ -21,6 +21,19 @@ class TTYBuffer(io.StringIO):
 
 
 class InteractiveTests(unittest.TestCase):
+    def navigable_console(self, keys: list[str]) -> tuple[object, TTYBuffer]:
+        output = TTYBuffer()
+        key_stream = iter(keys)
+        console = INSTALLER.Console(
+            TTYBuffer(),
+            output,
+            color=False,
+            unicode=True,
+            width=72,
+            key_reader=lambda: next(key_stream),
+        )
+        return console, output
+
     def test_auto_interactive_only_for_empty_real_terminal(self) -> None:
         args = INSTALLER.parser().parse_args([])
         tty_in, tty_out = TTYBuffer(), TTYBuffer()
@@ -43,6 +56,81 @@ class InteractiveTests(unittest.TestCase):
         self.assertFalse(
             INSTALLER.should_use_wizard([], automatic, tty_in, tty_out, {})
         )
+
+    def test_arrow_keys_space_and_enter_select_one_option(self) -> None:
+        console, output = self.navigable_console(["down", "space", "enter"])
+        selected = INSTALLER._select_one(
+            console,
+            "Install mode",
+            [
+                ("copy", "Copy files", "Stable local copy."),
+                ("link", "Create links", "Live checkout changes."),
+            ],
+            "copy",
+        )
+        self.assertEqual("link", selected)
+        self.assertIn("↑/↓", output.getvalue())
+        self.assertIn("Space", output.getvalue())
+        self.assertIn("Enter", output.getvalue())
+
+    def test_space_toggles_multiple_options_before_enter(self) -> None:
+        console, _ = self.navigable_console(
+            ["space", "down", "space", "down", "space", "enter"]
+        )
+        selected = INSTALLER._select_many(
+            console,
+            "Coding agents",
+            [
+                ("universal", "Shared", "Shared agents directory."),
+                ("codex", "Codex", "Codex integration."),
+                ("claude", "Claude", "Claude integration."),
+            ],
+            ["universal"],
+        )
+        self.assertEqual(["codex", "claude"], selected)
+
+    def test_confirm_uses_keyboard_option_selection(self) -> None:
+        console, _ = self.navigable_console(["up", "space", "enter"])
+        self.assertTrue(INSTALLER._confirm(console, "Apply this setup?", False))
+
+    def test_full_wizard_can_be_completed_with_navigation_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = INSTALLER.parser().parse_args(["--home", directory])
+            console, _ = self.navigable_console(
+                [
+                    "enter",  # user scope
+                    "enter",  # shared agents
+                    "down",
+                    "enter",  # link mode
+                    "up",
+                    "enter",  # Graphify yes
+                    "enter",  # apply
+                ]
+            )
+            self.assertTrue(INSTALLER.run_wizard(args, [SKILL], console))
+            self.assertEqual("user", args.scope)
+            self.assertEqual(["universal"], args.agent)
+            self.assertEqual("link", args.mode)
+            self.assertTrue(args.graphify)
+
+    def test_windows_extended_arrow_codes_are_normalized(self) -> None:
+        self.assertEqual("up", INSTALLER._normalize_windows_key("\xe0", "H"))
+        self.assertEqual("down", INSTALLER._normalize_windows_key("\x00", "P"))
+        self.assertEqual("space", INSTALLER._normalize_windows_key(" "))
+        self.assertEqual("enter", INSTALLER._normalize_windows_key("\r"))
+
+    def test_string_stream_keeps_numbered_prompt_fallback(self) -> None:
+        console = INSTALLER.Console(
+            TTYBuffer("2\n"), TTYBuffer(), color=False, unicode=False
+        )
+        self.assertFalse(console.supports_navigation)
+        selected = INSTALLER._select_one(
+            console,
+            "Mode",
+            [("copy", "Copy", "Copy files."), ("link", "Link", "Link files.")],
+            "copy",
+        )
+        self.assertEqual("link", selected)
 
     def test_default_wizard_configures_shared_user_install(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

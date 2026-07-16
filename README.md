@@ -36,6 +36,11 @@ color or Unicode is unavailable. Its recommended default is a user-scoped copy
 in `~/.agents/skills`, the shared location supported by Codex, Cursor, and
 GitHub Copilot.
 
+In an interactive terminal, use Up and Down to move between options, Space to
+toggle or choose the focused option, and Enter to confirm. Multi-select screens
+keep every checked option when you press Enter. Redirected input and terminals
+without raw-key support automatically use numbered prompts instead.
+
 Passing installer options keeps the command non-interactive, which makes it
 safe for scripts and CI. Use `--interactive` to open the wizard with preset
 options, or `--non-interactive` to explicitly suppress it.
@@ -124,7 +129,7 @@ uv sync
 To pin a machine to a release, check out its tag first:
 
 ```sh
-git checkout v2.0.0
+git checkout v3.0.0
 ./install.sh --agent all
 ```
 
