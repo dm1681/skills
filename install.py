@@ -239,7 +239,7 @@ def _terminal_navigation_supported(stdin: TextIO, stdout: TextIO) -> bool:
     except (AttributeError, OSError):
         return False
     if os.name != "nt":
-        return True
+        return os.environ.get("TERM", "") != "dumb"
     return _enable_windows_virtual_terminal(stdout)
 
 
@@ -249,14 +249,24 @@ def _enable_windows_virtual_terminal(stdout: TextIO) -> bool:
     try:
         import ctypes
         import msvcrt
+        from ctypes import wintypes
 
-        handle = msvcrt.get_osfhandle(stdout.fileno())
-        mode = ctypes.c_ulong()
+        handle = wintypes.HANDLE(msvcrt.get_osfhandle(stdout.fileno()))
+        mode = wintypes.DWORD()
         kernel32 = ctypes.windll.kernel32
-        if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+        get_console_mode = kernel32.GetConsoleMode
+        get_console_mode.argtypes = [
+            wintypes.HANDLE,
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        get_console_mode.restype = wintypes.BOOL
+        set_console_mode = kernel32.SetConsoleMode
+        set_console_mode.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        set_console_mode.restype = wintypes.BOOL
+        if not get_console_mode(handle, ctypes.byref(mode)):
             return False
         enabled = mode.value | 0x0004  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
-        return bool(kernel32.SetConsoleMode(handle, enabled))
+        return bool(set_console_mode(handle, enabled))
     except (AttributeError, OSError, ValueError):
         return False
 
@@ -352,8 +362,9 @@ def _render_navigation(
     description = options[current][2]
     if description:
         console.wrap(description, indent=5)
-    hint = "↑/↓ move · Space toggle · Enter confirm" if console.unicode else (
-        "Up/Down move · Space toggle · Enter confirm"
+    action = "toggle" if multiple else "select"
+    hint = f"↑/↓ move · Space {action} · Enter confirm" if console.unicode else (
+        f"Up/Down move · Space {action} · Enter confirm"
     )
     console.wrap(console.styled(hint, console.DIM), indent=5)
     if warning:
