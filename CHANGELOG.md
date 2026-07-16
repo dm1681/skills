@@ -5,6 +5,25 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+## [6.4.0] - 2026-07-16
+
+### Added
+
+- Added durable follow-up issue capture for external PR feedback that the
+  Reviewer assesses `AGREE` but keeps out of the current Worker lane as
+  non-blocking or out of scope.
+- Qualified candidates include source provenance, verified evidence, deferral
+  reason, desired outcome, likely surfaces, acceptance notes, deduplication
+  markers, and enough context for a later triage pass.
+
+### Changed
+
+- The Reviewer decides whether follow-up is warranted but preserves review-only
+  role boundaries. The parent Orchestrator deduplicates and creates the mapped
+  `needs-triage` issue, then returns the link for the Reviewer assessment.
+- Follow-up issues are never assigned or marked `ready-for-agent`, do not widen
+  current scope, and do not invalidate CLEAN or block readiness and merge.
+
 ## [6.3.0] - 2026-07-16
 
 ### Added

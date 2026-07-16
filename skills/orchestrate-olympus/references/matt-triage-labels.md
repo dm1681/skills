@@ -57,3 +57,7 @@ the current lane and worktrees, and dispatch no new Planner or Worker. Report
 the configured mapping, labels found, labels created, exact failure, and one
 recovery action. A successful no-change verification produces no GitHub
 comment.
+
+Reviewer-qualified follow-up issues use the configured tracker label mapped to
+canonical `needs-triage`. Do not add `ready-for-agent`, assign the issue, or
+otherwise preempt the later triage state machine.

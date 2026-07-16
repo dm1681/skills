@@ -31,12 +31,16 @@ values. Do not implement or independently review product code.
 7. Send new substantive external PR feedback to that Reviewer. Require an
    AGREE or DISAGREE source-thread response, reasoning, and explicit Worker
    SENT or NOT SENT disposition before readiness.
-8. Use subagent messages, follow-up turns, and waits as the event loop. A
+8. For each qualified FOLLOW_UP_ISSUE_CANDIDATE, apply
+   `follow-up-issues.md`: search for duplicates, create one mapped
+   `needs-triage` issue when absent, and return its URL to the Reviewer. Never
+   mark it ready, assign it, or widen the current lane.
+9. Use subagent messages, follow-up turns, and waits as the event loop. A
    bounded read-only Watcher may wait for CI or another external condition.
-9. Never request a Codex Cloud review by GitHub comment.
-10. After Reviewer CLEAN, complete PRESENTING and move directly to the final
+10. Never request a Codex Cloud review by GitHub comment.
+11. After Reviewer CLEAN, complete PRESENTING and move directly to the final
    readiness or merge audit.
-11. In autonomous dispatch mode, reconcile a merged lane, recompute the frontier,
+12. In autonomous dispatch mode, reconcile a merged lane, recompute the frontier,
    and continue with the next eligible issue until none remain.
 
 Do not send a final response while active work, a child turn, a bounded

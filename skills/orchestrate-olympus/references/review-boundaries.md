@@ -56,6 +56,9 @@ A generated artifact may block only when the defect is in Olympus's integration 
 Styling, interaction, report semantics, accessibility, or other behavior emitted by an unmodified upstream generator is `Advisory / Non-blocking / No change` unless the owner or Orchestrator explicitly promotes it into Olympus scope with evidence and a new scope version.
 
 The Worker must not patch, post-process, fork, vendor, or reimplement upstream behavior in response to an advisory. Preserve the observation in the ledger and identify the upstream actor when useful. Do not create a backlog issue without owner authorization.
+The standing authority in `follow-up-issues.md` applies only when the Reviewer
+agrees that a concrete Olympus-owned future decision or outcome deserves
+durable triage; it does not turn a pure upstream preference into Olympus scope.
 
 ## 4. Scope versions and corrections
 
@@ -114,7 +117,8 @@ For every new substantive item:
    **Olympus Reviewer assessment:** AGREE|DISAGREE
    **Reason:** <concise evidence-based reasoning>
    **Worker:** SENT as `<FINDING_ID>`|NOT SENT — <concise reason>
-   <!-- olympus-review-assessment source={SOURCE_ACTIVITY_ID} head={FULL_SHA} assessment={agree|disagree} worker={sent|not-sent} finding={FINDING_ID_OR_NONE} -->
+   **Follow-up:** PROPOSED|NOT PROPOSED — <concise reason>|CREATED|EXISTING `<ISSUE_URL>`
+   <!-- olympus-review-assessment source={SOURCE_ACTIVITY_ID} head={FULL_SHA} assessment={agree|disagree} worker={sent|not-sent} finding={FINDING_ID_OR_NONE} followup={proposed|not-proposed|created|existing|pending} issue={ISSUE_NUMBER_OR_NONE} -->
    ```
 
 4. When agreeing with an in-scope Worker-owned defect, create or reuse a stable
@@ -124,7 +128,12 @@ For every new substantive item:
    are advisory, duplicates, already assigned under an existing finding,
    require the Orchestrator, owner, or upstream actor, or need no branch
    mutation. State the reason; do not force work merely to produce a dispatch.
-6. After a sent finding is repaired, independently verify the new exact head
+6. For `AGREE` plus `NOT SENT` because the item is non-blocking or outside the
+   current scope, apply `follow-up-issues.md`. Propose only durable,
+   non-duplicate, public-safe Olympus work with enough context for later
+   triage. The Orchestrator creates or links the issue; the Reviewer updates
+   its own assessment with the result.
+7. After a sent finding is repaired, independently verify the new exact head
    and reply in the same source thread with the finding ID, verified head, and
    outcome. Do not let the Worker answer the external commenter, and do not
    resolve a thread authored by someone else.
@@ -136,7 +145,8 @@ published. The comment alone does not automatically invalidate exact-head code
 evidence or CLEAN. A `DISAGREE` or advisory `AGREE` leaves CLEAN valid after
 reconciliation. A blocking `AGREE` supersedes CLEAN immediately at the same
 head, returns the lane to `REPAIRING`, and any repair commit establishes a new
-head that requires a fresh review.
+head that requires a fresh review. Follow-up issue capture does not change the
+current scope, CLEAN, readiness, or merge state.
 
 ## 7. Shared disposition and clean signal
 

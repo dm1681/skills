@@ -230,14 +230,16 @@ In human-controlled mode, recommend exactly one issue and wait for approval. In 
 
 - Orchestrator: the current parent task; choose and report the path, maintain
   authority and checkpoint state, create/steer/wait on subagents, reconcile
-  scope, present artifacts, and perform the final readiness or authorized merge
-  audit. Do not implement or independently review product code.
+  scope, deduplicate and create Reviewer-qualified follow-up issues, present
+  artifacts, and perform the final readiness or authorized merge audit. Do not
+  implement or independently review product code.
 - Planner: plan one issue or material repair from an exact SHA; remain read-only for product code.
 - Worker: implement or repair one lane, use TDD at established seams, verify documented public commands, update tracked generated artifacts only through supported tools, and never approve or merge.
 - Reviewer: independently review exact-head Olympus-owned work, classify
   provenance before severity, own responses to substantive external PR
-  feedback, promote verified Worker findings, verify fixes, resolve only
-  Reviewer-authored threads, and never implement, approve, or merge.
+  feedback, promote verified Worker findings, propose qualified follow-up issue
+  capture, verify fixes, resolve only Reviewer-authored threads, and never
+  implement, create backlog issues, approve, or merge.
 
 Use the role-specific prompt references. Obtain actual task IDs before authorizing GitHub writes.
 
@@ -278,6 +280,13 @@ assessment with concise reasoning and says whether it was SENT to the Worker as
 a stable finding or NOT SENT with a reason. The Reviewer owns later
 verified-resolution replies. The Worker never responds directly to the source
 comment, and the Orchestrator never requests or waits for an external review.
+
+For `AGREE` plus `Worker: NOT SENT` feedback, apply
+`follow-up-issues.md`. The Reviewer decides whether durable capture is
+warranted and writes the candidate brief. The parent Orchestrator has standing
+authority to deduplicate and create only the corresponding mapped
+`needs-triage` issue. This bookkeeping never authorizes implementation,
+assignment, `ready-for-agent`, current-scope expansion, or a readiness block.
 
 Standard task titles:
 

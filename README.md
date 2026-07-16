@@ -32,6 +32,13 @@ concise reasoning, and whether the item was **SENT** to the Worker as a tracked
 finding. The Worker acts only on promoted findings and does not reply directly
 to external commenters.
 
+When the Reviewer agrees with feedback but keeps it out of the current Worker
+lane, it evaluates whether the observation deserves durable follow-up. A
+qualified item is deduplicated and created by the parent Orchestrator as a
+self-contained `needs-triage` issue, then linked from the original assessment.
+It is not assigned or marked `ready-for-agent`, and it cannot widen or block
+the current PR.
+
 When tracked `graphify-out/` exists and an Olympus lane changes indexed files,
 the Worker runs the public incremental Graphify refresh after ordinary tests
 and before the final push. The Reviewer verifies freshness, graph health,
@@ -196,7 +203,7 @@ uv sync
 To pin a machine to a release, check out its tag first:
 
 ```sh
-git checkout v6.3.0
+git checkout v6.4.0
 ./install.sh --agent all
 ```
 
