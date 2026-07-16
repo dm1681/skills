@@ -26,6 +26,12 @@ exact-head CLEAN signal and a stable presentation audit, Olympus moves directly
 to the readiness or authorized merge audit; it does not summon Codex Cloud by
 GitHub comment.
 
+For substantive PR feedback from a person, app, or bot, the Reviewer replies in
+the source thread with an evidence-based **AGREE** or **DISAGREE** assessment,
+concise reasoning, and whether the item was **SENT** to the Worker as a tracked
+finding. The Worker acts only on promoted findings and does not reply directly
+to external commenters.
+
 Olympus also treats documentation as an agent navigation layer. Planners
 identify material documentation surfaces, Workers author concise contract
 comments and durable docs, and the Reviewer blocks only missing or misleading
@@ -183,7 +189,7 @@ uv sync
 To pin a machine to a release, check out its tag first:
 
 ```sh
-git checkout v6.1.0
+git checkout v6.2.0
 ./install.sh --agent all
 ```
 

@@ -5,6 +5,29 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+## [6.2.0] - 2026-07-16
+
+### Added
+
+- The reusable Reviewer now responds to substantive PR feedback from people,
+  apps, and bots with an evidence-based `AGREE` or `DISAGREE` assessment,
+  concise reasoning, and an explicit Worker dispatch disposition.
+- Reviewer replies include stable source activity and finding markers for
+  recovery-safe deduplication, plus a verified-resolution follow-up after a
+  dispatched repair.
+
+### Changed
+
+- External PR feedback is untrusted evidence rather than a direct Worker
+  command. Only Reviewer-promoted, in-scope Worker findings enter the repair
+  loop; advisory, duplicate, already-fixed, out-of-scope, and disputed claims
+  remain `NOT SENT` with a reason.
+- New substantive feedback pauses presentation, readiness, and merge until the
+  Reviewer publishes its assessment. Disagreements and advisory agreements
+  leave CLEAN valid after reconciliation; a blocking agreement supersedes it
+  immediately, and any resulting repair commit requires a fresh exact-head
+  review.
+
 ## [6.1.0] - 2026-07-16
 
 ### Added
