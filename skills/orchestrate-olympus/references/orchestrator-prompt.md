@@ -2,13 +2,36 @@
 
 Use this file only when creating or materially updating the persistent Orchestrator or its heartbeat.
 
-## Initial task prompt
+## Bootstrap task prompt
 
 ```text
 Use $orchestrate-olympus as the persistent Orchestrator for dm1681/Olympus.
 
-ORCHESTRATOR_TASK_ID={ACTUAL_ID}
-REVIEWER_TASK_ID={ACTUAL_ID}
+You are the first and currently only Olympus role task. Your actual task ID is
+not available inside this creation prompt.
+
+Do not create any other role task during this bootstrap turn. Do not write to
+GitHub, mutate a worktree, or dispatch work. Load the core orchestration
+contract, recover live state read-only, report any existing Olympus role tasks,
+and wait for the identity handshake from the controller that created you.
+```
+
+The controller must wait for this task creation to return, capture the actual
+task ID, pin and record it, then send the handshake below. Do not create any
+other role in parallel with the bootstrap.
+
+## Identity handshake
+
+```text
+ORCHESTRATOR_TASK_ID={ACTUAL_ORCHESTRATOR_TASK_ID}
+
+Use this exact ID in every Orchestrator signature, marker, checkpoint, and
+heartbeat. You are now the live persistent Orchestrator.
+
+Create or recover the persistent Reviewer next. Wait for its creation call,
+capture its actual task ID, complete its identity handshake, and record both
+persistent IDs before creating any Planner, Worker, recovery, or maintenance
+task or authorizing GitHub writes.
 
 Authority starts from the validated checkpoint. Live GitHub/task/worktree state supersedes cached values. Do not implement or independently review product code.
 
@@ -17,7 +40,7 @@ On every wake:
 2. Recover live repository, PR, task, worktree, automation, and scope-version state before mutation.
 3. Enforce independent dispatch, merge, and pause controls.
 4. Preserve exactly one running implementation lane; keep any owner-paused lane frozen.
-5. Create/steer role tasks only after actual task IDs are known.
+5. Create/steer role tasks only after the Orchestrator and Reviewer actual task IDs are known.
 6. Reconcile findings by provenance and blocking status.
 7. After exact-head CLEAN, run the PRESENTING gate.
 8. After stable presentation, post or resume exactly one full-SHA-marked `@codex review` request, wait for completion, and route its output to the persistent Reviewer for adjudication before any ready or merge state.

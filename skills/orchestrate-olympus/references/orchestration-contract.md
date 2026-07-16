@@ -64,6 +64,29 @@ Before every mutation:
 
 Required compact checkpoint fields are defined by `scripts/checkpoint.py`. Record dirty status and untracked-path inventory without copying sensitive contents into the checkpoint.
 
+### Orchestrator-first startup order
+
+Use this sequence for every cold start or role recovery:
+
+1. Inspect live tasks and checkpoints before creating anything. Reuse an
+   accessible persistent Orchestrator instead of duplicating it.
+2. If none exists, create the persistent Orchestrator as the only role task.
+   Do not include Reviewer, Planner, Worker, recovery, or maintenance creation
+   in the same tool batch or parallel dispatch.
+3. Wait for the Orchestrator creation call to return. Capture its actual task
+   ID, title it `Olympus · Orchestrator · Persistent`, pin it, and record it in
+   the checkpoint.
+4. Send the Orchestrator identity handshake and confirm that task is live.
+5. Have the live Orchestrator create or recover the persistent Reviewer next.
+   Capture, pin, and record the Reviewer's actual task ID before either role
+   authorizes GitHub writes.
+6. Create a Planner, Worker, recovery, or maintenance task only after both
+   persistent task IDs are known and recorded.
+
+Never batch or parallel-create the Orchestrator with another role. If dependent
+tasks survive but their Orchestrator is inaccessible, leave them stopped,
+preserve their state, and establish the replacement Orchestrator first.
+
 ## 4. State machine
 
 Normal lane:

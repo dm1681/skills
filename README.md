@@ -10,6 +10,11 @@ self-contained under [`skills/`](skills/).
 | --- | --- |
 | `orchestrate-olympus` | Operate the visible, recoverable delivery control plane for `dm1681/Olympus`. |
 
+The Olympus cold-start order is strict: the persistent Orchestrator task starts
+alone and completes its identity handshake first. It then creates or recovers
+the persistent Reviewer; Planner, Worker, recovery, and maintenance tasks can
+start only after both persistent task IDs are recorded.
+
 ## Install
 
 Run the installer without options to open the guided setup. It walks through
@@ -162,7 +167,7 @@ uv sync
 To pin a machine to a release, check out its tag first:
 
 ```sh
-git checkout v4.0.0
+git checkout v4.1.0
 ./install.sh --agent all
 ```
 

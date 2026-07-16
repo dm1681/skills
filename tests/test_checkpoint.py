@@ -13,8 +13,9 @@ CHECKPOINT = ROOT / "skills" / "orchestrate-olympus" / "scripts" / "checkpoint.p
 
 
 class CheckpointTests(unittest.TestCase):
-    def test_idle_checkpoint_validates_and_renders(self) -> None:
-        data = {
+    @staticmethod
+    def idle_checkpoint() -> dict[str, object]:
+        return {
             "schema_version": 2,
             "repository": "dm1681/Olympus",
             "dispatch_mode": "human-controlled",
@@ -42,24 +43,48 @@ class CheckpointTests(unittest.TestCase):
             "escalation": None,
             "next": "Wait for owner approval.",
         }
+
+    def run_checkpoint(
+        self,
+        data: dict[str, object],
+        command: str = "validate",
+    ) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "checkpoint.json"
             path.write_text(json.dumps(data), encoding="utf-8")
-            validated = subprocess.run(
-                [sys.executable, str(CHECKPOINT), "validate", str(path)],
+            return subprocess.run(
+                [sys.executable, str(CHECKPOINT), command, str(path)],
                 text=True,
                 capture_output=True,
                 check=False,
             )
-            self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
-            rendered = subprocess.run(
-                [sys.executable, str(CHECKPOINT), "render-heartbeat", str(path)],
-                text=True,
-                capture_output=True,
-                check=False,
-            )
-            self.assertEqual(0, rendered.returncode, rendered.stdout + rendered.stderr)
-            self.assertIn("lane_kind=none phase=IDLE", rendered.stdout)
+
+    def test_idle_checkpoint_validates_and_renders(self) -> None:
+        data = self.idle_checkpoint()
+        validated = self.run_checkpoint(data)
+        self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
+        rendered = self.run_checkpoint(data, "render-heartbeat")
+        self.assertEqual(0, rendered.returncode, rendered.stdout + rendered.stderr)
+        self.assertIn("lane_kind=none phase=IDLE", rendered.stdout)
+
+    def test_dependent_role_tasks_require_orchestrator_task(self) -> None:
+        task_id = "11111111-1111-1111-1111-111111111111"
+        for field in ("reviewer_task", "planner_task", "worker_task"):
+            with self.subTest(field=field):
+                data = self.idle_checkpoint()
+                data[field] = task_id
+                validated = self.run_checkpoint(data)
+                self.assertNotEqual(0, validated.returncode)
+                self.assertIn(
+                    f"{field} requires orchestrator_task",
+                    validated.stderr,
+                )
+
+    def test_orchestrator_can_be_recorded_before_reviewer(self) -> None:
+        data = self.idle_checkpoint()
+        data["orchestrator_task"] = "11111111-1111-1111-1111-111111111111"
+        validated = self.run_checkpoint(data)
+        self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
 
 
 if __name__ == "__main__":

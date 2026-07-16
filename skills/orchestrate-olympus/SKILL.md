@@ -70,6 +70,12 @@ Never paste the full contract or completed-lane history into a heartbeat. Live r
 
 ## Keep work visible and bounded
 
+- Start or resume the persistent Orchestrator task first. On a cold start,
+  create it as the only role task, capture and record its actual task ID, and
+  complete its identity handshake before creating the Reviewer. Never batch or
+  parallel-create the Orchestrator with any other role. Create no Planner,
+  Worker, recovery, or maintenance task until the live Orchestrator has created
+  or recovered the persistent Reviewer.
 - Maintain one persistent Orchestrator and one persistent Reviewer.
 - Maintain exactly one running implementation lane and at most one open Worker PR. A preserved owner-paused lane with no open PR may coexist with one explicitly authorized maintenance lane; it is frozen, not running.
 - Title tasks `Olympus · <Role> · Issue #N`, adding `/ PR #P` when useful. Use `Olympus · Setup · <Topic> · PR #P` for maintenance and a concise `· Recovery` suffix only for recovery.

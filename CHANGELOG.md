@@ -5,6 +5,18 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-07-15
+
+### Changed
+
+- Olympus cold starts now create and identify the persistent Orchestrator as
+  the only role task before starting the Reviewer or any lane task.
+- The live Orchestrator now creates or recovers the persistent Reviewer and
+  completes both identity handshakes before dispatching Planner, Worker,
+  recovery, or maintenance work.
+- Checkpoint validation rejects dependent role task IDs when no Orchestrator
+  task ID is recorded.
+
 ## [4.0.0] - 2026-07-15
 
 ### Added

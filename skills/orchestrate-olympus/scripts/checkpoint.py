@@ -242,6 +242,9 @@ def validate_data(data: Any) -> list[str]:
     _nullable_sha(errors, "clean_signal", data["clean_signal"])
     for field in ("orchestrator_task", "planner_task", "worker_task", "reviewer_task"):
         _nullable_task(errors, field, data[field])
+    for field in ("reviewer_task", "planner_task", "worker_task"):
+        if data[field] is not None and data["orchestrator_task"] is None:
+            errors.append(f"{field} requires orchestrator_task")
 
     _nullable_nonempty_string(errors, "branch", data["branch"])
     _nullable_nonempty_string(errors, "worker_worktree", data["worker_worktree"])
