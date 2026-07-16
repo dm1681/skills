@@ -5,7 +5,9 @@ description: Create, resume, pause, recover, inspect, or operate the Olympus mul
 
 # Orchestrate Olympus
 
-Operate one visible, recoverable delivery control plane. Keep inference in Codex tasks, use GitHub as the durable audit ledger, and keep mutable heartbeat state smaller than the stable policy in this skill.
+Operate one visible, recoverable delivery control plane. The current parent
+Codex task is the Orchestrator, reusable subagents perform review and active
+lane work, and GitHub remains the durable audit ledger.
 
 ## Verify prerequisites
 
@@ -31,7 +33,7 @@ Classify the request before acting:
 4. **Maintenance** — run an explicitly authorized repository-management lane while any normal lane is idle or safely owner-paused.
 5. **Recover** — preserve and restore stalled, inaccessible, dirty, or base-drifted work.
 6. **Present** — refresh exact-head PR evidence, visual progress, artifacts, and owner handoff without changing product code.
-7. **Readiness or merge** — after persistent Reviewer exact-head CLEAN and a
+7. **Readiness or merge** — after reusable Reviewer exact-head CLEAN and a
    stable presentation audit, perform the final readiness or authorized merge
    audit directly.
 
@@ -44,8 +46,8 @@ Always read `references/orchestration-contract.md` before any mutation. Then rea
 - PR review, finding reconciliation, or scope correction: `references/review-boundaries.md`.
 - Matt Pocock issue/PR label setup, verification, or repair:
   `references/matt-triage-labels.md`.
-- Creating, recovering, pausing, or resuming Codex scheduled heartbeat
-  automations: `references/scheduled-automations.md`.
+- Creating, recovering, steering, waiting on, or retiring role subagents:
+  `references/subagent-lifecycle.md`.
 - Owner pause/resume, stalled task, dirty worktree, missing worktree, or base drift: `references/pause-and-recovery.md`.
 - Visual evidence, artifact publication, presentation gate, or final report: `references/visual-evidence.md`.
 - Creating or materially changing a role task: read that role's prompt file only:
@@ -58,7 +60,9 @@ Treat live `AGENTS.md` and linked repository instructions as higher-priority pro
 
 ## Recover before every mutation
 
-Inspect live GitHub state, exact SHAs, blockers, checks, reviews, threads, mergeability, agent markers, Codex tasks, worktrees, and automations. Match roles by actual task IDs. Do not duplicate persistent roles or active lanes.
+Inspect live GitHub state, exact SHAs, blockers, checks, reviews, threads,
+mergeability, agent markers, Codex tasks, subagents, and worktrees. Match child
+roles by actual subagent IDs. Do not duplicate reusable roles or active lanes.
 
 Use GitHub as the recoverable ledger and a compact checkpoint only as a host-local cache. Validate checkpoint JSON with:
 
@@ -66,40 +70,56 @@ Use GitHub as the recoverable ledger and a compact checkpoint only as a host-loc
 python3 scripts/checkpoint.py validate /path/to/checkpoint.json
 ```
 
-Render a minimal heartbeat prompt with:
+Render a compact recovery prompt for a new or compacted parent task with:
 
 ```sh
-python3 scripts/checkpoint.py render-heartbeat /path/to/checkpoint.json
+python3 scripts/checkpoint.py render-resume /path/to/checkpoint.json
 ```
 
-Never paste the full contract or completed-lane history into a heartbeat. Live recovery supersedes stale checkpoint values.
+`render-resume` automatically normalizes a valid schema v3 checkpoint into the
+parent-resident schema in memory. To write the normalized JSON for later use:
+
+```sh
+python3 scripts/checkpoint.py migrate /path/to/checkpoint.json > checkpoint-v4.json
+```
+
+Never paste the full contract or completed-lane history into a recovery prompt.
+Live recovery supersedes stale checkpoint values.
 
 ## Keep work visible and bounded
 
-- Start or resume the persistent Orchestrator task first. On a cold start,
-  create it as the only role task, capture and record its actual task ID, and
-  create or recover its Codex scheduled heartbeat automation before completing
-  its identity handshake or creating the Reviewer. Never batch or
-  parallel-create the Orchestrator with any other role. Create or recover the
-  Reviewer's scheduled heartbeat after its actual task ID is known. Create no
-  Planner, Worker, recovery, or maintenance task until both persistent tasks
-  and both scheduled automations are verified; complete that gate before
-  creating a Planner, Worker, recovery, or maintenance task.
-- Maintain one persistent Orchestrator and one persistent Reviewer.
-- After both persistent roles and scheduled automations are verified, validate
-  the configured Matt Pocock triage labels against the live repository and
-  create only missing mapped labels before dispatching a Planner or Worker.
-  GitHub uses one repository-wide label set for issues and PRs.
+- The current parent task becomes the Orchestrator before it creates any child.
+  Never spawn a separate Orchestrator subagent.
+- Spawn or recover one reusable Reviewer subagent first. Record its actual
+  subagent ID before dispatching a Planner, Worker, recovery, or maintenance
+  subagent.
+- After the Reviewer is verified, validate the configured Matt Pocock triage
+  labels against the live repository and create only missing mapped labels
+  before dispatching a Planner or Worker. GitHub uses one repository-wide
+  label set for issues and PRs.
 - After creating a Planner, wait only for creation or worktree setup to resolve
-  to its actual task ID, capture and record that ID, and immediately send the
+  to its actual subagent ID, capture and record that ID, and immediately send the
   Planner identity handshake. Do not wait for a readiness reply or a later
-  heartbeat. The Planner begins read-only planning immediately but may publish
+  message. The Planner begins read-only planning immediately but may publish
   nothing until its exact-base and live-eligibility gates pass.
+- Create a Planner as a one-shot subagent. Reuse the same Worker for
+  implementation and all repair turns in the active lane. Reuse the same
+  Reviewer across heads and repair rounds.
+- Use subagent messages, follow-up turns, and waits as the event loop. An
+  optional Watcher may wait on one bounded external condition such as CI and
+  report back read-only; never create a permanent polling task.
+- Do not send the parent task's final response while an active lane, child turn,
+  bounded external wait, repair loop, presentation, authorized merge, or
+  eligible autonomous queue remains. Stay resident and continue until a true
+  terminal condition in `references/subagent-lifecycle.md`.
 - Maintain exactly one running implementation lane and at most one open Worker PR. A preserved owner-paused lane with no open PR may coexist with one explicitly authorized maintenance lane; it is frozen, not running.
 - Title tasks `Olympus · <Role> · Issue #N`, adding `/ PR #P` when useful. Use `Olympus · Setup · <Topic> · PR #P` for maintenance and a concise `· Recovery` suffix only for recovery.
-- Pin the Orchestrator, Reviewer, and current active one-shot task. Archive and unpin completed one-shot tasks only after their worktree state is safe.
+- Pin the parent Orchestrator task when supported, plus the Reviewer and current
+  active one-shot child. Archive and unpin completed one-shot children only
+  after their worktree state is safe.
 - Never delete or archive a dirty or unverified worktree merely to recover a lane.
-- Keep GitHub comments concise and transition-driven. Never write a no-change heartbeat comment.
+- Keep GitHub comments concise and transition-driven. Never write a no-change
+  status comment.
 
 ## Enforce exact-head completion
 
@@ -108,7 +128,7 @@ Every finding needs a shared disposition under the ownership rules. A new commit
 Never request a Codex Cloud review by GitHub comment. It is not an Olympus
 phase, readiness gate, repair actor, or merge requirement. After stable
 presentation, move directly to the final readiness or merge audit while the
-persistent Reviewer's exact-head CLEAN remains valid. Treat any pre-existing
+reusable Reviewer's exact-head CLEAN remains valid. Treat any pre-existing
 external bot review as non-authoritative activity under normal ownership rules;
 do not wait for it, trigger another one, or give it separate checkpoint state.
 
@@ -119,4 +139,8 @@ Merge behavior follows `merge_mode` independently from dispatch:
 
 ## Report compact state
 
-End each orchestration pass with the checkpoint fields that matter now: authority modes, lane kind, phase, scope version, issue/PR, role task IDs, exact head, dirty-worktree state, findings, checks, clean signal, artifacts, escalation, and one next action. With no transition, make no GitHub write and report concise unchanged state.
+At each visible status transition, report the checkpoint fields that matter
+now: authority modes, lane kind, phase, scope version, issue/PR, child task IDs,
+exact head, dirty-worktree state, findings, checks, clean signal, artifacts,
+escalation, and one next action. This status does not end the parent task unless
+a terminal condition is satisfied. With no transition, make no GitHub write.

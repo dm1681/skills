@@ -1,9 +1,9 @@
 # Matt Pocock triage-label gate
 
-Use this gate after the persistent Orchestrator and Reviewer identities and
-scheduled automations are verified, and before dispatching any Planner or
-Worker. GitHub labels are repository-wide, so one verified label set serves
-both issues and pull requests.
+Use this gate after the parent Orchestrator and reusable Reviewer identity are
+verified, and before dispatching any Planner or Worker. GitHub labels are
+repository-wide, so one verified label set serves both issues and pull
+requests.
 
 ## Resolve the configured vocabulary
 

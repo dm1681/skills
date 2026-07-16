@@ -10,12 +10,18 @@ self-contained under [`skills/`](skills/).
 | --- | --- |
 | `orchestrate-olympus` | Operate the visible, recoverable delivery control plane for `dm1681/Olympus`. |
 
-The Olympus cold-start order is strict: the persistent Orchestrator task starts
-alone and completes its identity handshake first. It then creates or recovers
-the persistent Reviewer; Planner, Worker, recovery, and maintenance tasks can
-start only after both persistent task IDs are recorded.
+Olympus now uses a parent-resident subagent loop. The current Codex task is the
+Orchestrator; it starts one reusable Reviewer first, uses one-shot Planners,
+reuses one Worker through implementation and repair, and can create bounded
+read-only Watchers for CI or other external waits. It does not depend on Codex
+scheduled tasks.
 
-The persistent Reviewer is the final code-review authority. After its
+The parent stays active until a true terminal state. In autonomous dispatch
+mode it continues through the eligible issue frontier, including review,
+repair, presentation, merge, and post-merge reconciliation, without requiring
+a timer to wake it between role handoffs.
+
+The reusable Reviewer is the final code-review authority. After its
 exact-head CLEAN signal and a stable presentation audit, Olympus moves directly
 to the readiness or authorized merge audit; it does not summon Codex Cloud by
 GitHub comment.
@@ -172,9 +178,13 @@ uv sync
 To pin a machine to a release, check out its tag first:
 
 ```sh
-git checkout v5.0.0
+git checkout v6.0.0
 ./install.sh --agent all
 ```
+
+Subagent autonomy lasts for the active parent task. If Codex exits, the machine
+restarts, or the task is ended, start a new parent task with
+`$orchestrate-olympus`; it recovers from GitHub and the compact checkpoint.
 
 ## Agent directory policy
 

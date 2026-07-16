@@ -5,6 +5,37 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+## [6.0.0] - 2026-07-16
+
+### Added
+
+- Added an explicit parent-resident subagent lifecycle: reusable Reviewer,
+  one-shot Planner, reusable active-lane Worker, and optional bounded read-only
+  Watcher.
+- Added a compact `checkpoint.py render-resume` prompt for recovering a new or
+  compacted parent Orchestrator from live GitHub, child, and worktree state.
+- Added `checkpoint.py migrate` and automatic v3 normalization for recovery
+  from checkpoints that still contain scheduled-automation state.
+
+### Changed
+
+- The current Codex task is now the Orchestrator and must remain resident until
+  human-merge readiness, autonomous queue completion, owner pause/stop, or a
+  genuine escalation.
+- Role handoffs are event-driven through subagent messages, follow-up turns,
+  and waits. Autonomous dispatch continues through the eligible frontier after
+  each merge.
+- Reviewer, Planner, and Worker creation now each require immediate delivery of
+  the actual child ID; Worker repair turns reuse the same child.
+- Checkpoint schema version 4 records
+  `orchestrator_mode=parent-resident`; Planner and Worker child IDs require a
+  reusable Reviewer ID, not a separately spawned Orchestrator UUID.
+
+### Removed
+
+- Removed scheduled heartbeat automations, their startup gate, checkpoint
+  state, recovery rules, and fixed-cadence polling.
+
 ## [5.0.0] - 2026-07-16
 
 ### Removed

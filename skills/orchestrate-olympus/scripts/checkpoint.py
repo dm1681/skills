@@ -18,6 +18,7 @@ TASK_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 DISPATCH_MODES = {"human-controlled", "autonomous"}
 MERGE_MODES = {"owner-only", "autonomous"}
 PAUSE_MODES = {"running", "owner-paused", "escalated"}
+ORCHESTRATOR_MODES = {"parent-resident"}
 LANE_KINDS = {"none", "issue", "repair", "maintenance"}
 PHASES = {
     "IDLE",
@@ -74,16 +75,12 @@ DISPOSITIONS = {
 }
 PROMOTERS = {"none", "orchestrator", "owner"}
 ARTIFACT_STATUSES = {"planned", "active", "verified", "stale", "failed"}
-AUTOMATION_STATUSES = {"running", "paused"}
-AUTOMATION_NAMES = {
-    "orchestrator": "olympus-work-orchestrator",
-    "reviewer": "olympus-pr-review-watcher",
-}
 ACCEPTED_BLOCKING = {"accepted-fixed", "accepted-no-change"}
 
 REQUIRED_FIELDS = {
     "schema_version",
     "repository",
+    "orchestrator_mode",
     "dispatch_mode",
     "merge_mode",
     "pause_mode",
@@ -139,41 +136,6 @@ def _nullable_task(errors: list[str], field: str, value: Any) -> None:
 def _nullable_positive_int(errors: list[str], field: str, value: Any) -> None:
     if value is not None and (not isinstance(value, int) or isinstance(value, bool) or value <= 0):
         errors.append(f"{field} must be null or a positive integer")
-
-
-def _validate_automations(errors: list[str], value: Any, data: dict[str, Any]) -> None:
-    prefix = "automations"
-    if not isinstance(value, dict):
-        errors.append(f"{prefix} must be an object")
-        return
-    for role, expected_name in AUTOMATION_NAMES.items():
-        automation = value.get(role)
-        if automation is None:
-            continue
-        field = f"{prefix}.{role}"
-        if not isinstance(automation, dict):
-            errors.append(f"{field} must be null or an object")
-            continue
-        required = {"id", "name", "target_task", "interval_minutes", "status"}
-        missing = sorted(required - automation.keys())
-        if missing:
-            errors.append(f"{field} missing fields: {', '.join(missing)}")
-            continue
-        if not isinstance(automation["id"], str) or not automation["id"].strip():
-            errors.append(f"{field}.id must be a non-empty string")
-        if automation["name"] != expected_name:
-            errors.append(f"{field}.name must be {expected_name}")
-        _nullable_task(errors, f"{field}.target_task", automation["target_task"])
-        task_field = f"{role}_task"
-        if automation["target_task"] != data[task_field]:
-            errors.append(f"{field}.target_task must equal {task_field}")
-        if (
-            not isinstance(automation["interval_minutes"], int)
-            or isinstance(automation["interval_minutes"], bool)
-            or automation["interval_minutes"] <= 0
-        ):
-            errors.append(f"{field}.interval_minutes must be a positive integer")
-        _enum(errors, f"{field}.status", automation["status"], AUTOMATION_STATUSES)
 
 
 def _validate_lane_snapshot(errors: list[str], value: Any, prefix: str) -> None:
@@ -232,10 +194,16 @@ def validate_data(data: Any) -> list[str]:
         errors.append(f"missing fields: {', '.join(missing)}")
         return errors
 
-    if data["schema_version"] != 3:
-        errors.append("schema_version must be 3")
+    if data["schema_version"] != 4:
+        errors.append("schema_version must be 4")
     if data["repository"] != "dm1681/Olympus":
         errors.append("repository must be dm1681/Olympus")
+    _enum(
+        errors,
+        "orchestrator_mode",
+        data["orchestrator_mode"],
+        ORCHESTRATOR_MODES,
+    )
     _enum(errors, "dispatch_mode", data["dispatch_mode"], DISPATCH_MODES)
     _enum(errors, "merge_mode", data["merge_mode"], MERGE_MODES)
     _enum(errors, "pause_mode", data["pause_mode"], PAUSE_MODES)
@@ -249,6 +217,11 @@ def validate_data(data: Any) -> list[str]:
         _enum(errors, "phase", data["phase"], PHASES)
     if "codex_review" in data:
         errors.append("codex_review was removed from checkpoint schema version 3")
+    if "automations" in data:
+        errors.append(
+            "automations was removed from checkpoint schema version 4; "
+            "use parent-resident subagents"
+        )
 
     if not isinstance(data["scope_version"], int) or isinstance(data["scope_version"], bool) or data["scope_version"] < 1:
         errors.append("scope_version must be a positive integer")
@@ -259,11 +232,9 @@ def validate_data(data: Any) -> list[str]:
     _nullable_sha(errors, "clean_signal", data["clean_signal"])
     for field in ("orchestrator_task", "planner_task", "worker_task", "reviewer_task"):
         _nullable_task(errors, field, data[field])
-    for field in ("reviewer_task", "planner_task", "worker_task"):
-        if data[field] is not None and data["orchestrator_task"] is None:
-            errors.append(f"{field} requires orchestrator_task")
-    if data.get("automations") is not None:
-        _validate_automations(errors, data["automations"], data)
+    for field in ("planner_task", "worker_task"):
+        if data[field] is not None and data["reviewer_task"] is None:
+            errors.append(f"{field} requires reviewer_task")
 
     _nullable_nonempty_string(errors, "branch", data["branch"])
     _nullable_nonempty_string(errors, "worker_worktree", data["worker_worktree"])
@@ -390,16 +361,40 @@ def validate_data(data: Any) -> list[str]:
 
 
 def load_checkpoint(path: Path) -> dict[str, Any]:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError as exc:
-        raise ValueError(f"checkpoint not found: {path}") from exc
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"invalid JSON at line {exc.lineno}, column {exc.colno}: {exc.msg}") from exc
+    value = read_checkpoint_json(path)
     errors = validate_data(value)
     if errors:
         raise ValueError("\n".join(f"- {error}" for error in errors))
     return value
+
+
+def read_checkpoint_json(path: Path) -> Any:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise ValueError(f"checkpoint not found: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid JSON at line {exc.lineno}, column {exc.colno}: {exc.msg}") from exc
+
+
+def migrate_data(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError("checkpoint must be a JSON object")
+
+    migrated = copy.deepcopy(value)
+    if migrated.get("schema_version") == 3:
+        migrated["schema_version"] = 4
+        migrated["orchestrator_mode"] = "parent-resident"
+        migrated.pop("automations", None)
+
+    errors = validate_data(migrated)
+    if errors:
+        raise ValueError("\n".join(f"- {error}" for error in errors))
+    return migrated
+
+
+def load_resume_checkpoint(path: Path) -> dict[str, Any]:
+    return migrate_data(read_checkpoint_json(path))
 
 
 def _fmt(value: Any) -> str:
@@ -413,6 +408,7 @@ def _fmt(value: Any) -> str:
 def render_state(data: dict[str, Any]) -> str:
     lines = [
         f"schema_version={data['schema_version']} repository={data['repository']}",
+        f"orchestrator_mode={data['orchestrator_mode']}",
         f"dispatch_mode={data['dispatch_mode']} merge_mode={data['merge_mode']} pause_mode={data['pause_mode']}",
         f"lane_kind={data['lane_kind']} phase={data['phase']} scope_version={data['scope_version']}",
         f"issue={_fmt(data['issue'])} pr={_fmt(data['pr'])} branch={_fmt(data['branch'])}",
@@ -452,36 +448,28 @@ def render_state(data: dict[str, Any]) -> str:
             f"paused_lane={paused['lane_kind']} issue={_fmt(paused['issue'])} pr={_fmt(paused['pr'])} "
             f"worker={_fmt(paused['worker_task'])} dirty={_fmt(paused['worker_dirty'])}"
         )
-    if data.get("automations") is not None:
-        automations = data["automations"]
-        for role in ("orchestrator", "reviewer"):
-            automation = automations.get(role)
-            if automation is not None:
-                lines.append(
-                    f"automation.{role}={automation['id']} target={automation['target_task']} "
-                    f"interval={automation['interval_minutes']}m status={automation['status']}"
-                )
     lines.append(f"next={data['next']}")
     return "\n".join(lines)
 
 
-def render_heartbeat(data: dict[str, Any]) -> str:
+def render_resume(data: dict[str, Any]) -> str:
     state = render_state(data)
-    return f"""Use $orchestrate-olympus as the persistent Olympus Orchestrator for dm1681/Olympus.
+    return f"""Use $orchestrate-olympus in this parent task for dm1681/Olympus.
 
-This checkpoint is a validated host-local cache, not authority. Recover live GitHub, task, worktree, and automation state before every mutation; live evidence supersedes stale values.
+This parent task is the Olympus Orchestrator. Do not spawn an Orchestrator subagent. This checkpoint is a validated host-local cache, not authority. Recover live GitHub, child-subagent, and worktree state before every mutation; live evidence supersedes stale values.
 
 CHECKPOINT
 {state}
 
-Follow the skill's core contract and load only the conditional references needed for this wake-up. Keep dispatch, merge, and pause authority independent. If pause_mode is not running, perform no implementation, review, presentation, merge, or GitHub write without an explicit owner command. Preserve dirty worktrees. Do not duplicate tasks or comments. On a transition, update the checkpoint and report one next action; otherwise make no GitHub write."""
+Follow the skill's core contract and subagent lifecycle. Recover or spawn the reusable Reviewer first, use one-shot Planners and a reusable active-lane Worker, and use messages plus waits as the event loop. Keep dispatch, merge, and pause authority independent. If pause_mode is not running, perform no implementation, review, presentation, merge, or GitHub write without an explicit owner command. Preserve dirty worktrees. Do not duplicate children or comments. Do not send a final response while active work or a bounded wait remains. Continue an eligible autonomous queue only after the current lane is merged and reconciled; READY_FOR_HUMAN_MERGE under owner-only merge authority is terminal even when later issues are eligible."""
 
 
 def sample_checkpoint() -> dict[str, Any]:
     sha = "a" * 40
     return {
-        "schema_version": 3,
+        "schema_version": 4,
         "repository": "dm1681/Olympus",
+        "orchestrator_mode": "parent-resident",
         "dispatch_mode": "human-controlled",
         "merge_mode": "owner-only",
         "pause_mode": "running",
@@ -513,7 +501,8 @@ def self_test() -> None:
     valid = sample_checkpoint()
     assert validate_data(valid) == []
     assert "dispatch_mode=human-controlled" in render_state(valid)
-    assert "live evidence supersedes stale values" in render_heartbeat(valid)
+    assert "live evidence supersedes stale values" in render_resume(valid)
+    assert "parent task is the Olympus Orchestrator" in render_resume(valid)
 
     paused = copy.deepcopy(valid)
     paused["pause_mode"] = "owner-paused"
@@ -563,6 +552,22 @@ def self_test() -> None:
     legacy_errors = validate_data(legacy_cloud_review)
     assert any("CODEX_REVIEWING was removed" in error for error in legacy_errors)
     assert any("codex_review was removed" in error for error in legacy_errors)
+
+    legacy_automations = copy.deepcopy(valid)
+    legacy_automations["automations"] = {}
+    assert any(
+        "automations was removed" in error
+        for error in validate_data(legacy_automations)
+    )
+
+    real_v3 = copy.deepcopy(valid)
+    real_v3["schema_version"] = 3
+    real_v3.pop("orchestrator_mode")
+    real_v3["automations"] = {"orchestrator": None, "reviewer": None}
+    migrated_v3 = migrate_data(real_v3)
+    assert migrated_v3["schema_version"] == 4
+    assert migrated_v3["orchestrator_mode"] == "parent-resident"
+    assert "automations" not in migrated_v3
 
     bad_upstream = copy.deepcopy(valid)
     bad_upstream["findings"] = [
@@ -632,7 +637,7 @@ def self_test() -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for name in ("validate", "render-state", "render-heartbeat"):
+    for name in ("validate", "render-state", "render-resume", "migrate"):
         command = subparsers.add_parser(name)
         command.add_argument("checkpoint", type=Path)
     subparsers.add_parser("self-test")
@@ -644,7 +649,10 @@ def main() -> int:
         return 0
 
     try:
-        data = load_checkpoint(args.checkpoint)
+        if args.command in {"render-resume", "migrate"}:
+            data = load_resume_checkpoint(args.checkpoint)
+        else:
+            data = load_checkpoint(args.checkpoint)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 1
@@ -653,8 +661,10 @@ def main() -> int:
         print("checkpoint valid")
     elif args.command == "render-state":
         print(render_state(data))
+    elif args.command == "migrate":
+        print(json.dumps(data, indent=2, sort_keys=True))
     else:
-        print(render_heartbeat(data))
+        print(render_resume(data))
     return 0
 
 

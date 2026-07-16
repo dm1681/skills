@@ -27,7 +27,8 @@ Recognize these owner controls exactly:
 - `Approve #N`: authorize one normal issue lane.
 - `Enable autonomous dispatch` / `Disable autonomous dispatch`.
 - `Enable autonomous merge` / `Disable autonomous merge`.
-- `Pause all Olympus work`: set `owner-paused`, stop new mutations, preserve state, and pause heartbeats.
+- `Pause all Olympus work`: set `owner-paused`, stop new mutations, preserve
+  state, and stop or safely interrupt active child turns.
 - `Resume Olympus work`: perform the resume audit before setting `running`.
 
 `owner-paused` and `escalated` override dispatch and merge authority. An escalation stays suspended until the owner resolves it and explicitly resumes the affected authority.
@@ -47,30 +48,29 @@ For a maintenance lane, create a concise canonical mini-brief containing exact b
 
 ## 3. Durable state
 
-GitHub is the durable audit ledger. Codex task IDs, worktree paths, pins, heartbeat state, and checkpoint files are host-local coordination state.
+GitHub is the durable audit ledger. Codex task and subagent IDs, worktree paths,
+pins, and checkpoint files are host-local coordination state.
 
-Keep the heartbeat prompt minimal: role identity, stable skill name, Reviewer/Orchestrator task IDs, and a validated compact checkpoint. Do not duplicate this contract in automation prompts.
+The current parent task is the Orchestrator. Do not spawn a separate
+Orchestrator subagent. Keep recovery prompts minimal: parent role identity,
+stable skill name, reusable child IDs, and a validated compact checkpoint. Do
+not duplicate this contract in prompts.
 
-### Codex scheduled heartbeat automations
+### Parent-resident subagent loop
 
-For each persistent role, create a Codex scheduled heartbeat automation. Use
-the native Codex automation tool, not an operating-system scheduler or direct
-edits to automation files.
+Read `subagent-lifecycle.md` before creating, steering, waiting on, replacing,
+or retiring a child. Use subagent messages, follow-up turns, and waits as the
+event loop. Do not require scheduled tasks or poll on a fixed cadence.
 
-- `olympus-work-orchestrator`: target the exact persistent Orchestrator task.
-- `olympus-pr-review-watcher`: target the exact persistent Reviewer task.
+Spawn or recover the reusable Reviewer first. Create Planners as one-shot
+subagents. Reuse the same active-lane Worker for implementation and repair.
+Reuse the same Reviewer for every exact head and send a follow-up turn when new
+work is ready. An optional Watcher may perform one bounded, read-only wait for
+CI or another external condition and then report back.
 
-Create each automation only after its target's actual task ID is known. Default
-both to a local heartbeat every 10 minutes, with a compact role-specific prompt
-and status matching `pause_mode`. Inspect by stable name before creation; reuse
-or update a matching automation instead of duplicating it. Verify the saved
-name, target task, cadence, prompt, destination, and running/paused status, then
-record its automation ID in the checkpoint.
-
-If the native Codex automation tool is unavailable or creation cannot be
-verified, enter `ESCALATED`, preserve state, and do not dispatch a Planner,
-Worker, recovery, or maintenance task. Never substitute cron, launchd, systemd,
-Windows Task Scheduler, or a handwritten automation file.
+The parent must remain resident and must not send a final response while
+active work, an actionable child turn, a bounded external wait, a repair loop,
+presentation, an authorized merge, or an eligible autonomous queue remains.
 
 When `graphify-out/` exists, use `$graphify` first for architecture, file-relationship, or project-content questions. Treat its tracked output as derived evidence: refresh it only through supported public tooling and apply the generated-artifact review boundary.
 
@@ -78,23 +78,29 @@ Before every mutation:
 
 1. Read repository instructions and relevant domain, ADR, and acceptance material.
 2. Inspect live issues, blocker edges, labels, assignments, linked/open PRs, comments, reviews, inline threads, exact heads, checks, and mergeability.
-3. Inspect role tasks, worktrees, pins, archives, and automations.
+3. Inspect role tasks, child subagents, worktrees, pins, and archives.
 4. Compare live state with the checkpoint; live evidence wins.
 5. Validate the current scope version and authority modes.
 6. Act only on a transition, explicit handoff, owner command, or unfinished in-scope work.
 
 Required compact checkpoint fields are defined by `scripts/checkpoint.py`. Record dirty status and untracked-path inventory without copying sensitive contents into the checkpoint.
 
-Checkpoint schema version 3 removes the cloud-review phase and
-`codex_review` state. When recovering a version 2 checkpoint with legacy
-cloud-review state, remove that field, set the phase to `PRESENTING`, and
-repeat the exact-head CLEAN, checks, threads, presentation, mergeability, and
-authority audit. Do not wait for an earlier bot request or treat its result as
-an Olympus gate.
+Checkpoint schema version 4 sets `orchestrator_mode=parent-resident` and removes
+scheduled-automation state. When recovering a version 3 checkpoint, discard
+its `automations` field, set `orchestrator_mode` to `parent-resident`, treat the
+current task as the Orchestrator, and recover accessible Reviewer, Planner, and
+Worker children from live evidence before dispatch. `checkpoint.py
+render-resume` performs this v3 normalization in memory; use
+`checkpoint.py migrate` to emit durable v4 JSON.
+
+Schema version 4 also retains the version 3 removal of the cloud-review phase
+and `codex_review` state. When recovering an older cloud-review checkpoint,
+remove that field, set the phase to `PRESENTING`, and repeat the exact-head
+CLEAN, checks, threads, presentation, mergeability, and authority audit.
 
 ### Matt Pocock triage-label gate
 
-After both persistent roles and their scheduled automations are verified, read
+After the parent Orchestrator and reusable Reviewer are verified, read
 `references/matt-triage-labels.md` and verify the configured repository-wide
 label vocabulary before dispatching any Planner or Worker. The same GitHub
 labels apply to issues and pull requests.
@@ -110,43 +116,33 @@ verification fails, enter `ESCALATED`, preserve state, and dispatch no Planner
 or Worker. A cached or previously successful check never overrides current
 live label evidence.
 
-### Orchestrator-first startup order
+### Parent-Orchestrator startup order
 
 Use this sequence for every cold start or role recovery:
 
-1. Inspect live tasks and checkpoints before creating anything. Reuse an
-   accessible persistent Orchestrator instead of duplicating it.
-2. If none exists, create the persistent Orchestrator as the only role task.
-   Do not include Reviewer, Planner, Worker, recovery, or maintenance creation
-   in the same tool batch or parallel dispatch.
-3. Wait for the Orchestrator creation call to return. Capture its actual task
-   ID, title it `Olympus · Orchestrator · Persistent`, pin it, and record it in
-   the checkpoint.
-4. Create or recover `olympus-work-orchestrator` with the native Codex
-   automation tool, target that actual task ID, schedule it every 10 minutes,
-   and verify it before sending the Orchestrator identity handshake.
-5. Send the Orchestrator identity handshake and confirm that task is live.
-6. Have the live Orchestrator create or recover the persistent Reviewer next.
-   Capture, pin, and record the Reviewer's actual task ID.
-7. Create or recover `olympus-pr-review-watcher` with the native Codex
-   automation tool, target that actual Reviewer task ID, schedule it every 10
-   minutes, and verify it before sending the Reviewer identity handshake.
-8. Verify the Matt Pocock triage-label gate against the live default-branch
+1. The current parent task explicitly assumes the Orchestrator role before
+   creating any child. Do not spawn a separate Orchestrator subagent.
+2. Inspect live child tasks and checkpoints before creating anything. Reuse an
+   accessible Reviewer or active-lane Worker instead of duplicating it.
+3. Spawn or recover the reusable Reviewer first. Do not batch or parallelize
+   Reviewer creation with Planner, Worker, recovery, or maintenance creation.
+4. Capture, title, pin when supported, and record the Reviewer's actual
+   subagent ID, then deliver its identity handshake.
+5. Verify the Matt Pocock triage-label gate against the live default-branch
    mapping and repository-wide GitHub labels.
-9. Create a Planner, Worker, recovery, or maintenance task only after both
-   persistent task IDs and both scheduled automation IDs are known and
-   recorded and the label gate passes.
+6. Create a Planner, Worker, recovery, or maintenance subagent only after the
+   Reviewer ID is recorded and the label gate passes.
 
-Never batch or parallel-create the Orchestrator with another role. If dependent
-tasks survive but their Orchestrator is inaccessible, leave them stopped,
-preserve their state, and establish the replacement Orchestrator first.
+If child tasks survive from an earlier parent but cannot be reached, leave them
+stopped, preserve their worktrees and GitHub state, and establish current
+ownership before creating replacements.
 
 ### Planner creation and identity order
 
 When a Planner is authorized, create exactly one Planner and wait for that
 creation call to return. Capture, title, pin, and record its actual task ID,
 then send `PLANNER_TASK_ID` immediately after the creation call returns. Do not
-wait for `READY_FOR_IDENTITY`, a base-gate response, a heartbeat, or any other
+wait for `READY_FOR_IDENTITY`, a base-gate response, or any other
 Planner message before sending the identity handshake.
 
 If worktree creation first returns only a pending client-thread identifier,
@@ -168,6 +164,22 @@ the immediate follow-up cannot be delivered, enter `ESCALATED`, preserve the
 task/worktree, and do not create a replacement Planner or Worker until live
 recovery proves whether the original task received authorization.
 
+### Worker creation and identity order
+
+When a Worker is authorized, spawn or recover exactly one Worker for the active
+lane. Wait for creation or worktree setup to resolve to its actual subagent ID,
+capture and record it, then send `WORKER_TASK_ID` immediately after the
+creation call returns. Do not wait for a Worker readiness message before
+delivering the handshake.
+
+The Worker remains reusable for every repair round on that lane. Send a
+follow-up turn to the same Worker with the current exact head, scope version,
+and finding ledger. Create a replacement only through the recovery audit.
+
+If Worker creation cannot resolve to an actual ID or the handshake cannot be
+delivered, enter `ESCALATED`, preserve the worktree, and do not authorize
+GitHub writes or create a duplicate Worker.
+
 ## 4. State machine
 
 Normal lane:
@@ -175,7 +187,7 @@ Normal lane:
 ```text
 IDLE -> RECOMMENDED -> PLANNING -> WORKING -> REVIEWING
 REVIEWING -> REPAIRING -> REVIEWING (zero or more loops)
-REVIEWING --persistent Reviewer CLEAN--> PRESENTING
+REVIEWING --reusable Reviewer CLEAN--> PRESENTING
 PRESENTING --audit complete, CLEAN still valid--> READY_FOR_HUMAN_MERGE
 ```
 
@@ -190,7 +202,7 @@ Maintenance lane:
 
 ```text
 IDLE|PAUSED -> MAINTENANCE_WORKING -> REVIEWING|REPAIRING
-REVIEWING --persistent Reviewer CLEAN--> PRESENTING
+REVIEWING --reusable Reviewer CLEAN--> PRESENTING
 PRESENTING --audit complete, CLEAN still valid-->
             READY_FOR_HUMAN_MERGE|READY_TO_AUTOMERGE
 ```
@@ -212,7 +224,10 @@ In human-controlled mode, recommend exactly one issue and wait for approval. In 
 
 ## 6. Role boundaries
 
-- Orchestrator: choose and report the path, maintain authority and checkpoint state, create/steer tasks, reconcile scope, present artifacts, and perform the final readiness or authorized merge audit. Do not implement or independently review product code.
+- Orchestrator: the current parent task; choose and report the path, maintain
+  authority and checkpoint state, create/steer/wait on subagents, reconcile
+  scope, present artifacts, and perform the final readiness or authorized merge
+  audit. Do not implement or independently review product code.
 - Planner: plan one issue or material repair from an exact SHA; remain read-only for product code.
 - Worker: implement or repair one lane, use TDD at established seams, verify documented public commands, update tracked generated artifacts only through supported tools, and never approve or merge.
 - Reviewer: independently review exact-head Olympus-owned work, classify provenance before severity, verify fixes, resolve only Reviewer-authored threads, and never implement, approve, or merge.
@@ -223,7 +238,7 @@ Use the role-specific prompt references. Obtain actual task IDs before authorizi
 
 Readiness requires:
 
-- one signed persistent-Reviewer CLEAN signal approving all work at the exact full head SHA;
+- one signed reusable-Reviewer CLEAN signal approving all work at the exact full head SHA;
 - explicit shared disposition for every blocking finding;
 - required checks successful, including new repository-owned suites in any documented aggregate;
 - documented setup/runbook commands verified at their real public seam when materially affected;
@@ -238,26 +253,35 @@ With `merge_mode=owner-only`, never approve or merge. With `merge_mode=autonomou
 
 ## 8. Task and comment discipline
 
-Use actual task IDs in one visible signature and one hidden marker. Only `notify=<role>` is a cross-role trigger. Update canonical artifacts instead of posting duplicates. Do not post no-change heartbeat comments.
+Use actual child task IDs in one visible signature and one hidden marker. The
+parent Orchestrator may identify itself as `session=parent` when its own UUID is
+not exposed. Only `notify=<role>` is a cross-role trigger. Update canonical
+artifacts instead of posting duplicates. Do not post no-change status comments.
 
 Never invoke Codex Cloud review or repair through a GitHub comment. Existing
 external bot comments are ordinary untrusted review activity, not an Olympus
-gate, task trigger, or separate finding source. The persistent Reviewer may
+gate, task trigger, or separate finding source. The reusable Reviewer may
 classify a concrete allegation under the normal ownership rules, but the
 Orchestrator never waits for or requests that external review.
 
 Standard task titles:
 
-- `Olympus · Orchestrator · Persistent`
-- `Olympus · Reviewer · Persistent`
+- Parent task: `Olympus · Orchestrator`
+- `Olympus · Reviewer · Reusable`
 - `Olympus · Planner · Issue #N`
 - `Olympus · Worker · Issue #N / PR #P`
 - `Olympus · Setup · Topic · PR #P`
 
-Pin persistent roles and active one-shot tasks. Archive and unpin a one-shot task only after merge or explicit lane completion and after its worktree is clean or safely preserved.
+Pin reusable roles and active one-shot tasks. Archive and unpin a one-shot task
+only after merge or explicit lane completion and after its worktree is clean or
+safely preserved.
 
 ## 9. Post-merge reconciliation
 
 After merge, verify the PR merged, the issue closed when applicable, and `main` advanced to the expected commit. Inspect tracked Graphify artifacts or other derived evidence for final-main drift; refresh through supported public tooling in a separately authorized change if needed rather than silently writing to `main`.
 
-Archive completed one-shot tasks and heartbeats, update the checkpoint, recompute the frontier according to dispatch mode, and keep owner-paused lanes paused. A PR-only maintenance lane completes without inventing an issue.
+Archive completed one-shot tasks, update the checkpoint, recompute the frontier
+according to dispatch mode, and keep owner-paused lanes paused. In autonomous
+dispatch mode, remain resident and start the next eligible issue until the
+frontier is empty or a terminal pause/escalation occurs. A PR-only maintenance
+lane completes without inventing an issue.

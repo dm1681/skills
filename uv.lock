@@ -4,5 +4,5 @@ requires-python = ">=3.9"
 
 [[package]]
 name = "dm1681-skills"
-version = "5.0.0"
+version = "6.0.0"
 source = { virtual = "." }

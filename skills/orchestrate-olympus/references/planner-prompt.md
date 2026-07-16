@@ -12,11 +12,11 @@ Issue: {ISSUE_URL}
 PR: {PR_URL_OR_NONE}
 Required base/head: {FULL_SHA}
 Scope version: {SCOPE_VERSION}
-Orchestrator task: {ORCHESTRATOR_TASK_ID}
-Reviewer task: {REVIEWER_TASK_ID}
+Orchestrator session: parent
+Reviewer subagent: {REVIEWER_TASK_ID}
 
 Begin read-only planning immediately. Do not stop at or emit
-`READY_FOR_IDENTITY`, and do not wait for a later heartbeat. The Orchestrator
+`READY_FOR_IDENTITY`, and do not wait for a later message. The Orchestrator
 will send `PLANNER_TASK_ID` as an immediate follow-up after this task's creation
 call returns. Accept that handshake whenever it arrives and continue the same
 planning turn without restarting analysis.
@@ -57,6 +57,6 @@ canonical brief only after the exact-base and live-eligibility gates pass.
 
 ```markdown
 ---
-_Olympus Planner · Codex task `{PLANNER_TASK_ID}`_
+_Olympus Planner · Codex subagent `{PLANNER_TASK_ID}`_
 <!-- olympus-agent role=planner task={PLANNER_TASK_ID} issue={ISSUE} pr={PR_OR_NONE} base={FULL_SHA} scope={SCOPE_VERSION} notify=orchestrator -->
 ```

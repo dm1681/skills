@@ -16,8 +16,9 @@ class CheckpointTests(unittest.TestCase):
     @staticmethod
     def idle_checkpoint() -> dict[str, object]:
         return {
-            "schema_version": 3,
+            "schema_version": 4,
             "repository": "dm1681/Olympus",
+            "orchestrator_mode": "parent-resident",
             "dispatch_mode": "human-controlled",
             "merge_mode": "owner-only",
             "pause_mode": "running",
@@ -63,65 +64,61 @@ class CheckpointTests(unittest.TestCase):
         data = self.idle_checkpoint()
         validated = self.run_checkpoint(data)
         self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
-        rendered = self.run_checkpoint(data, "render-heartbeat")
+        rendered = self.run_checkpoint(data, "render-resume")
         self.assertEqual(0, rendered.returncode, rendered.stdout + rendered.stderr)
         self.assertIn("lane_kind=none phase=IDLE", rendered.stdout)
+        self.assertIn("parent task is the Olympus Orchestrator", rendered.stdout)
 
-    def test_dependent_role_tasks_require_orchestrator_task(self) -> None:
+    def test_planner_and_worker_require_reviewer_subagent(self) -> None:
         task_id = "11111111-1111-1111-1111-111111111111"
-        for field in ("reviewer_task", "planner_task", "worker_task"):
+        for field in ("planner_task", "worker_task"):
             with self.subTest(field=field):
                 data = self.idle_checkpoint()
                 data[field] = task_id
                 validated = self.run_checkpoint(data)
                 self.assertNotEqual(0, validated.returncode)
                 self.assertIn(
-                    f"{field} requires orchestrator_task",
+                    f"{field} requires reviewer_task",
                     validated.stderr,
                 )
 
-    def test_orchestrator_can_be_recorded_before_reviewer(self) -> None:
+    def test_reviewer_can_be_recorded_without_parent_task_uuid(self) -> None:
         data = self.idle_checkpoint()
-        data["orchestrator_task"] = "11111111-1111-1111-1111-111111111111"
+        data["reviewer_task"] = "11111111-1111-1111-1111-111111111111"
         validated = self.run_checkpoint(data)
         self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
 
-    def test_persistent_automation_targets_must_match_role_tasks(self) -> None:
-        orchestrator = "11111111-1111-1111-1111-111111111111"
-        reviewer = "22222222-2222-2222-2222-222222222222"
+    def test_legacy_scheduled_automation_state_is_rejected(self) -> None:
         data = self.idle_checkpoint()
-        data.update(
-            {
-                "orchestrator_task": orchestrator,
-                "reviewer_task": reviewer,
-                "automations": {
-                    "orchestrator": {
-                        "id": "automation-orchestrator",
-                        "name": "olympus-work-orchestrator",
-                        "target_task": orchestrator,
-                        "interval_minutes": 10,
-                        "status": "running",
-                    },
-                    "reviewer": {
-                        "id": "automation-reviewer",
-                        "name": "olympus-pr-review-watcher",
-                        "target_task": reviewer,
-                        "interval_minutes": 10,
-                        "status": "running",
-                    },
-                },
-            }
-        )
+        data["automations"] = {}
         validated = self.run_checkpoint(data)
-        self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
+        self.assertNotEqual(0, validated.returncode)
+        self.assertIn("automations was removed", validated.stderr)
 
-        data["automations"]["reviewer"]["target_task"] = orchestrator
-        mismatch = self.run_checkpoint(data)
-        self.assertNotEqual(0, mismatch.returncode)
-        self.assertIn(
-            "automations.reviewer.target_task must equal reviewer_task",
-            mismatch.stderr,
-        )
+    def test_real_v3_checkpoint_can_migrate_and_render_resume(self) -> None:
+        data = self.idle_checkpoint()
+        data["schema_version"] = 3
+        data.pop("orchestrator_mode")
+        data["automations"] = {
+            "orchestrator": None,
+            "reviewer": None,
+        }
+
+        strict = self.run_checkpoint(data)
+        self.assertNotEqual(0, strict.returncode)
+        self.assertIn("orchestrator_mode", strict.stderr)
+
+        rendered = self.run_checkpoint(data, "render-resume")
+        self.assertEqual(0, rendered.returncode, rendered.stdout + rendered.stderr)
+        self.assertIn("schema_version=4", rendered.stdout)
+        self.assertIn("orchestrator_mode=parent-resident", rendered.stdout)
+
+        migrated = self.run_checkpoint(data, "migrate")
+        self.assertEqual(0, migrated.returncode, migrated.stdout + migrated.stderr)
+        normalized = json.loads(migrated.stdout)
+        self.assertEqual(4, normalized["schema_version"])
+        self.assertEqual("parent-resident", normalized["orchestrator_mode"])
+        self.assertNotIn("automations", normalized)
 
     def test_ready_for_human_merge_requires_reviewer_clean_at_current_head(self) -> None:
         head = "a" * 40
@@ -132,7 +129,6 @@ class CheckpointTests(unittest.TestCase):
                 "phase": "READY_FOR_HUMAN_MERGE",
                 "pr": 35,
                 "head": head,
-                "orchestrator_task": "11111111-1111-1111-1111-111111111111",
                 "reviewer_task": "22222222-2222-2222-2222-222222222222",
             }
         )
@@ -146,6 +142,14 @@ class CheckpointTests(unittest.TestCase):
         data["clean_signal"] = head
         validated = self.run_checkpoint(data)
         self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
+
+        data["dispatch_mode"] = "autonomous"
+        rendered = self.run_checkpoint(data, "render-resume")
+        self.assertEqual(0, rendered.returncode, rendered.stdout + rendered.stderr)
+        self.assertIn(
+            "READY_FOR_HUMAN_MERGE under owner-only merge authority is terminal",
+            rendered.stdout,
+        )
 
     def test_legacy_codex_cloud_review_state_is_rejected(self) -> None:
         head = "a" * 40

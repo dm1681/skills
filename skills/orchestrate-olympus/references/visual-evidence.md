@@ -20,7 +20,7 @@ Do not create an always-on visualization agent. Assign responsibility by role:
 
 Use an optional Visual QA subagent only for a substantial Olympus-authored visual artifact. Do not use one merely to critique an unmodified upstream visualization.
 
-Maintain one canonical progress visual when the lane has at least three meaningful phases, branches, dependencies, or evidence groups. Refresh it at meaningful transitions such as planning complete, first PR head, review/repair, Reviewer CLEAN, and merge. Link or embed the same canonical artifact in the relevant issue or PR handoff and final report; do not post a new visualization comment on unchanged heartbeats.
+Maintain one canonical progress visual when the lane has at least three meaningful phases, branches, dependencies, or evidence groups. Refresh it at meaningful transitions such as planning complete, first PR head, review/repair, Reviewer CLEAN, and merge. Link or embed the same canonical artifact in the relevant issue or PR handoff and final report; do not post a new visualization comment when nothing changed.
 
 ## 2. When to visualize
 
@@ -75,7 +75,7 @@ After exact-head Reviewer CLEAN, enter `PRESENTING` before reporting ready:
 5. State network, offline, compatibility, privacy, migration, and generated-artifact limitations truthfully.
 6. Ensure color is supplementary and the text alone communicates status.
 7. Re-audit head, checks, threads, mergeability, and escalation after presentation changes.
-8. Confirm the persistent Reviewer's exact-head CLEAN is still valid, then move the stable presented head directly to the final readiness or authorized merge audit.
+8. Confirm the reusable Reviewer's exact-head CLEAN is still valid, then move the stable presented head directly to the final readiness or authorized merge audit.
 
 PR-body-only changes do not require code re-review when the head is unchanged, but stale, broken, unsafe, or misleading presentation blocks the presentation gate.
 

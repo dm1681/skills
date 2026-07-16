@@ -9,20 +9,25 @@ SKILL_ROOT = ROOT / "skills" / "orchestrate-olympus"
 
 
 class OrchestrationStartupTests(unittest.TestCase):
-    def test_contract_requires_orchestrator_only_cold_start(self) -> None:
+    def test_current_parent_becomes_orchestrator_before_spawning_children(self) -> None:
         contract = (SKILL_ROOT / "references" / "orchestration-contract.md").read_text(
             encoding="utf-8"
         )
-        self.assertIn("create the persistent Orchestrator as the only role task", contract)
-        self.assertIn("Never batch or parallel-create", contract)
+        normalized = " ".join(contract.split())
+        lowered = normalized.lower()
+        self.assertIn("the current parent task is the orchestrator", lowered)
+        self.assertIn("do not spawn a separate orchestrator subagent", lowered)
+        self.assertIn("spawn or recover the reusable reviewer first", lowered)
 
-    def test_orchestrator_has_bootstrap_and_identity_handshake(self) -> None:
+    def test_orchestrator_prompt_is_for_the_parent_task(self) -> None:
         prompt = (SKILL_ROOT / "references" / "orchestrator-prompt.md").read_text(
             encoding="utf-8"
         )
-        self.assertIn("## Bootstrap task prompt", prompt)
-        self.assertIn("## Identity handshake", prompt)
-        self.assertIn("Do not create any other role task during this bootstrap turn", prompt)
+        normalized = " ".join(prompt.split())
+        self.assertIn("## Parent task prompt", prompt)
+        self.assertIn("This current task is the Olympus Orchestrator", normalized)
+        self.assertIn("Do not spawn an Orchestrator subagent", normalized)
+        self.assertIn("Do not send a final response while", normalized)
 
     def test_planner_identity_is_sent_immediately_after_creation(self) -> None:
         contract = (SKILL_ROOT / "references" / "orchestration-contract.md").read_text(
@@ -51,6 +56,25 @@ class OrchestrationStartupTests(unittest.TestCase):
         self.assertIn(
             "Both the base and eligibility gates must pass before any GitHub write",
             normalized,
+        )
+
+    def test_worker_identity_is_sent_immediately_after_creation(self) -> None:
+        contract = (SKILL_ROOT / "references" / "orchestration-contract.md").read_text(
+            encoding="utf-8"
+        )
+        prompt = (SKILL_ROOT / "references" / "orchestrator-prompt.md").read_text(
+            encoding="utf-8"
+        )
+        normalized_contract = " ".join(contract.split())
+        normalized_prompt = " ".join(prompt.split())
+        self.assertIn("### Worker creation and identity order", contract)
+        self.assertIn(
+            "send `WORKER_TASK_ID` immediately after the creation call returns",
+            normalized_contract,
+        )
+        self.assertIn(
+            "immediately send WORKER_TASK_ID",
+            normalized_prompt,
         )
 
     def test_matt_triage_label_gate_covers_issues_and_prs(self) -> None:
@@ -88,7 +112,10 @@ class OrchestrationStartupTests(unittest.TestCase):
         self.assertIn("### Matt Pocock triage-label gate", contract)
         self.assertIn("before dispatching any Planner or Worker", normalized_contract)
         self.assertIn("enter `ESCALATED`", normalized_contract)
-        self.assertIn("verify the Matt Pocock triage-label gate", normalized_prompt)
+        self.assertIn(
+            "verify the matt pocock triage-label gate",
+            normalized_prompt.lower(),
+        )
 
 
 if __name__ == "__main__":

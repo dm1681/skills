@@ -34,7 +34,7 @@ class ReviewerCleanReadinessTests(unittest.TestCase):
             normalized,
         )
         self.assertIn(
-            "persistent-Reviewer CLEAN signal approving all work at the exact full head SHA",
+            "reusable-Reviewer CLEAN signal approving all work at the exact full head SHA",
             normalized,
         )
 

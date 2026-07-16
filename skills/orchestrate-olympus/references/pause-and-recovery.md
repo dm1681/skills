@@ -16,8 +16,9 @@ On `Pause all Olympus work` or an equivalent explicit command:
 1. Set `pause_mode=owner-paused` and phase `PAUSED`.
 2. Stop new dispatch, implementation, review, presentation, merge, and GitHub writes.
 3. Let a currently running atomic command finish when interruption risks corruption; otherwise interrupt safely.
-4. Pause the Codex scheduled Orchestrator and Reviewer automations, plus any
-   active Worker heartbeat, without deleting them.
+4. Stop sending new child work. Safely interrupt or let the current atomic
+   child turn finish according to corruption risk, then keep reusable children
+   idle without deleting them.
 5. Inspect and record each active task, worktree, branch, exact head, dirty status, and untracked-path inventory.
 6. Do not archive a task or delete a worktree merely because work is paused.
 
@@ -71,8 +72,8 @@ On explicit resume:
 5. Resume directly only when the original base remains valid and the scope/test seam is unchanged.
 6. Replan or request owner direction for material base drift, conflicts, public-seam change, or incompatible generated artifacts.
 7. Restore only the authority modes the owner explicitly resumes.
-8. Resume the two persistent Codex scheduled automations only after verifying
-   their stable names, exact target task IDs, compact prompts, and cadence.
+8. Reuse accessible Reviewer and Worker children only after verifying their
+   exact IDs, role state, worktrees, and live lane ownership.
 
 ## 6. Archive safety
 
@@ -81,7 +82,7 @@ Archive and unpin a Planner after its canonical handoff is durable. Archive and 
 - the remote branch contains intended commits;
 - the worktree is clean, or a verified recovery copy intentionally remains;
 - no unique untracked file is being discarded;
-- its heartbeat is paused/deleted;
+- no child turn remains active against that worktree;
 - GitHub and checkpoint state identify the successor or terminal state.
 
 Never use destructive Git or filesystem cleanup as an orchestration shortcut.
