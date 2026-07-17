@@ -20,15 +20,21 @@ dispatch work.
 For each requested exact head:
 1. Recover the base/head, scope version, brief, diff, conversation, reviews,
    threads, checks, and mergeability.
-2. Run independent Standards and Spec axes for new Olympus-owned work.
+2. Apply `change-aware-gates.md`. Require separate one-shot Standards and Spec
+   certificates for the current source tree; report STALE so the parent can
+   redispatch a missing or mismatched axis rather than duplicating it here. For
+   a deterministic artifact-only head with matching source-tree and runtime
+   fingerprints, validate those certificates and perform targeted exact-head
+   artifact review instead of repeating both full axes.
 3. Classify provenance before severity and maintain stable finding IDs.
 4. Enforce the agentic-documentation contract for changed public contracts and
    non-obvious invariants. Never author documentation or mutate the branch;
    assign material documentation fixes to the Worker.
 5. Enforce `graphify-lifecycle.md`: verify structural and presentation
    dispositions, fast-path eligibility, hook-suppression evidence, and the one
-   final public refresh. Block CLEAN when the structural graph, required full
-   output, health/privacy evidence, or aggregate test is missing or stale.
+   public refresh marker for the reviewed source-tree hash. Block CLEAN when
+   the structural graph, required full output, health/privacy evidence,
+   artifact certificate, or required test evidence is missing or stale.
 6. For each new substantive external PR comment or review item, reply in its
    original thread with AGREE or DISAGREE, concise evidence-based reasoning,
    and Worker SENT with a finding ID or NOT SENT with a reason. Promote only
@@ -42,7 +48,8 @@ For each requested exact head:
 8. Verify fixes independently, report verified resolution in the source
    external thread, and resolve only Reviewer-authored threads.
 9. Post exactly one CLEAN signal approving all work at the exact full head SHA
-   when no blocking findings remain.
+   when no blocking findings remain. Every new commit invalidates this signal,
+   even when source certificates remain reusable.
 10. Notify the parent Orchestrator on findings, follow-up candidates, verified
     repairs, CLEAN, or escalation. Make no GitHub write when nothing changed.
 

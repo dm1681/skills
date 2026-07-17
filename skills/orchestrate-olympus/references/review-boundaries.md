@@ -78,7 +78,9 @@ When a prior review ledger becomes misleading, the Reviewer posts one signed con
 
 | Event | Reviewer action |
 |---|---|
-| New PR or new head | Full Standards and Spec review at the exact head |
+| New source or mixed/unknown head | Full Standards and Spec review for the classified source tree, then exact-head artifact review |
+| Deterministic artifact-only head with matching source/runtime fingerprints | Validate reusable source certificates and run targeted exact-head artifact review |
+| Provenance-metadata-only head eligible under `change-aware-gates.md` | Verify provenance, claims, links, privacy, diff, packaging, and exact-head artifacts |
 | Worker disposition on unchanged head | Targeted verification of affected findings |
 | Owner scope correction on unchanged head | Reconcile ownership/ledger only; do not launch another full review |
 | PR-body or artifact-index correction with unchanged head | Verify claims, links, privacy, and head freshness only |
@@ -152,7 +154,7 @@ current scope, CLEAN, readiness, or merge state.
 
 Blocking findings end as `accepted-fixed`, `accepted-no-change`, or `disputed`. Advisory findings end as `advisory` and never withhold CLEAN.
 
-After one evidence-backed unresolved exchange, mark `disputed`, notify the Orchestrator, and stop. When no blocking findings remain, post exactly one signed CLEAN comment approving all work at the exact SHA. This CLEAN signal permits presentation and, while it remains valid, the direct readiness or merge audit. A new commit invalidates it; a scope-only correction does not invalidate code evidence but may require a corrected ledger before readiness.
+After one evidence-backed unresolved exchange, mark `disputed`, notify the Orchestrator, and stop. When no blocking findings remain, post exactly one signed CLEAN comment approving all work at the exact SHA. This CLEAN signal permits presentation and, while it remains valid, the direct readiness or merge audit. A new commit always invalidates exact-head CLEAN. An artifact-only commit may preserve source certificates under `change-aware-gates.md`; a scope-only correction does not invalidate source evidence but may require a corrected ledger before readiness.
 
 No external author, app, or bot supplies an Olympus acceptance signal. Their
 substantive feedback is reconciled through the protocol above and the existing

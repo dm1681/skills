@@ -5,6 +5,39 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+## [7.0.0] - 2026-07-16
+
+### Added
+
+- Added source, evidence, artifact, and final Reviewer phases so independent
+  Standards and Spec review completes before screenshots and Graphify work.
+- Added source-tree and runtime fingerprints, separate Standards and Spec
+  certificates, required aggregate-test evidence, exact-head artifact review,
+  Graphify refresh markers and dispositions, and exact-head Actions evidence.
+- Added one-shot read-only source-review agents, per-worktree runtime bootstrap,
+  repository-supported test-output isolation, and mandatory-agent slot priority
+  over optional CI Watchers.
+- Added a bounded GitHub Actions `5xx` degradation path for one initial WIP
+  push and PR publication. Successful exact-head Actions evidence remains
+  mandatory before Reviewer CLEAN, readiness, or merge.
+
+### Changed
+
+- Deterministic artifact-only commits may reuse product tests and source-review
+  certificates only when source-tree hash, runtime fingerprint, scope, and
+  required aggregate evidence still match. Every commit still invalidates the
+  final exact-head Reviewer CLEAN.
+- Graphify now refreshes once per reviewed source-tree hash and records a
+  version, command, and output marker. Generated-output commits do not trigger
+  a duplicate refresh when the marker still matches.
+- Mechanical evidence metadata receives a narrow provenance-only classification
+  only when it cannot alter acceptance meaning and is outside Graphify's
+  semantic corpus. Section-level Markdown preservation is explicitly left to
+  upstream Graphify public tooling.
+- Checkpoint schema v5 replaces the combined source-review state with separate
+  Standards and Spec evidence. Migrating a legacy CLEAN/ready checkpoint
+  conservatively returns it to `REVIEWING` until the new gates are rebuilt.
+
 ## [6.5.0] - 2026-07-16
 
 ### Added

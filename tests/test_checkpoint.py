@@ -16,7 +16,7 @@ class CheckpointTests(unittest.TestCase):
     @staticmethod
     def idle_checkpoint() -> dict[str, object]:
         return {
-            "schema_version": 4,
+            "schema_version": 5,
             "repository": "dm1681/Olympus",
             "orchestrator_mode": "parent-resident",
             "dispatch_mode": "human-controlled",
@@ -39,6 +39,25 @@ class CheckpointTests(unittest.TestCase):
             "dirty_paths": [],
             "findings": [],
             "checks": "none",
+            "gate_evidence": {
+                "head_change_class": "mixed-or-unknown",
+                "source_tree_hash": None,
+                "runtime_fingerprint": None,
+                "standards_status": "not-run",
+                "standards_head": None,
+                "standards_scope_version": None,
+                "spec_status": "not-run",
+                "spec_head": None,
+                "spec_scope_version": None,
+                "artifact_review": "not-run",
+                "artifact_review_head": None,
+                "test_evidence": [],
+                "graphify_disposition": "not-assessed",
+                "graphify_marker": None,
+                "actions_state": "not-checked",
+                "actions_head": None,
+                "actions_degraded_evidence": None,
+            },
             "clean_signal": None,
             "artifacts": [],
             "escalation": None,
@@ -99,6 +118,7 @@ class CheckpointTests(unittest.TestCase):
         data = self.idle_checkpoint()
         data["schema_version"] = 3
         data.pop("orchestrator_mode")
+        data.pop("gate_evidence")
         data["automations"] = {
             "orchestrator": None,
             "reviewer": None,
@@ -110,13 +130,13 @@ class CheckpointTests(unittest.TestCase):
 
         rendered = self.run_checkpoint(data, "render-resume")
         self.assertEqual(0, rendered.returncode, rendered.stdout + rendered.stderr)
-        self.assertIn("schema_version=4", rendered.stdout)
+        self.assertIn("schema_version=5", rendered.stdout)
         self.assertIn("orchestrator_mode=parent-resident", rendered.stdout)
 
         migrated = self.run_checkpoint(data, "migrate")
         self.assertEqual(0, migrated.returncode, migrated.stdout + migrated.stderr)
         normalized = json.loads(migrated.stdout)
-        self.assertEqual(4, normalized["schema_version"])
+        self.assertEqual(5, normalized["schema_version"])
         self.assertEqual("parent-resident", normalized["orchestrator_mode"])
         self.assertNotIn("automations", normalized)
 
@@ -140,6 +160,34 @@ class CheckpointTests(unittest.TestCase):
         )
 
         data["clean_signal"] = head
+        data["gate_evidence"] = {
+            "head_change_class": "source",
+            "source_tree_hash": "b" * 64,
+            "runtime_fingerprint": "c" * 64,
+            "standards_status": "clean",
+            "standards_head": head,
+            "standards_scope_version": 1,
+            "spec_status": "clean",
+            "spec_head": head,
+            "spec_scope_version": 1,
+            "artifact_review": "clean",
+            "artifact_review_head": head,
+            "test_evidence": [
+                {
+                    "command": "pnpm test",
+                    "scope": "aggregate",
+                    "required": True,
+                    "source_tree_hash": "b" * 64,
+                    "runtime_fingerprint": "c" * 64,
+                    "result": "pass",
+                }
+            ],
+            "graphify_disposition": "not-required",
+            "graphify_marker": None,
+            "actions_state": "green",
+            "actions_head": head,
+            "actions_degraded_evidence": None,
+        }
         validated = self.run_checkpoint(data)
         self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
 
@@ -175,6 +223,143 @@ class CheckpointTests(unittest.TestCase):
         self.assertNotEqual(0, legacy.returncode)
         self.assertIn("CODEX_REVIEWING", legacy.stderr)
         self.assertIn("codex_review was removed", legacy.stderr)
+
+    def test_artifact_only_head_can_reuse_source_axes_but_needs_exact_artifact_review(self) -> None:
+        source_head = "a" * 40
+        artifact_head = "d" * 40
+        data = self.idle_checkpoint()
+        data.update(
+            {
+                "lane_kind": "repair",
+                "phase": "ARTIFACT_VERIFYING",
+                "pr": 35,
+                "head": artifact_head,
+                "gate_evidence": {
+                    "head_change_class": "deterministic-artifact",
+                    "source_tree_hash": "b" * 64,
+                    "runtime_fingerprint": "c" * 64,
+                    "standards_status": "clean",
+                    "standards_head": source_head,
+                    "standards_scope_version": 1,
+                    "spec_status": "clean",
+                    "spec_head": source_head,
+                    "spec_scope_version": 1,
+                    "artifact_review": "not-run",
+                    "artifact_review_head": None,
+                    "test_evidence": [
+                        {
+                            "command": "pnpm test",
+                            "scope": "aggregate",
+                            "required": True,
+                            "source_tree_hash": "b" * 64,
+                            "runtime_fingerprint": "c" * 64,
+                            "result": "pass",
+                        }
+                    ],
+                    "graphify_disposition": "current",
+                    "graphify_marker": {
+                        "source_tree_hash": "b" * 64,
+                        "graphify_version": "1.2.3",
+                        "command": "graphify update . --no-cluster",
+                        "output_hash": "e" * 64,
+                    },
+                    "actions_state": "pending",
+                    "actions_head": None,
+                    "actions_degraded_evidence": None,
+                },
+            }
+        )
+        validated = self.run_checkpoint(data)
+        self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
+
+        data["phase"] = "READY_FOR_HUMAN_MERGE"
+        data["clean_signal"] = artifact_head
+        not_ready = self.run_checkpoint(data)
+        self.assertNotEqual(0, not_ready.returncode)
+        self.assertIn("requires clean artifact review", not_ready.stderr)
+        self.assertIn("requires successful Actions evidence", not_ready.stderr)
+
+    def test_v4_checkpoint_migrates_with_conservative_gate_defaults(self) -> None:
+        data = self.idle_checkpoint()
+        data["schema_version"] = 4
+        data.pop("gate_evidence")
+        migrated = self.run_checkpoint(data, "migrate")
+        self.assertEqual(0, migrated.returncode, migrated.stdout + migrated.stderr)
+        normalized = json.loads(migrated.stdout)
+        self.assertEqual(5, normalized["schema_version"])
+        self.assertEqual("mixed-or-unknown", normalized["gate_evidence"]["head_change_class"])
+        self.assertEqual("not-run", normalized["gate_evidence"]["standards_status"])
+
+    def test_clean_axes_require_both_certificates_and_matching_aggregate(self) -> None:
+        head = "a" * 40
+        data = self.idle_checkpoint()
+        data.update({"lane_kind": "repair", "phase": "SOURCE_REVIEWING", "pr": 35, "head": head})
+        data["gate_evidence"].update(
+            {
+                "head_change_class": "source",
+                "source_tree_hash": "b" * 64,
+                "runtime_fingerprint": "c" * 64,
+                "standards_status": "clean",
+                "standards_head": head,
+                "standards_scope_version": 1,
+                "spec_status": "clean",
+                "spec_head": head,
+                "spec_scope_version": 1,
+            }
+        )
+        missing_tests = self.run_checkpoint(data)
+        self.assertNotEqual(0, missing_tests.returncode)
+        self.assertIn("matching required aggregate test evidence", missing_tests.stderr)
+
+        data["gate_evidence"]["test_evidence"] = [
+            {
+                "command": "pnpm test",
+                "scope": "aggregate",
+                "required": True,
+                "source_tree_hash": "b" * 64,
+                "runtime_fingerprint": "c" * 64,
+                "result": "pass",
+            }
+        ]
+        validated = self.run_checkpoint(data)
+        self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
+
+        data["scope_version"] = 2
+        stale_scope = self.run_checkpoint(data)
+        self.assertNotEqual(0, stale_scope.returncode)
+        self.assertIn("must match the current scope_version", stale_scope.stderr)
+
+    def test_graphify_current_requires_marker_and_green_actions_require_exact_head(self) -> None:
+        head = "a" * 40
+        data = self.idle_checkpoint()
+        data.update({"lane_kind": "repair", "phase": "REVIEWING", "pr": 35, "head": head})
+        data["gate_evidence"].update(
+            {
+                "source_tree_hash": "b" * 64,
+                "graphify_disposition": "current",
+                "actions_state": "green",
+                "actions_head": "d" * 40,
+            }
+        )
+        invalid = self.run_checkpoint(data)
+        self.assertNotEqual(0, invalid.returncode)
+        self.assertIn("requires graphify_marker", invalid.stderr)
+        self.assertIn("green Actions evidence must match the current head", invalid.stderr)
+
+    def test_degraded_actions_requires_bounded_retry_evidence(self) -> None:
+        data = self.idle_checkpoint()
+        data["gate_evidence"]["actions_state"] = "unknown-degraded"
+        missing = self.run_checkpoint(data)
+        self.assertNotEqual(0, missing.returncode)
+        self.assertIn("requires actions_degraded_evidence", missing.stderr)
+
+        data["gate_evidence"]["actions_degraded_evidence"] = {
+            "attempts": 3,
+            "last_error": "authenticated Actions endpoint returned 503",
+            "corroboration": ["viewer identity", "remote branch head"],
+        }
+        validated = self.run_checkpoint(data)
+        self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
 
 
 if __name__ == "__main__":

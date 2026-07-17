@@ -26,15 +26,15 @@ class GraphifyLifecycleTests(unittest.TestCase):
         self.assertIn("treat the refresh as required", normalized)
         self.assertIn("`GRAPHIFY_NOT_REQUIRED` with the verified reason", normalized)
 
-    def test_worker_runs_one_final_refresh_after_tests(self) -> None:
+    def test_worker_runs_one_refresh_after_source_clean(self) -> None:
         policy = (
             SKILL_ROOT / "references" / "graphify-lifecycle.md"
         ).read_text(encoding="utf-8")
         normalized = " ".join(policy.split())
-        self.assertIn("Run exactly one synchronous final refresh", normalized)
-        self.assertIn("after ordinary tests", normalized)
-        self.assertIn("A repair that changes indexed files", normalized)
-        self.assertIn("final Standards and Spec check", normalized)
+        self.assertIn("Run exactly one synchronous refresh", normalized)
+        self.assertIn("after ordinary tests and source Standards/Spec CLEAN", normalized)
+        self.assertIn("A source repair that changes indexed files", normalized)
+        self.assertIn("targeted exact-head artifact verification", normalized)
         self.assertIn("push the exact head", normalized)
 
     def test_code_only_fast_path_skips_clustering(self) -> None:
@@ -117,7 +117,7 @@ class GraphifyLifecycleTests(unittest.TestCase):
             SKILL_ROOT / "references" / "graphify-lifecycle.md"
         ).read_text(encoding="utf-8")
         normalized = " ".join(policy.split())
-        self.assertIn("A repair that changes indexed files", normalized)
+        self.assertIn("A source repair that changes indexed files", normalized)
         self.assertIn("current base added no indexed-file changes", normalized)
         self.assertIn("one final refresh, push, and exact-head review", normalized)
 

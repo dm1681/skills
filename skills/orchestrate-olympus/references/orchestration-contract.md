@@ -88,15 +88,27 @@ Before every mutation:
 5. Validate the current scope version and authority modes.
 6. Act only on a transition, explicit handoff, owner command, or unfinished in-scope work.
 
-Required compact checkpoint fields are defined by `scripts/checkpoint.py`. Record dirty status and untracked-path inventory without copying sensitive contents into the checkpoint.
+Required compact checkpoint fields are defined by `scripts/checkpoint.py`.
+Record dirty status and untracked-path inventory without copying sensitive
+contents into the checkpoint. Also record source-tree and runtime fingerprints,
+test evidence, source-axis status, artifact status, the Graphify refresh marker,
+and Actions state under `gate_evidence`.
 
-Checkpoint schema version 4 sets `orchestrator_mode=parent-resident` and removes
+Checkpoint schema version 5 adds change-aware gate evidence. It preserves a
+valid source certificate across an artifact-only head only when the classified
+source-tree hash and runtime fingerprint remain identical; exact-head CLEAN is
+never preserved. `checkpoint.py render-resume` migrates schema versions 3 and
+4 through a conservative default: all reusable gate evidence starts `not-run`
+and the current head is `unknown`. A legacy CLEAN or ready phase is downgraded
+to `REVIEWING` until schema v5 source, artifact, and Actions evidence is rebuilt.
+
+Checkpoint schema version 4 set `orchestrator_mode=parent-resident` and removed
 scheduled-automation state. When recovering a version 3 checkpoint, discard
 its `automations` field, set `orchestrator_mode` to `parent-resident`, treat the
 current task as the Orchestrator, and recover accessible Reviewer, Planner, and
 Worker children from live evidence before dispatch. `checkpoint.py
-render-resume` performs this v3 normalization in memory; use
-`checkpoint.py migrate` to emit durable v4 JSON.
+render-resume` performs this normalization in memory; use
+`checkpoint.py migrate` to emit durable v5 JSON.
 
 Schema version 4 also retains the version 3 removal of the cloud-review phase
 and `codex_review` state. When recovering an older cloud-review checkpoint,
@@ -190,9 +202,12 @@ GitHub writes or create a duplicate Worker.
 Normal lane:
 
 ```text
-IDLE -> RECOMMENDED -> PLANNING -> WORKING -> REVIEWING
-REVIEWING -> REPAIRING -> REVIEWING (zero or more loops)
-REVIEWING --reusable Reviewer CLEAN--> PRESENTING
+IDLE -> RECOMMENDED -> PLANNING -> WORKING -> SOURCE_REVIEWING
+SOURCE_REVIEWING --Standards+Spec CLEAN--> EVIDENCE_BUILDING
+SOURCE_REVIEWING --finding--> WORKING
+EVIDENCE_BUILDING -> ARTIFACT_VERIFYING -> REVIEWING
+REVIEWING -> REPAIRING -> WORKING|EVIDENCE_BUILDING (zero or more loops)
+REVIEWING --reusable Reviewer exact-head CLEAN--> PRESENTING
 PRESENTING --audit complete, CLEAN still valid--> READY_FOR_HUMAN_MERGE
 ```
 
@@ -206,7 +221,8 @@ READY_TO_AUTOMERGE -> MERGING -> MERGED_ARCHIVE -> IDLE
 Maintenance lane:
 
 ```text
-IDLE|PAUSED -> MAINTENANCE_WORKING -> REVIEWING|REPAIRING
+IDLE|PAUSED -> MAINTENANCE_WORKING -> SOURCE_REVIEWING
+SOURCE_REVIEWING -> EVIDENCE_BUILDING -> ARTIFACT_VERIFYING -> REVIEWING
 REVIEWING --reusable Reviewer CLEAN--> PRESENTING
 PRESENTING --audit complete, CLEAN still valid-->
             READY_FOR_HUMAN_MERGE|READY_TO_AUTOMERGE
@@ -242,6 +258,12 @@ In human-controlled mode, recommend exactly one issue and wait for approval. In 
   capture, verify fixes, resolve only Reviewer-authored threads, and never
   implement, create backlog issues, approve, or merge.
 
+The parent Orchestrator launches independent one-shot, read-only Standards and
+Spec axes after product tests. These are mandatory source certificates, not
+replacement Reviewers and not GitHub approval actors. They never edit the
+Worker worktree or write to GitHub. Read `change-aware-gates.md` and
+`subagent-lifecycle.md` before launching or reusing their evidence.
+
 Use the role-specific prompt references. Obtain actual task IDs before authorizing GitHub writes.
 
 ## 7. Readiness and merge
@@ -249,6 +271,9 @@ Use the role-specific prompt references. Obtain actual task IDs before authorizi
 Readiness requires:
 
 - one signed reusable-Reviewer CLEAN signal approving all work at the exact full head SHA;
+- CLEAN source Standards and Spec certificates for the current classified
+  source-tree hash and runtime fingerprint;
+- a CLEAN targeted artifact certificate for the exact full head SHA;
 - explicit shared disposition for every blocking finding;
 - required checks successful, including new repository-owned suites in any documented aggregate;
 - documented setup/runbook commands verified at their real public seam when materially affected;
@@ -263,7 +288,11 @@ Readiness requires:
 - no escalation or pause;
 - a completed presentation gate with current artifact links and truthful limitations.
 
-Any new commit invalidates readiness and the Olympus clean signal. PR-body-only presentation changes require a final head/check/thread re-audit but not a new code review when the head is unchanged.
+Any new commit invalidates readiness and the Olympus exact-head clean signal.
+Artifact-only commits may reuse source certificates under
+`change-aware-gates.md`, but require targeted artifact verification and a new
+exact-head Reviewer CLEAN. PR-body-only presentation changes require a final
+head/check/thread re-audit but not a new code review when the head is unchanged.
 
 With `merge_mode=owner-only`, never approve or merge. With `merge_mode=autonomous`, re-audit every gate immediately before using the repository's allowed non-forced merge method. Never bypass protection, force, dismiss review, or resolve another author's blocker to satisfy policy.
 

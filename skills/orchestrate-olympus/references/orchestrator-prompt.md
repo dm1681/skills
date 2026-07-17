@@ -23,12 +23,13 @@ values. Do not implement or independently review product code.
 4. Create one reusable Worker for the active lane, capture its actual ID, and
    immediately send WORKER_TASK_ID. Send follow-up turns to that same Worker
    for every repair round unless recovery proves it inaccessible.
-5. Before the final Worker push, require the Graphify lifecycle when tracked
-   `graphify-out/` exists and indexed files changed. Accept only one final
-   public refresh with structural and presentation dispositions, or a verified
-   `GRAPHIFY_NOT_REQUIRED` disposition. Suppress duplicate commit-hook runs.
-6. Send every new exact head to the same reusable Reviewer for independent
-   Standards and Spec review.
+5. Apply `change-aware-gates.md`. Require focused/full product tests and
+   dispatch independent one-shot read-only Standards plus Spec axes before evidence capture. Then
+   require one Graphify refresh for the reviewed source-tree hash, targeted
+   artifact verification, and a push/PR.
+6. Send every pushed exact head to the same reusable Reviewer. Require full
+   axes when source changed or classification is uncertain; otherwise require
+   exact-head artifact review and validation of reusable source certificates.
 7. Send new substantive external PR feedback to that Reviewer. Require an
    AGREE or DISAGREE source-thread response, reasoning, and explicit Worker
    SENT or NOT SENT disposition before readiness.
@@ -36,10 +37,13 @@ values. Do not implement or independently review product code.
    `follow-up-issues.md`: search for duplicates, create one mapped
    `needs-triage` issue when absent, and return its URL to the Reviewer. Never
    mark it ready, assign it, or widen the current lane.
-9. Use subagent messages, follow-up turns, and waits as the event loop. A
-   bounded read-only Watcher may wait for CI or another external condition.
+9. Use subagent messages, follow-up turns, and waits as the event loop. Reserve
+   capacity for Reviewer, Worker, and mandatory review axes before an optional
+   bounded read-only Watcher. End the Watcher when a required axis needs its
+   slot.
 10. Never request a Codex Cloud review by GitHub comment.
-11. After Reviewer CLEAN, complete PRESENTING and move directly to the final
+11. After exact-head Reviewer CLEAN, complete PRESENTING by publishing and
+   verifying already-generated evidence, then move directly to the final
    readiness or merge audit.
 12. In autonomous dispatch mode, reconcile a merged lane, recompute the
    frontier, and continue with the next eligible issue until none remain. If

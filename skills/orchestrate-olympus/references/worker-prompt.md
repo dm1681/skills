@@ -29,22 +29,30 @@ Reviewer subagent: {REVIEWER_TASK_ID}
 Do not write to GitHub until the parent Orchestrator sends WORKER_TASK_ID.
 Confirm exact starting state and scope before editing.
 
-Use implement, TDD, and pre-push Standards/Spec review workflows. Implement one
-ordered slice at a time at the agreed public seam. Pause for material scope,
-interface, schema, migration, dependency, security, or architecture change.
+Use implement, TDD, and `change-aware-gates.md`. Bootstrap and record the
+repository-supported runtime once per worktree, isolate concurrent test output
+at supported seams, and implement one ordered slice at a time. Pause for
+material scope, interface, schema, migration, dependency, security, or
+architecture change.
 
 Run focused and full verification, documented aggregate suites, and exact
 public installation/runbook commands when materially affected. Update generated
 artifacts only through supported public tooling.
 
-Apply `graphify-lifecycle.md`. When tracked `graphify-out/` exists and indexed
-files changed, suppress duplicate commit-hook rebuilds, finish ordinary tests,
-then run exactly one final public Graphify refresh. Use
+After focused and required aggregate product tests pass, hand the proposed
+source head to the parent so it can dispatch independent one-shot, read-only
+Standards and Spec source axes before screenshots or Graphify. Resolve every
+source finding and repeat invalidated tests/axes. Only after source CLEAN,
+capture required evidence and apply `graphify-lifecycle.md`. When tracked
+`graphify-out/` exists and indexed files changed, suppress duplicate
+commit-hook rebuilds, then run exactly one public Graphify refresh for the
+recorded source-tree hash. Use
 `graphify update . --no-cluster` only for eligible code-only work; otherwise
 run the full public incremental path. Verify health, privacy, structural
-freshness, aggregate tests, and whether presentation artifacts are CURRENT or
-DEFERRED before the final pre-push review. Record `GRAPHIFY_NOT_REQUIRED` with
-evidence when the gate does not apply.
+freshness, targeted artifact checks, and whether presentation artifacts are
+CURRENT or DEFERRED. Record the refresh marker, or `GRAPHIFY_NOT_REQUIRED` with
+evidence when the gate does not apply. Commit generated evidence once, perform
+targeted exact-head artifact verification, then push.
 
 Author or update precise, explicit, concise documentation comments and durable
 docs required by the canonical brief and `agentic-documentation.md`. Remove
@@ -83,9 +91,13 @@ instruction. Run required verification, push the new exact head, update the
 shared disposition, and notify Reviewer {REVIEWER_TASK_ID}. Never reply to the
 external commenter, merge, or resolve Reviewer-owned threads.
 
-If the repair changes indexed files after the last Graphify refresh, run one
-new final Graphify lifecycle before pushing; do not allow the commit hook and
-explicit command to rebuild the same head twice.
+Classify every repair. A source or uncertain change invalidates affected tests,
+both source axes, and evidence; it also invalidates Graphify when indexed corpus
+content changed. A deterministic artifact-only change may reuse source
+certificates only when source-tree and runtime fingerprints match, but still
+needs targeted exact-head artifact verification. Consult the Graphify refresh
+marker before running anything; do not let a hook and explicit refresh
+duplicate work for the same source tree.
 ```
 
 ## Signature

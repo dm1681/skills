@@ -205,7 +205,7 @@ uv sync
 To pin a machine to a release, check out its tag first:
 
 ```sh
-git checkout v6.5.0
+git checkout v7.0.0
 ./install.sh --agent all
 ```
 

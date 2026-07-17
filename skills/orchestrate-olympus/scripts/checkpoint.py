@@ -13,6 +13,7 @@ from typing import Any
 
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 TASK_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 DISPATCH_MODES = {"human-controlled", "autonomous"}
@@ -26,6 +27,9 @@ PHASES = {
     "PLANNING",
     "WORKING",
     "MAINTENANCE_WORKING",
+    "SOURCE_REVIEWING",
+    "EVIDENCE_BUILDING",
+    "ARTIFACT_VERIFYING",
     "REVIEWING",
     "REPAIRING",
     "PRESENTING",
@@ -76,6 +80,23 @@ DISPOSITIONS = {
 PROMOTERS = {"none", "orchestrator", "owner"}
 ARTIFACT_STATUSES = {"planned", "active", "verified", "stale", "failed"}
 ACCEPTED_BLOCKING = {"accepted-fixed", "accepted-no-change"}
+HEAD_CHANGE_CLASSES = {
+    "none",
+    "source",
+    "deterministic-artifact",
+    "provenance-metadata-only",
+    "mixed-or-unknown",
+}
+GATE_STATUSES = {"not-run", "clean", "stale", "failed"}
+GRAPHIFY_DISPOSITIONS = {"not-assessed", "not-required", "current", "stale", "failed"}
+ACTIONS_STATES = {
+    "not-checked",
+    "pending",
+    "green",
+    "failed",
+    "unknown-degraded",
+}
+TEST_RESULTS = {"pass", "fail"}
 
 REQUIRED_FIELDS = {
     "schema_version",
@@ -101,11 +122,35 @@ REQUIRED_FIELDS = {
     "dirty_paths",
     "findings",
     "checks",
+    "gate_evidence",
     "clean_signal",
     "artifacts",
     "escalation",
     "next",
 }
+
+
+def empty_gate_evidence() -> dict[str, Any]:
+    """Return conservative defaults that never imply reusable validation."""
+    return {
+        "head_change_class": "mixed-or-unknown",
+        "source_tree_hash": None,
+        "runtime_fingerprint": None,
+        "standards_status": "not-run",
+        "standards_head": None,
+        "standards_scope_version": None,
+        "spec_status": "not-run",
+        "spec_head": None,
+        "spec_scope_version": None,
+        "artifact_review": "not-run",
+        "artifact_review_head": None,
+        "test_evidence": [],
+        "graphify_disposition": "not-assessed",
+        "graphify_marker": None,
+        "actions_state": "not-checked",
+        "actions_head": None,
+        "actions_degraded_evidence": None,
+    }
 
 
 def _enum(errors: list[str], field: str, value: Any, allowed: set[str]) -> None:
@@ -116,6 +161,16 @@ def _enum(errors: list[str], field: str, value: Any, allowed: set[str]) -> None:
 def _nullable_sha(errors: list[str], field: str, value: Any) -> None:
     if value is not None and (not isinstance(value, str) or not SHA_RE.fullmatch(value)):
         errors.append(f"{field} must be null or a lowercase 40-character SHA")
+
+
+def _nullable_hash(errors: list[str], field: str, value: Any) -> None:
+    if value is not None and (not isinstance(value, str) or not HASH_RE.fullmatch(value)):
+        errors.append(f"{field} must be null or a lowercase 64-character hash")
+
+
+def _hash(errors: list[str], field: str, value: Any) -> None:
+    if not isinstance(value, str) or not HASH_RE.fullmatch(value):
+        errors.append(f"{field} must be a lowercase 64-character hash")
 
 
 def _sha(errors: list[str], field: str, value: Any) -> None:
@@ -184,6 +239,143 @@ def _validate_lane_snapshot(errors: list[str], value: Any, prefix: str) -> None:
         errors.append(f"{prefix}.next must be a non-empty string")
 
 
+def _validate_gate_evidence(
+    errors: list[str], value: Any, current_head: Any, scope_version: Any
+) -> None:
+    prefix = "gate_evidence"
+    if not isinstance(value, dict):
+        errors.append(f"{prefix} must be an object")
+        return
+    required = set(empty_gate_evidence())
+    missing = sorted(required - value.keys())
+    if missing:
+        errors.append(f"{prefix} missing fields: {', '.join(missing)}")
+        return
+
+    _enum(errors, f"{prefix}.head_change_class", value["head_change_class"], HEAD_CHANGE_CLASSES)
+    _nullable_hash(errors, f"{prefix}.source_tree_hash", value["source_tree_hash"])
+    _nullable_hash(errors, f"{prefix}.runtime_fingerprint", value["runtime_fingerprint"])
+    for axis in ("standards", "spec"):
+        _enum(errors, f"{prefix}.{axis}_status", value[f"{axis}_status"], GATE_STATUSES)
+        _nullable_sha(errors, f"{prefix}.{axis}_head", value[f"{axis}_head"])
+        _nullable_positive_int(errors, f"{prefix}.{axis}_scope_version", value[f"{axis}_scope_version"])
+    _enum(errors, f"{prefix}.artifact_review", value["artifact_review"], GATE_STATUSES)
+    _nullable_sha(errors, f"{prefix}.artifact_review_head", value["artifact_review_head"])
+    _enum(errors, f"{prefix}.graphify_disposition", value["graphify_disposition"], GRAPHIFY_DISPOSITIONS)
+    _enum(errors, f"{prefix}.actions_state", value["actions_state"], ACTIONS_STATES)
+    _nullable_sha(errors, f"{prefix}.actions_head", value["actions_head"])
+
+    clean_axes = value["standards_status"] == "clean" and value["spec_status"] == "clean"
+    for axis in ("standards", "spec"):
+        if value[f"{axis}_status"] == "clean":
+            for field in ("source_tree_hash", "runtime_fingerprint"):
+                if value[field] is None:
+                    errors.append(f"{prefix}.{field} is required when {axis}_status=clean")
+            if value[f"{axis}_head"] is None:
+                errors.append(f"{prefix}.{axis}_head is required when {axis}_status=clean")
+            if value[f"{axis}_scope_version"] != scope_version:
+                errors.append(f"clean {axis} certificate must match the current scope_version")
+            if (
+                value["head_change_class"] in {"source", "mixed-or-unknown"}
+                and current_head is not None
+                and value[f"{axis}_head"] != current_head
+            ):
+                errors.append(f"clean {axis} certificate for a source or unknown head must match the current head")
+    if clean_axes and value["standards_head"] != value["spec_head"]:
+        errors.append("clean Standards and Spec certificates must review the same source head")
+
+    if value["artifact_review"] == "clean":
+        if value["artifact_review_head"] is None:
+            errors.append(f"{prefix}.artifact_review_head is required when artifact_review=clean")
+        elif current_head is None or value["artifact_review_head"] != current_head:
+            errors.append("clean artifact review must match the current head")
+
+    test_evidence = value["test_evidence"]
+    if not isinstance(test_evidence, list):
+        errors.append(f"{prefix}.test_evidence must be an array")
+    else:
+        for index, item in enumerate(test_evidence):
+            item_prefix = f"{prefix}.test_evidence[{index}]"
+            required_test = {"command", "scope", "required", "source_tree_hash", "runtime_fingerprint", "result"}
+            if not isinstance(item, dict):
+                errors.append(f"{item_prefix} must be an object")
+                continue
+            missing_test = sorted(required_test - item.keys())
+            if missing_test:
+                errors.append(f"{item_prefix} missing fields: {', '.join(missing_test)}")
+                continue
+            for field in ("command", "scope"):
+                if not isinstance(item[field], str) or not item[field].strip():
+                    errors.append(f"{item_prefix}.{field} must be a non-empty string")
+            if not isinstance(item["required"], bool):
+                errors.append(f"{item_prefix}.required must be boolean")
+            _hash(errors, f"{item_prefix}.source_tree_hash", item["source_tree_hash"])
+            _hash(errors, f"{item_prefix}.runtime_fingerprint", item["runtime_fingerprint"])
+            _enum(errors, f"{item_prefix}.result", item["result"], TEST_RESULTS)
+
+        matching_required = [
+            item
+            for item in test_evidence
+            if isinstance(item, dict)
+            and item.get("required") is True
+            and item.get("scope") == "aggregate"
+            and item.get("source_tree_hash") == value["source_tree_hash"]
+            and item.get("runtime_fingerprint") == value["runtime_fingerprint"]
+        ]
+        if clean_axes and not matching_required:
+            errors.append("clean source certificates require matching required aggregate test evidence")
+        if clean_axes and any(item.get("result") != "pass" for item in matching_required):
+            errors.append("clean source certificates require all matching required aggregate tests to pass")
+
+    marker = value["graphify_marker"]
+    if marker is not None:
+        marker_prefix = f"{prefix}.graphify_marker"
+        required_marker = {"source_tree_hash", "graphify_version", "command", "output_hash"}
+        if not isinstance(marker, dict):
+            errors.append(f"{marker_prefix} must be null or an object")
+        else:
+            missing_marker = sorted(required_marker - marker.keys())
+            if missing_marker:
+                errors.append(f"{marker_prefix} missing fields: {', '.join(missing_marker)}")
+            else:
+                _hash(errors, f"{marker_prefix}.source_tree_hash", marker["source_tree_hash"])
+                _hash(errors, f"{marker_prefix}.output_hash", marker["output_hash"])
+                for field in ("graphify_version", "command"):
+                    if not isinstance(marker[field], str) or not marker[field].strip():
+                        errors.append(f"{marker_prefix}.{field} must be a non-empty string")
+                if marker["source_tree_hash"] != value["source_tree_hash"]:
+                    errors.append("graphify marker must match gate_evidence.source_tree_hash")
+    if value["graphify_disposition"] == "current" and marker is None:
+        errors.append("graphify_disposition=current requires graphify_marker")
+    if value["graphify_disposition"] == "not-required" and marker is not None:
+        errors.append("graphify_disposition=not-required requires graphify_marker=null")
+
+    degraded = value["actions_degraded_evidence"]
+    if degraded is not None:
+        degraded_prefix = f"{prefix}.actions_degraded_evidence"
+        required_degraded = {"attempts", "last_error", "corroboration"}
+        if not isinstance(degraded, dict):
+            errors.append(f"{degraded_prefix} must be null or an object")
+        else:
+            missing_degraded = sorted(required_degraded - degraded.keys())
+            if missing_degraded:
+                errors.append(f"{degraded_prefix} missing fields: {', '.join(missing_degraded)}")
+            else:
+                if not isinstance(degraded["attempts"], int) or isinstance(degraded["attempts"], bool) or degraded["attempts"] < 2:
+                    errors.append(f"{degraded_prefix}.attempts must be an integer of at least 2")
+                if not isinstance(degraded["last_error"], str) or not degraded["last_error"].strip():
+                    errors.append(f"{degraded_prefix}.last_error must be a non-empty string")
+                if not isinstance(degraded["corroboration"], list) or not degraded["corroboration"] or not all(isinstance(item, str) and item.strip() for item in degraded["corroboration"]):
+                    errors.append(f"{degraded_prefix}.corroboration must be a non-empty string array")
+    if value["actions_state"] == "unknown-degraded" and degraded is None:
+        errors.append("actions_state=unknown-degraded requires actions_degraded_evidence")
+    if value["actions_state"] == "green":
+        if current_head is None or value["actions_head"] != current_head:
+            errors.append("green Actions evidence must match the current head")
+    elif value["actions_head"] is not None:
+        errors.append("actions_head must be null unless actions_state=green")
+
+
 def validate_data(data: Any) -> list[str]:
     errors: list[str] = []
     if not isinstance(data, dict):
@@ -194,8 +386,8 @@ def validate_data(data: Any) -> list[str]:
         errors.append(f"missing fields: {', '.join(missing)}")
         return errors
 
-    if data["schema_version"] != 4:
-        errors.append("schema_version must be 4")
+    if data["schema_version"] != 5:
+        errors.append("schema_version must be 5")
     if data["repository"] != "dm1681/Olympus":
         errors.append("repository must be dm1681/Olympus")
     _enum(
@@ -317,6 +509,16 @@ def validate_data(data: Any) -> list[str]:
         for finding in findings:
             if isinstance(finding, dict) and finding.get("blocking") and finding.get("disposition") not in ACCEPTED_BLOCKING:
                 errors.append(f"clean_signal conflicts with unresolved blocking finding {finding.get('id', '?')}")
+        gate_evidence = data["gate_evidence"]
+        if isinstance(gate_evidence, dict):
+            if gate_evidence.get("standards_status") != "clean" or gate_evidence.get("spec_status") != "clean":
+                errors.append("clean_signal requires clean Standards and Spec certificates")
+            if gate_evidence.get("artifact_review") != "clean" or gate_evidence.get("artifact_review_head") != data["head"]:
+                errors.append("clean_signal requires clean artifact review at current head")
+            if gate_evidence.get("graphify_disposition") not in {"not-required", "current"}:
+                errors.append("clean_signal requires a final Graphify disposition")
+            if gate_evidence.get("actions_state") != "green" or gate_evidence.get("actions_head") != data["head"]:
+                errors.append("clean_signal requires successful Actions evidence at current head")
 
     artifacts = data["artifacts"]
     if not isinstance(artifacts, list):
@@ -349,9 +551,20 @@ def validate_data(data: Any) -> list[str]:
     if data["phase"] in {"READY_FOR_HUMAN_MERGE", "READY_TO_AUTOMERGE", "MERGING"}:
         if data["clean_signal"] != data["head"]:
             errors.append(f"{data['phase']} requires Reviewer CLEAN at current head")
+        gate_evidence = data["gate_evidence"]
+        if isinstance(gate_evidence, dict):
+            if gate_evidence.get("standards_status") != "clean" or gate_evidence.get("spec_status") != "clean":
+                errors.append(f"{data['phase']} requires clean Standards and Spec certificates")
+            if gate_evidence.get("artifact_review") != "clean" or gate_evidence.get("artifact_review_head") != data["head"]:
+                errors.append(f"{data['phase']} requires clean artifact review at current head")
+            if gate_evidence.get("graphify_disposition") not in {"not-required", "current"}:
+                errors.append(f"{data['phase']} requires a final Graphify disposition")
+            if gate_evidence.get("actions_state") != "green" or gate_evidence.get("actions_head") != data["head"]:
+                errors.append(f"{data['phase']} requires successful Actions evidence at current head")
 
     if not isinstance(data["checks"], str):
         errors.append("checks must be a string")
+    _validate_gate_evidence(errors, data["gate_evidence"], data["head"], data["scope_version"])
     if data["escalation"] is not None and not isinstance(data["escalation"], str):
         errors.append("escalation must be null or a string")
     if not isinstance(data["next"], str) or not data["next"].strip():
@@ -386,6 +599,22 @@ def migrate_data(value: Any) -> dict[str, Any]:
         migrated["schema_version"] = 4
         migrated["orchestrator_mode"] = "parent-resident"
         migrated.pop("automations", None)
+    if migrated.get("schema_version") == 4:
+        migrated["schema_version"] = 5
+        migrated["gate_evidence"] = empty_gate_evidence()
+        if migrated.get("clean_signal") is not None:
+            migrated["clean_signal"] = None
+            if migrated.get("phase") in {
+                "PRESENTING",
+                "READY_FOR_HUMAN_MERGE",
+                "READY_TO_AUTOMERGE",
+                "MERGING",
+            }:
+                migrated["phase"] = "REVIEWING"
+                migrated["next"] = (
+                    "Rebuild schema v5 source, artifact, and Actions evidence "
+                    "before requesting exact-head Reviewer CLEAN."
+                )
 
     errors = validate_data(migrated)
     if errors:
@@ -439,6 +668,13 @@ def render_state(data: dict[str, Any]) -> str:
     lines.extend(
         [
             f"checks={data['checks'] or 'none'} clean_signal={_fmt(data['clean_signal'])}",
+            "gates="
+            f"class:{data['gate_evidence']['head_change_class']},"
+            f"standards:{data['gate_evidence']['standards_status']},"
+            f"spec:{data['gate_evidence']['spec_status']},"
+            f"artifact:{data['gate_evidence']['artifact_review']},"
+            f"graphify:{data['gate_evidence']['graphify_disposition']},"
+            f"actions:{data['gate_evidence']['actions_state']}",
             f"artifacts={len(data['artifacts'])} escalation={_fmt(data['escalation'])}",
         ]
     )
@@ -467,7 +703,7 @@ Follow the skill's core contract and subagent lifecycle. Recover or spawn the re
 def sample_checkpoint() -> dict[str, Any]:
     sha = "a" * 40
     return {
-        "schema_version": 4,
+        "schema_version": 5,
         "repository": "dm1681/Olympus",
         "orchestrator_mode": "parent-resident",
         "dispatch_mode": "human-controlled",
@@ -490,6 +726,7 @@ def sample_checkpoint() -> dict[str, Any]:
         "dirty_paths": [],
         "findings": [],
         "checks": "focused green",
+        "gate_evidence": empty_gate_evidence(),
         "clean_signal": None,
         "artifacts": [],
         "escalation": None,
@@ -538,6 +775,33 @@ def self_test() -> None:
             "pr": 35,
             "phase": "READY_FOR_HUMAN_MERGE",
             "clean_signal": "a" * 40,
+            "gate_evidence": {
+                **empty_gate_evidence(),
+                "head_change_class": "source",
+                "source_tree_hash": "b" * 64,
+                "runtime_fingerprint": "c" * 64,
+                "standards_status": "clean",
+                "standards_head": "a" * 40,
+                "standards_scope_version": 1,
+                "spec_status": "clean",
+                "spec_head": "a" * 40,
+                "spec_scope_version": 1,
+                "artifact_review": "clean",
+                "artifact_review_head": "a" * 40,
+                "test_evidence": [
+                    {
+                        "command": "pnpm test",
+                        "scope": "aggregate",
+                        "required": True,
+                        "source_tree_hash": "b" * 64,
+                        "runtime_fingerprint": "c" * 64,
+                        "result": "pass",
+                    }
+                ],
+                "graphify_disposition": "not-required",
+                "actions_state": "green",
+                "actions_head": "a" * 40,
+            },
         }
     )
     assert validate_data(ready) == []
@@ -565,9 +829,10 @@ def self_test() -> None:
     real_v3.pop("orchestrator_mode")
     real_v3["automations"] = {"orchestrator": None, "reviewer": None}
     migrated_v3 = migrate_data(real_v3)
-    assert migrated_v3["schema_version"] == 4
+    assert migrated_v3["schema_version"] == 5
     assert migrated_v3["orchestrator_mode"] == "parent-resident"
     assert "automations" not in migrated_v3
+    assert migrated_v3["gate_evidence"]["standards_status"] == "not-run"
 
     bad_upstream = copy.deepcopy(valid)
     bad_upstream["findings"] = [

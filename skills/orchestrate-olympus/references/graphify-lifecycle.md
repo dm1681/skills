@@ -11,8 +11,9 @@ Record exactly one structural disposition:
 
 - `GRAPHIFY_NOT_REQUIRED` with the verified reason when `graphify-out/` is
   absent or no indexed file changed.
-- `GRAPHIFY_STRUCTURAL_CURRENT` when the current `graph.json` was refreshed and
-  verified at the exact Worker head.
+- `GRAPHIFY_STRUCTURAL_CURRENT` when the current exact head contains
+  `graph.json` bytes matching a verified public refresh marker for its
+  `SOURCE_TREE_HASH`.
 
 Also record `GRAPHIFY_PRESENTATION_CURRENT` or
 `GRAPHIFY_PRESENTATION_DEFERRED`. Presentation artifacts include community
@@ -63,10 +64,13 @@ with `GRAPHIFY_SKIP_HOOK=1` scoped to that commit process. On POSIX shells use
 for the `git commit` call and remove it immediately afterward. Do not disable or
 uninstall the repository hook.
 
-Run exactly one synchronous final refresh for each proposed Worker head after
-ordinary tests. Do not run a background hook refresh and then wait on its lock
-with a second explicit refresh. A repair that changes indexed files creates a
-new proposed head and requires one new final refresh.
+Run exactly one synchronous refresh for each reviewed `SOURCE_TREE_HASH`, after
+ordinary tests and source Standards/Spec CLEAN. Record the public command,
+Graphify version, source-tree hash, and generated-output hash as the
+`GRAPHIFY_REFRESH_MARKER`. Do not run a background hook refresh and then wait
+on its lock with a second explicit refresh. A source repair that changes
+indexed files invalidates the marker; an artifact-only commit does not when the
+source and expected generated-output hashes still match.
 
 Respect Graphify's platform-safe worker default. `GRAPHIFY_MAX_WORKERS` may be
 set only for the final command after a repository-local timing check shows that
@@ -87,17 +91,21 @@ or generated-artifact risk.
 
 When Graphify is required:
 
-1. Finish implementation, documentation, ordinary focused tests, and aggregate
-   tests while suppressing commit-hook rebuilds as described above.
-2. Select the structural fast path or full path from the actual final diff and
-   run exactly one synchronous public refresh.
+1. Finish implementation, documentation, ordinary focused tests, aggregate
+   tests, and independent source Standards/Spec review while suppressing
+   commit-hook rebuilds as described above.
+2. Capture required acceptance evidence. Select the structural fast path or
+   full path from the actual source diff and run exactly one synchronous public
+   refresh for the reviewed source-tree hash.
 3. Verify command completion, graph integrity, source coverage, expected node
    and edge changes, shrink behavior, and absence of credentials, private
    paths, or unrelated corpus content.
-4. Run repository-owned Graphify, generated-artifact, and fresh-clone tests.
-5. Record both structural and presentation dispositions. Include every changed
-   tracked artifact in the branch, commit it with the hook suppressed, perform
-   the final Standards and Spec check, and push the exact head.
+4. Run repository-owned Graphify, generated-artifact, evidence replay,
+   privacy, diff, packaging, and fresh-clone checks.
+5. Record the refresh marker plus both structural and presentation
+   dispositions. Include every changed tracked artifact in the branch, commit
+   it with the hook suppressed, perform targeted exact-head artifact
+   verification, and push the exact head.
 
 A required refresh failure, unsafe artifact diff, unexplained graph-health
 warning, unsupported shrink, or false freshness claim blocks handoff. Preserve
@@ -106,10 +114,11 @@ or silently deleting tracked artifacts.
 
 ### Reviewer
 
-At the exact pushed head, verify the Planner classification, final indexed
-diff, command selection, hook-suppression evidence, successful public refresh,
-structural freshness, health, privacy, reproducibility, and aggregate tests.
-Verify that presentation artifacts are either current or explicitly deferred.
+At the exact pushed head, verify the Planner classification, source-tree hash,
+runtime fingerprint, source review certificates, final indexed diff, command
+selection, hook-suppression evidence, refresh marker, structural freshness,
+health, privacy, reproducibility, and applicable test evidence. Verify that
+presentation artifacts are either current or explicitly deferred.
 
 `GRAPHIFY_PRESENTATION_DEFERRED` is non-blocking only when the fast-path
 criteria hold and no PR claim or acceptance check depends on those views. A
@@ -122,7 +131,8 @@ upstream styling or interaction remains advisory unless promoted.
 ### Orchestrator
 
 Do not send a final Worker head to the Reviewer until both Graphify
-dispositions and refresh evidence are recorded. Before readiness or merge,
+dispositions, refresh marker, and targeted artifact evidence are recorded.
+Before readiness or merge,
 recheck that the current base added no indexed-file changes outside the
 reviewed head. If it did, return the lane through base recovery, one final
 refresh, push, and exact-head review.
@@ -138,6 +148,14 @@ do not create a redundant maintenance lane.
 Never regenerate or commit directly on `main`. Under human-controlled dispatch,
 report the accumulated deferral durably and wait for explicit maintenance
 authorization.
+
+## Semantic incrementality boundary
+
+Use `PROVENANCE_METADATA_ONLY` only under `change-aware-gates.md`. A changed
+Markdown file that remains in the semantic corpus requires the supported
+semantic update path. Public Graphify tooling may replace all semantic nodes
+for that modified document; preserving unchanged section nodes is an upstream
+engine concern. Never call internals or hand-edit output to emulate it.
 
 ## Post-merge verification
 

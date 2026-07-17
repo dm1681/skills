@@ -66,11 +66,19 @@ Inspect artifacts for secrets, credentials, idempotency keys, sensitive Session 
 
 ## 5. Presentation gate
 
+Generate required acceptance screenshots, recordings, and other expensive
+evidence after source Standards and Spec CLEAN and before the one final
+Graphify refresh. Verify those artifacts in the artifact phase. If capture or
+replay reveals a source defect, return to `WORKING` and invalidate the source
+certificates.
+
 After exact-head Reviewer CLEAN, enter `PRESENTING` before reporting ready:
 
 1. Verify the PR head and clean signal still match.
 2. Update the PR body or canonical disposition with a compact color-coordinated lane view.
-3. Refresh exact-head SHAs, counts, screenshots, artifact links, test results, and owner action.
+3. Publish and verify exact-head SHAs, counts, already-generated screenshots,
+   artifact links, test results, and owner action. Do not regenerate evidence
+   merely for presentation.
 4. Test that links open through the documented authenticated path; do not advertise raw private HTML as executable.
 5. State network, offline, compatibility, privacy, migration, and generated-artifact limitations truthfully.
 6. Ensure color is supplementary and the text alone communicates status.

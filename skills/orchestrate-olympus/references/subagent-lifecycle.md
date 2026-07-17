@@ -36,11 +36,26 @@ internally. A commentary update is not a terminal handoff.
   containing the new exact head, finding ledger, and scope version. Create a
   replacement only after recovery proves the original is inaccessible and
   unique local state is safe.
+- **Standards and Spec axes: one-shot and read-only.** After product tests pass,
+  the parent Orchestrator dispatches one independent Standards axis and one
+  independent Spec axis against the same proposed source head, source-tree
+  hash, runtime fingerprint, scope version, and canonical brief. They may read
+  the Worker worktree but never edit it or write to GitHub. Each returns one
+  signed CLEAN certificate or stable findings to the parent. They do not
+  replace the reusable Reviewer or issue final approval.
+  Create each from `source-review-axis-prompt.md` and retire it after its
+  certificate or findings are captured.
 - **Watcher: optional, bounded, and read-only.** A Watcher may observe one
   external condition such as CI completion, mergeability refresh, or a required
   GitHub response. Give it a condition, evidence source, and finite timeout. It
   reports success, failure, or timeout to the parent and then ends. It never
   edits code, mutates GitHub, or becomes a persistent role.
+
+Reserve constrained child capacity in this order: reusable Reviewer, active
+Worker, required Standards and Spec source axes, optional Watcher. Retire or
+interrupt a Watcher before it prevents a mandatory axis from starting. If only
+one review slot is free, run Standards and Spec sequentially; parallelism is an
+optimization, not an acceptance requirement.
 
 ## Startup order
 
