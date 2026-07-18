@@ -1,0 +1,466 @@
+<title>The Semantic Layer — How CodeRabbit Reads a Pull Request</title>
+<style>
+  :root {
+    --bg:        #f4f1ea00; /* placeholder, overridden below */
+    --ground:    #f6f3ec;
+    --panel:     #fffdf8;
+    --panel-2:   #efeae0;
+    --ink:       #23262e;
+    --ink-soft:  #55585f;
+    --ink-faint: #86888e;
+    --rule:      #ddd6c8;
+    --rule-soft: #e8e2d5;
+    --amber:     #b9762a;  /* semantic accent */
+    --amber-bg:  #f0e3d0;
+    --teal:      #2f7d72;  /* data flow / retrieval */
+    --teal-bg:   #dbe9e5;
+    --violet:    #5f52a8;  /* persistent memory */
+    --violet-bg: #e5e1f1;
+    --good:      #3f8a5c;
+    --warn:      #b9762a;
+    --hard:      #b1493c;
+    --shadow:    0 1px 2px rgba(40,36,28,.05), 0 8px 30px rgba(40,36,28,.06);
+    --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground:    #12151d;
+      --panel:     #1a1e28;
+      --panel-2:   #222736;
+      --ink:       #e8e6df;
+      --ink-soft:  #a7a9b2;
+      --ink-faint: #74767f;
+      --rule:      #2c313f;
+      --rule-soft: #232838;
+      --amber:     #e0a34d;
+      --amber-bg:  #2a2318;
+      --teal:      #59b6a8;
+      --teal-bg:   #16241f;
+      --violet:    #9488d9;
+      --violet-bg: #1e1b2c;
+      --good:      #63bd85;
+      --warn:      #e0a34d;
+      --hard:      #db7a6b;
+      --shadow:    0 1px 2px rgba(0,0,0,.3), 0 10px 34px rgba(0,0,0,.36);
+    }
+  }
+  :root[data-theme="light"] {
+    --ground:#f6f3ec; --panel:#fffdf8; --panel-2:#efeae0; --ink:#23262e; --ink-soft:#55585f;
+    --ink-faint:#86888e; --rule:#ddd6c8; --rule-soft:#e8e2d5; --amber:#b9762a; --amber-bg:#f0e3d0;
+    --teal:#2f7d72; --teal-bg:#dbe9e5; --violet:#5f52a8; --violet-bg:#e5e1f1;
+    --good:#3f8a5c; --warn:#b9762a; --hard:#b1493c;
+    --shadow:0 1px 2px rgba(40,36,28,.05), 0 8px 30px rgba(40,36,28,.06);
+  }
+  :root[data-theme="dark"] {
+    --ground:#12151d; --panel:#1a1e28; --panel-2:#222736; --ink:#e8e6df; --ink-soft:#a7a9b2;
+    --ink-faint:#74767f; --rule:#2c313f; --rule-soft:#232838; --amber:#e0a34d; --amber-bg:#2a2318;
+    --teal:#59b6a8; --teal-bg:#16241f; --violet:#9488d9; --violet-bg:#1e1b2c;
+    --good:#63bd85; --warn:#e0a34d; --hard:#db7a6b;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 34px rgba(0,0,0,.36);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--sans); line-height: 1.6;
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--ink-faint);
+  }
+  h1,h2,h3 { font-family: var(--serif); font-weight: 600; text-wrap: balance; line-height: 1.12; }
+  a { color: var(--amber); }
+
+  /* ---------- HERO ---------- */
+  .hero { position: relative; overflow: hidden; border-bottom: 1px solid var(--rule); }
+  #graph { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .hero-veil { position: absolute; inset: 0;
+    background: linear-gradient(180deg, transparent 40%, var(--ground) 96%); pointer-events: none; }
+  .hero-inner { position: relative; padding: 92px 0 64px; }
+  h1 { font-size: clamp(36px, 6vw, 62px); margin: 18px 0 0; letter-spacing: -.01em; }
+  h1 .accent { font-style: italic; color: var(--amber); }
+  .dek { max-width: 34em; font-size: clamp(16px, 2.1vw, 19px); color: var(--ink-soft); margin: 22px 0 0; }
+  .credit { margin-top: 30px; font-family: var(--mono); font-size: 12px; color: var(--ink-faint); }
+
+  /* ---------- shared blocks ---------- */
+  section { padding: 62px 0; border-bottom: 1px solid var(--rule-soft); }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+  .sec-num { font-family: var(--mono); font-size: 12px; color: var(--amber); letter-spacing: .1em; }
+  h2 { font-size: clamp(24px, 3.4vw, 33px); margin: 0; }
+  .lede { max-width: 62ch; color: var(--ink-soft); font-size: 17px; margin: 14px 0 34px; }
+
+  /* ---------- PIPELINE ---------- */
+  .pipe { display: flex; flex-direction: column; gap: 0; position: relative; }
+  .stage { position: relative; display: grid; grid-template-columns: 56px 1fr;
+    gap: 20px; padding: 0 0 30px; }
+  .rail { position: relative; display: flex; flex-direction: column; align-items: center; }
+  .node {
+    width: 42px; height: 42px; flex: 0 0 42px; border-radius: 11px;
+    display: grid; place-items: center; font-family: var(--mono); font-weight: 600;
+    font-size: 15px; z-index: 2; background: var(--panel); border: 1.5px solid var(--rule);
+    color: var(--ink); box-shadow: var(--shadow);
+  }
+  .stage:not(:last-child) .rail::after {
+    content: ""; position: absolute; top: 42px; bottom: -6px; width: 2px;
+    background: linear-gradient(var(--rule), var(--rule-soft));
+  }
+  .stage[data-kind="semantic"] .node { border-color: var(--amber); color: var(--amber); background: var(--amber-bg); }
+  .stage[data-kind="retrieval"] .node { border-color: var(--teal); color: var(--teal); background: var(--teal-bg); }
+  .stage[data-kind="memory"] .node { border-color: var(--violet); color: var(--violet); background: var(--violet-bg); }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--rule); border-radius: 14px;
+    padding: 20px 22px; box-shadow: var(--shadow);
+  }
+  .card h3 { font-size: 20px; margin: 0 0 6px; }
+  .card .tag {
+    display: inline-block; font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em;
+    text-transform: uppercase; padding: 3px 9px; border-radius: 20px; margin-bottom: 10px;
+    border: 1px solid var(--rule);
+  }
+  [data-kind="parse"] .tag, [data-kind="ingest"] .tag { color: var(--ink-soft); background: var(--panel-2); }
+  [data-kind="semantic"] .tag { color: var(--amber); background: var(--amber-bg); border-color: transparent; }
+  [data-kind="retrieval"] .tag { color: var(--teal); background: var(--teal-bg); border-color: transparent; }
+  [data-kind="memory"] .tag { color: var(--violet); background: var(--violet-bg); border-color: transparent; }
+  .card p { margin: 0; color: var(--ink-soft); font-size: 15px; }
+  .card .detail { margin-top: 12px; font-family: var(--mono); font-size: 12.5px; color: var(--ink-faint);
+    border-top: 1px dashed var(--rule); padding-top: 11px; line-height: 1.75; }
+  .card .detail b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- FEASIBILITY ---------- */
+  .matrix { display: grid; gap: 12px; }
+  .row {
+    display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 18px;
+    background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 15px 18px;
+  }
+  .row .name { font-weight: 600; font-size: 15.5px; }
+  .row .why { color: var(--ink-soft); font-size: 13.5px; margin-top: 2px; }
+  .meter { display: flex; align-items: center; gap: 11px; }
+  .pips { display: flex; gap: 4px; }
+  .pip { width: 9px; height: 20px; border-radius: 3px; background: var(--rule); }
+  .pip.on-good { background: var(--good); }
+  .pip.on-warn { background: var(--warn); }
+  .pip.on-hard { background: var(--hard); }
+  .effort { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    width: 74px; text-align: right; color: var(--ink-faint); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; margin: 22px 0 0; font-family: var(--mono);
+    font-size: 12px; color: var(--ink-soft); }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .swatch { width: 11px; height: 11px; border-radius: 3px; }
+
+  /* ---------- CUT LINE ---------- */
+  .cut { background: var(--panel); border: 1px solid var(--rule); border-radius: 16px;
+    padding: 30px 30px; box-shadow: var(--shadow); }
+  .cut .pull { font-family: var(--serif); font-size: clamp(20px,3vw,26px); font-style: italic;
+    color: var(--amber); margin: 0 0 22px; line-height: 1.3; text-wrap: balance; }
+  ol.steps { counter-reset: s; list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+  ol.steps li { display: grid; grid-template-columns: 34px 1fr; gap: 14px; align-items: start; }
+  ol.steps li::before { counter-increment: s; content: counter(s);
+    font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--amber);
+    background: var(--amber-bg); border-radius: 8px; width: 30px; height: 30px;
+    display: grid; place-items: center; }
+  ol.steps b { color: var(--ink); }
+  ol.steps .k { color: var(--ink-soft); font-size: 14.5px; }
+  .later { opacity: .72; }
+  .later::before { color: var(--ink-faint) !important; background: var(--panel-2) !important; }
+
+  /* ---------- OLYMPUS ---------- */
+  .oly { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px,1fr)); gap: 14px; }
+  .oly .cell { background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 18px; }
+  .oly .cell .role { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--teal); margin-bottom: 8px; }
+  .oly .cell p { margin: 0; font-size: 14px; color: var(--ink-soft); }
+
+  /* ---------- footer ---------- */
+  footer { padding: 40px 0 64px; color: var(--ink-faint); font-size: 13px; }
+  footer .caveat { border-left: 3px solid var(--amber); padding: 4px 0 4px 16px; margin: 0 0 20px;
+    color: var(--ink-soft); font-size: 13.5px; max-width: 68ch; }
+  footer code { font-family: var(--mono); font-size: 12px; }
+
+  @media (max-width: 620px) {
+    .stage { grid-template-columns: 44px 1fr; gap: 14px; }
+    .node { width: 36px; height: 36px; flex-basis: 36px; }
+    .row { grid-template-columns: 1fr; }
+    .meter { justify-content: flex-start; }
+  }
+  @media (prefers-reduced-motion: reduce) { #graph { display: none; } }
+</style>
+
+<div class="hero">
+  <canvas id="graph" aria-hidden="true"></canvas>
+  <div class="hero-veil"></div>
+  <div class="wrap hero-inner">
+    <div class="eyebrow">Deep-research teardown · Architecture</div>
+    <h1>The <span class="accent">semantic layer</span> behind a pull request</h1>
+    <p class="dek">How CodeRabbit turns a flat, alphabetical diff into a graph of the change —
+      and whether one developer can build the same thing.</p>
+    <div class="credit">CodeRabbit teardown · compiled 2026-07-18 · sources: vendor blogs + LanceDB case study</div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2>The core idea</h2></div>
+    <p class="lede">GitHub shows you a diff: files in alphabetical order, every line a delete or an add.
+      CodeRabbit throws that ordering away. For each PR it rebuilds the change as a <b>graph</b> — syntax
+      from the AST, meaning from the call and dependency edges — then re-renders that graph the way the
+      author would actually walk you through it. The claim, in their words: reconstruct
+      <em>"how the PR author would have crafted the diff."</em></p>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2>The pipeline, end to end</h2></div>
+    <p class="lede">Six loosely-coupled stages. Amber marks where the <b>semantic</b> work happens;
+      teal is <b>live retrieval</b>; violet is the <b>persistent memory</b> that sits off to the side.</p>
+
+    <div class="pipe">
+      <div class="stage" data-kind="ingest">
+        <div class="rail"><div class="node">◇</div></div>
+        <div class="card">
+          <span class="tag">Trigger</span>
+          <h3>Ingest &amp; clone</h3>
+          <p>A webhook fires when a PR opens on GitHub or GitLab. CodeRabbit clones the repo and isolates the diff.</p>
+          <div class="detail"><b>Solo-dev read:</b> standard, well-trodden. A weekend.</div>
+        </div>
+      </div>
+
+      <div class="stage" data-kind="parse">
+        <div class="rail"><div class="node">{ }</div></div>
+        <div class="card">
+          <span class="tag">Syntax</span>
+          <h3>Parse to an AST</h3>
+          <p>tree-sitter / <code>ast-grep</code> parse the code structurally, so a change reads as
+            <em>"method <code>calculate_total</code> in class <code>Cart</code> changed"</em> — not "line 10 changed."
+            Diff hunks are expanded out to their enclosing function.</p>
+          <div class="detail"><b>Off the shelf.</b> tree-sitter has ~40 grammars + mature bindings.</div>
+        </div>
+      </div>
+
+      <div class="stage" data-kind="semantic">
+        <div class="rail"><div class="node">⧉</div></div>
+        <div class="card">
+          <span class="tag">Semantic · core</span>
+          <h3>Build the change graph</h3>
+          <p>Nodes are symbols; edges are calls, imports and dependencies — traced cross-file and cross-repo.
+            This is the "semantic" in semantic layer: structure the model can reason over instead of raw text.</p>
+          <div class="detail"><b>The hard, disclosed-vaguely part.</b> What makes an edge "semantic" is not published.</div>
+        </div>
+      </div>
+
+      <div class="stage" data-kind="retrieval">
+        <div class="rail"><div class="node">⌕</div></div>
+        <div class="card">
+          <span class="tag">Retrieval · context engine</span>
+          <h3>Gather context + static analysis</h3>
+          <p>Graph-based retrieval over ASTs, dependency graphs and call relationships pulls in related code
+            beyond the diff. Diagnostics from <b>25–40+ linters &amp; SAST tools</b> are fed in as structured signal.</p>
+          <div class="detail"><b>Static analysis isn't a separate product</b> — it's one input to the prompt.</div>
+        </div>
+      </div>
+
+      <div class="stage" data-kind="semantic">
+        <div class="rail"><div class="node">☰</div></div>
+        <div class="card">
+          <span class="tag">Semantic · the payoff</span>
+          <h3>Cohorts, layers &amp; the walkthrough</h3>
+          <p>Related changes are grouped into <b>cohorts</b>, ordered into dependency-aware <b>layers</b>
+            (foundational changes first), each given a plain-language summary — plus a Mermaid diagram
+            where one earns its place. Moved code renders as a single relocation, not a delete + re-add.</p>
+          <div class="detail"><b>This is the moment users feel.</b> "Oh — it actually understands my PR."</div>
+        </div>
+      </div>
+
+      <div class="stage" data-kind="memory">
+        <div class="rail"><div class="node">⛁</div></div>
+        <div class="card">
+          <span class="tag">Persistent memory · off to the side</span>
+          <h3>Cross-PR RAG (LanceDB)</h3>
+          <p>A separate, standing vector store indexes the whole codebase for cross-PR memory —
+            past PRs, Jira/Linear tickets, team conventions — queried semantically. Reported at millions
+            of reviews with sub-second latency.</p>
+          <div class="detail"><b>Defer this.</b> It's the moat and the cost — not needed to ship the feel.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><h2>Can a solo dev build it?</h2></div>
+    <p class="lede">Yes — a genuinely useful subset is. The trap is treating it as one monolith. It's ~6
+      capabilities, each of which degrades gracefully. Here's the honest effort read on each.</p>
+
+    <div class="matrix">
+      <div class="row">
+        <div><div class="name">PR ingestion + webhook</div><div class="why">Clone on PR open. Standard plumbing.</div></div>
+        <div class="meter"><div class="pips"><i class="pip on-good"></i><i class="pip"></i><i class="pip"></i><i class="pip"></i><i class="pip"></i></div><span class="effort">weekend</span></div>
+      </div>
+      <div class="row">
+        <div><div class="name">AST parsing (tree-sitter)</div><div class="why">Off-the-shelf grammars + bindings.</div></div>
+        <div class="meter"><div class="pips"><i class="pip on-good"></i><i class="pip"></i><i class="pip"></i><i class="pip"></i><i class="pip"></i></div><span class="effort">~days</span></div>
+      </div>
+      <div class="row">
+        <div><div class="name">Hunk → enclosing symbol</div><div class="why">Line ranges ∩ AST node spans.</div></div>
+        <div class="meter"><div class="pips"><i class="pip on-good"></i><i class="pip"></i><i class="pip"></i><i class="pip"></i><i class="pip"></i></div><span class="effort">~days</span></div>
+      </div>
+      <div class="row">
+        <div><div class="name">LLM cohort summaries</div><div class="why">Highest value-to-effort in the system.</div></div>
+        <div class="meter"><div class="pips"><i class="pip on-good"></i><i class="pip"></i><i class="pip"></i><i class="pip"></i><i class="pip"></i></div><span class="effort">~days</span></div>
+      </div>
+      <div class="row">
+        <div><div class="name">Move-aware diff rendering</div><div class="why">Myers + block hashing; known algorithms.</div></div>
+        <div class="meter"><div class="pips"><i class="pip on-good"></i><i class="pip on-good"></i><i class="pip"></i><i class="pip"></i><i class="pip"></i></div><span class="effort">1–2 wks</span></div>
+      </div>
+      <div class="row">
+        <div><div class="name">Cross-file dependency graph</div><div class="why">Import/call resolution — pain is per-language.</div></div>
+        <div class="meter"><div class="pips"><i class="pip on-warn"></i><i class="pip on-warn"></i><i class="pip on-warn"></i><i class="pip"></i><i class="pip"></i></div><span class="effort">weeks</span></div>
+      </div>
+      <div class="row">
+        <div><div class="name">Codebase RAG (LanceDB)</div><div class="why">DB is easy; chunking + retrieval quality isn't.</div></div>
+        <div class="meter"><div class="pips"><i class="pip on-warn"></i><i class="pip on-warn"></i><i class="pip on-warn"></i><i class="pip"></i><i class="pip"></i></div><span class="effort">weeks+</span></div>
+      </div>
+      <div class="row">
+        <div><div class="name">Cohort clustering + layering</div><div class="why">Community detection + topo-sort; tuning is the tail.</div></div>
+        <div class="meter"><div class="pips"><i class="pip on-warn"></i><i class="pip on-warn"></i><i class="pip on-warn"></i><i class="pip"></i><i class="pip"></i></div><span class="effort">weeks</span></div>
+      </div>
+      <div class="row">
+        <div><div class="name">Cross-repo context at scale</div><div class="why">Millions of reviews, sub-second, multi-tenant. The moat.</div></div>
+        <div class="meter"><div class="pips"><i class="pip on-hard"></i><i class="pip on-hard"></i><i class="pip on-hard"></i><i class="pip on-hard"></i><i class="pip on-hard"></i></div><span class="effort">team-yrs</span></div>
+      </div>
+      <div class="row">
+        <div><div class="name">Review quality at the margin</div><div class="why">Low false positives; earned via private eval corpus.</div></div>
+        <div class="meter"><div class="pips"><i class="pip on-hard"></i><i class="pip on-hard"></i><i class="pip on-hard"></i><i class="pip on-hard"></i><i class="pip"></i></div><span class="effort">ongoing</span></div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span><i class="swatch" style="background:var(--good)"></i> Easy — solo, quickly</span>
+      <span><i class="swatch" style="background:var(--warn)"></i> Medium — solo, weeks</span>
+      <span><i class="swatch" style="background:var(--hard)"></i> Hard — the company's moat</span>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">04</span><h2>The cut line</h2></div>
+    <div class="cut">
+      <p class="pull">"Build the per-PR pipeline. Skip the persistent cross-PR infra until you have users."</p>
+      <ol class="steps">
+        <li><div><b>Skeleton.</b> <span class="k">Webhook → clone → tree-sitter parse → hunk-to-symbol mapping.</span></div></li>
+        <li><div><b>The semantic layer people feel.</b> <span class="k">Per-cohort LLM summaries + a dependency-ordered walkthrough. This alone lands the effect.</span></div></li>
+        <li><div><b>Perceived polish.</b> <span class="k">Move-aware diff rendering — contained scope, high payoff.</span></div></li>
+        <li><div><b>Diagrams, gated.</b> <span class="k">LLM → Mermaid for call flows &amp; data models, behind an "is this worth it" check.</span></div></li>
+        <li class="later"><div><b>Later — once repos are worth remembering.</b> <span class="k">LanceDB cross-PR memory + the cost-saving cheap-model dedup on incremental reviews.</span></div></li>
+      </ol>
+      <p style="margin:22px 0 0;color:var(--ink-soft);font-size:15px;">Steps 1–4 are a
+        <b style="color:var(--ink)">1–3 month solo build</b> for a competent engineer and already deliver the
+        "this understands my PR" moment. Everything expensive is exactly what you can defer.</p>
+    </div>
+  </section>
+
+  <section style="border-bottom:none;">
+    <div class="sec-head"><span class="sec-num">05</span><h2>Where it slots into Olympus</h2></div>
+    <p class="lede">Olympus already runs an orchestrator / worker / reviewer loop over an issue frontier —
+      a strong substrate. The semantic layer is a <b>Reviewer capability</b>, not new standing infrastructure.</p>
+    <div class="oly">
+      <div class="cell"><div class="role">Reviewer</div><p>Natural home for the pipeline — it already sits at the review stage and can emit a structured walkthrough artifact.</p></div>
+      <div class="cell"><div class="role">Orchestrator</div><p>Surfaces the per-PR graph + cohort walkthrough to the frontier without any persistent index behind it.</p></div>
+      <div class="cell"><div class="role">Repair loop</div><p>The cheap-model semantic dedup maps cleanly onto re-review cycles, where the same PR is reviewed repeatedly.</p></div>
+      <div class="cell"><div class="role">Bounded steps</div><p>Olympus favors recoverable steps — so start with ephemeral per-PR graphs, add durable memory only when it's earned.</p></div>
+    </div>
+  </section>
+
+  <footer>
+    <p class="caveat"><b>On sourcing:</b> nearly all evidence is CodeRabbit's own engineering/marketing blogs
+      plus a LanceDB vendor case study — appropriate for "how we built it" claims, but not independent, and the
+      scale/latency/cost figures are self-reported. No patents or peer-reviewed disclosures were found. Their term is
+      "semantic diff / semantic graph / semantic view," not literally "semantic layer."</p>
+    <p>Full write-up with per-claim confidence flags &amp; sources: <code>docs/coderabbit-semantic-layer-research.md</code>.
+      Method: 6-angle fan-out search → 17 sources → 23 claims → 3-vote adversarial verification (23/23 confirmed) → synthesis.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) return;
+  var canvas = document.getElementById('graph');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  var hero = canvas.parentElement, DPR = Math.min(window.devicePixelRatio || 1, 2);
+  var W = 0, H = 0, nodes = [], edges = [], t = 0;
+
+  function themeColors() {
+    var cs = getComputedStyle(document.documentElement);
+    return {
+      line: cs.getPropertyValue('--rule').trim() || '#ccc',
+      dot:  cs.getPropertyValue('--ink-faint').trim() || '#888',
+      hot:  cs.getPropertyValue('--amber').trim() || '#b9762a'
+    };
+  }
+  var COL = themeColors();
+
+  function build() {
+    var r = hero.getBoundingClientRect();
+    W = r.width; H = r.height;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    nodes = []; edges = [];
+    var n = Math.max(16, Math.min(34, Math.round(W / 46)));
+    for (var i = 0; i < n; i++) {
+      nodes.push({
+        x: Math.random() * W, y: Math.random() * H * 0.92,
+        vx: (Math.random() - 0.5) * 0.22, vy: (Math.random() - 0.5) * 0.22,
+        r: 1.6 + Math.random() * 2.2, hot: Math.random() < 0.16, ph: Math.random() * 6.28
+      });
+    }
+  }
+
+  function step() {
+    t += 0.006;
+    ctx.clearRect(0, 0, W, H);
+    // edges by proximity
+    for (var i = 0; i < nodes.length; i++) {
+      var a = nodes[i];
+      a.x += a.vx; a.y += a.vy;
+      if (a.x < 0 || a.x > W) a.vx *= -1;
+      if (a.y < 0 || a.y > H * 0.92) a.vy *= -1;
+      for (var j = i + 1; j < nodes.length; j++) {
+        var b = nodes[j], dx = a.x - b.x, dy = a.y - b.y, d = Math.sqrt(dx*dx + dy*dy);
+        if (d < 132) {
+          var al = (1 - d / 132) * 0.5;
+          ctx.strokeStyle = COL.line;
+          ctx.globalAlpha = al;
+          ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
+    for (var k = 0; k < nodes.length; k++) {
+      var p = nodes[k];
+      var pulse = p.hot ? (0.6 + 0.4 * Math.sin(t * 3 + p.ph)) : 1;
+      ctx.fillStyle = p.hot ? COL.hot : COL.dot;
+      ctx.globalAlpha = p.hot ? (0.55 + 0.45 * pulse) : 0.5;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * (p.hot ? pulse * 1.3 : 1), 0, 6.2832);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    raf = requestAnimationFrame(step);
+  }
+
+  var raf;
+  function boot() { COL = themeColors(); build(); }
+  boot();
+  raf = requestAnimationFrame(step);
+  var to;
+  window.addEventListener('resize', function () { clearTimeout(to); to = setTimeout(boot, 180); });
+  var mq = window.matchMedia('(prefers-color-scheme: dark)');
+  if (mq.addEventListener) mq.addEventListener('change', function(){ COL = themeColors(); });
+})();
+</script>
