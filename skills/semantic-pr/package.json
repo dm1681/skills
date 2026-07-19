@@ -6,7 +6,8 @@
   "description": "Layered semantic PR walkthrough — turn one repo's diff into a dependency-ordered, LLM-summarized walkthrough. v1 spec: docs/layered-semantic-pr-spec.md",
   "bin": { "semantic-pr": "src/cli.ts" },
   "scripts": {
-    "start": "tsx src/cli.ts"
+    "start": "tsx src/cli.ts",
+    "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "graphology": "^0.26.0",
