@@ -14,7 +14,8 @@ npx tsx src/cli.ts --repo /path/to/repo --base <ref> --head <ref> --out walkthro
 ```
 
 Flags: `--repo` (default `.`), `--base` (default = merge-base with the default branch),
-`--head` (default `HEAD`), `--out` (Markdown file; else stdout), `--json` (dump the analysis).
+`--head` (default `HEAD`), `--out` (Markdown file; else stdout), `--json` (dump the analysis),
+`--prev <artifact.json>` (reuse unchanged groups' summaries — incremental re-review).
 
 Set `ANTHROPIC_API_KEY` for LLM summaries; without it the tool still emits the full
 layered structure with placeholder titles. `SEMANTIC_PR_MODEL` overrides the model

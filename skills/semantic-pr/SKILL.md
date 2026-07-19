@@ -34,6 +34,8 @@ Flags:
 - `--base <ref>` — default = merge-base with the default branch.
 - `--head <ref>` — default `HEAD`.
 - `--out <file>` — Markdown walkthrough (else stdout). `--json <file>` — structured analysis.
+- `--prev <artifact.json>` — a prior `--json` artifact; groups whose stable id is unchanged reuse
+  their summary (no LLM call), so re-reviewing a PR after new commits only summarizes what changed.
 
 **LLM summaries are optional.** With `ANTHROPIC_API_KEY` set, each sub-group gets a plain-language
 title + summary (`claude-opus-4-8` by default; `SEMANTIC_PR_MODEL=claude-sonnet-5` for lower cost).
