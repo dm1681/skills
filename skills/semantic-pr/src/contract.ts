@@ -10,11 +10,13 @@ export interface Artifact {
   /** every changed symbol, keyed by its cross-commit-stable id */
   symbols: Array<{
     id: string; name: string; kind: string; file: string; pkg: string;
-    line: number; layer: number; degree: number;
+    line: number; layer: number; degree: number; inCycle: boolean;
     snippet: string; // truncated declaration text — enough for a caller to summarize the group
   }>;
-  /** dependency edges (source depends on target), stable-id endpoints */
-  edges: Array<{ source: string; target: string; crossPkg: boolean; crossFile: boolean }>;
+  /** dependency edges (source depends on target); `evidence` cites a `file:line` reference site */
+  edges: Array<{ source: string; target: string; crossPkg: boolean; crossFile: boolean; evidence: string | null }>;
+  /** dependency cycles among changed symbols (non-trivial SCCs), as stable-id lists */
+  cycles: string[][];
   /** the walkthrough: dependency cohorts → feature groups → ordered symbols */
   groups: Array<{
     id: string; cohort: number; pkgs: string[]; crossPkg: boolean; isTest: boolean;
@@ -31,12 +33,13 @@ export function toArtifact(a: Analysis): Artifact {
     meta: a.meta,
     symbols: a.symbols.map((s) => ({
       id: s.stableId, name: s.name, kind: s.kind, file: s.file, pkg: s.pkg,
-      line: s.line, layer: s.layer, degree: s.degree, snippet: s.snippet ?? "",
+      line: s.line, layer: s.layer, degree: s.degree, inCycle: !!s.inCycle, snippet: s.snippet ?? "",
     })),
     edges: a.edges.map((e) => ({
       source: stable.get(e.source)!, target: stable.get(e.target)!,
-      crossPkg: e.crossPkg, crossFile: e.crossFile,
+      crossPkg: e.crossPkg, crossFile: e.crossFile, evidence: e.evidence ?? null,
     })),
+    cycles: a.cycles,
     groups: a.subGroups.map((g) => ({
       id: g.id, cohort: g.cohortId, pkgs: g.pkgs, crossPkg: g.crossPkg, isTest: g.isTest,
       title: g.title ?? null, summary: g.summary ?? null,

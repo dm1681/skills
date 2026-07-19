@@ -135,7 +135,7 @@ export function analyze(repo: string, changed: ChangedRange[]) {
     return undefined;
   };
 
-  const edgeSet = new Set<string>();
+  const edgeEv = new Map<string, string>(); // key `owner==>dep` → evidence `file:line` (first ref site)
   for (const s of symbols.values()) {
     const nameNode = (s._decl as any).getNameNode?.();
     if (!nameNode) continue;
@@ -143,14 +143,20 @@ export function analyze(repo: string, changed: ChangedRange[]) {
     try { refs = nameNode.findReferencesAsNodes(); } catch { continue; }
     for (const r of refs) {
       const owner = enclosingChanged(r);
-      if (owner && owner.id !== s.id) edgeSet.add(`${owner.id}==>${s.id}`);
+      if (owner && owner.id !== s.id) {
+        const key = `${owner.id}==>${s.id}`;
+        if (!edgeEv.has(key)) {
+          const f = relative(repo, r.getSourceFile().getFilePath());
+          edgeEv.set(key, `${f}:${r.getStartLineNumber()}`);
+        }
+      }
     }
   }
 
-  const edges: Edge[] = [...edgeSet].map((e) => {
+  const edges: Edge[] = [...edgeEv].map(([e, evidence]) => {
     const [source, target] = e.split("==>");
     const sa = symbols.get(source)!, sb = symbols.get(target)!;
-    return { source, target, crossPkg: sa.pkg !== sb.pkg, crossFile: sa.file !== sb.file };
+    return { source, target, crossPkg: sa.pkg !== sb.pkg, crossFile: sa.file !== sb.file, evidence };
   });
 
   // degree

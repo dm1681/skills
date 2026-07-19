@@ -43,8 +43,8 @@ async function main() {
   const { symbols, edges, loadMs, analyzeMs, filesLoaded } = analyze(repo, changed);
   console.error(`[analyze] ${symbols.length} symbols, ${edges.length} edges (load ${loadMs}ms, total ${analyzeMs}ms)`);
 
-  const subGroups = group(symbols, edges);
-  console.error(`[group] ${subGroups.length} sub-groups`);
+  const { subGroups, cycles } = group(symbols, edges);
+  console.error(`[group] ${subGroups.length} sub-groups${cycles.length ? `, ${cycles.length} cycle(s)` : ""}`);
 
   // #19: incremental re-review — reuse summaries from a prior artifact by stable group id.
   let reuse: Reuse | undefined;
@@ -69,6 +69,7 @@ async function main() {
       loadMs, analyzeMs,
     },
     symbols, edges, subGroups: labeled,
+    cycles: cycles.map((c) => c.map((s) => s.stableId)),
   };
 
   const md = render(analysis);
