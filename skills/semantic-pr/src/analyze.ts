@@ -11,6 +11,12 @@ const DECL_KINDS = new Set([
   "InterfaceDeclaration", "TypeAliasDeclaration", "EnumDeclaration",
 ]);
 
+const SHORT_KIND: Record<string, string> = {
+  FunctionDeclaration: "fn", MethodDeclaration: "method", ClassDeclaration: "class",
+  InterfaceDeclaration: "interface", TypeAliasDeclaration: "type",
+  EnumDeclaration: "enum", VariableDeclaration: "const",
+};
+
 function walk(dir: string, out: string[] = []): string[] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     if (e.name === "node_modules" || e.name === "dist" || e.name === ".git") continue;
@@ -152,8 +158,18 @@ export function analyze(repo: string, changed: ChangedRange[]) {
   for (const e of edges) { deg.set(e.source, deg.get(e.source)! + 1); deg.set(e.target, deg.get(e.target)! + 1); }
 
   const plain: Symbol[] = [...symbols.values()].map(({ _decl, ...s }) => ({
-    ...s, degree: deg.get(s.id)!, snippet: _decl.getText().slice(0, 500),
+    ...s, degree: deg.get(s.id)!, snippet: _decl.getText().slice(0, 500), stableId: "",
   }));
+
+  // Assign cross-commit-stable public ids: file::kind::name, disambiguated on collision.
+  // Deterministic given the same diff (insertion order of the changed-symbol scan).
+  const seen = new Map<string, number>();
+  for (const s of plain) {
+    const base = `${s.file}::${SHORT_KIND[s.kind] ?? s.kind}::${s.name}`;
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    s.stableId = n === 0 ? base : `${base}#${n + 1}`;
+  }
   return {
     symbols: plain, edges, loadMs, analyzeMs: Date.now() - t0,
     filesLoaded: project.getSourceFiles().length,
