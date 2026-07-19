@@ -8,6 +8,7 @@ import { group } from "./group.ts";
 import { label, type Reuse } from "./label.ts";
 import { render } from "./render.ts";
 import { toArtifact } from "./contract.ts";
+import { matchAny } from "./glob.ts";
 import type { Analysis } from "./types.ts";
 
 function parseArgs(argv: string[]) {
@@ -25,8 +26,18 @@ async function main() {
   const { baseRef, headRef } = resolveRefs(repo, args.base, args.head);
 
   console.error(`[ingest] ${repo}  ${baseRef.slice(0, 12)}..${headRef.slice(0, 12)}`);
-  const changed = changedRanges(repo, baseRef, headRef);
+  let changed = changedRanges(repo, baseRef, headRef);
   console.error(`[ingest] ${changed.length} changed .ts/.tsx files`);
+
+  // #1 fog: optional path filtering (comma-separated globs). Tests are still shown by default —
+  // exclude them explicitly (e.g. --exclude 'tests/**') for a product-only view.
+  const inc = (args.include || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const exc = (args.exclude || "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (inc.length || exc.length) {
+    const before = changed.length;
+    changed = changed.filter((c) => (inc.length ? matchAny(c.file, inc) : true) && !matchAny(c.file, exc));
+    console.error(`[filter] ${before}→${changed.length} files (include:${inc.join("|") || "*"} exclude:${exc.join("|") || "none"})`);
+  }
   if (!changed.length) { console.error("No TypeScript changes in range."); process.exit(0); }
 
   const { symbols, edges, loadMs, analyzeMs, filesLoaded } = analyze(repo, changed);

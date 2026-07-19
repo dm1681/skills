@@ -36,6 +36,9 @@ Flags:
 - `--out <file>` — Markdown walkthrough (else stdout). `--json <file>` — structured analysis.
 - `--prev <artifact.json>` — a prior `--json` artifact; groups whose stable id is unchanged reuse
   their summary (no LLM call), so re-reviewing a PR after new commits only summarizes what changed.
+- `--include <globs>` / `--exclude <globs>` — comma-separated path globs (e.g. `apps/web/**`,
+  `tests/**`, `**/*.test.ts`). Tests are **included by default and rendered last** as a
+  "Verification / tests" section; pass `--exclude 'tests/**'` for a product-only view.
 
 **The skill calls no model and needs no API key.** It produces the deterministic layered structure;
 each group gets a deterministic fallback title and an **empty summary**. **You (the invoking agent)

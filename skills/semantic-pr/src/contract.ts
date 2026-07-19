@@ -17,7 +17,7 @@ export interface Artifact {
   edges: Array<{ source: string; target: string; crossPkg: boolean; crossFile: boolean }>;
   /** the walkthrough: dependency cohorts → feature groups → ordered symbols */
   groups: Array<{
-    id: string; cohort: number; pkgs: string[]; crossPkg: boolean;
+    id: string; cohort: number; pkgs: string[]; crossPkg: boolean; isTest: boolean;
     title: string | null; summary: string | null;
     layerNotes: Array<{ layer: number; note: string }>;
     symbols: string[]; // member stableIds, in layer order
@@ -38,7 +38,7 @@ export function toArtifact(a: Analysis): Artifact {
       crossPkg: e.crossPkg, crossFile: e.crossFile,
     })),
     groups: a.subGroups.map((g) => ({
-      id: g.id, cohort: g.cohortId, pkgs: g.pkgs, crossPkg: g.crossPkg,
+      id: g.id, cohort: g.cohortId, pkgs: g.pkgs, crossPkg: g.crossPkg, isTest: g.isTest,
       title: g.title ?? null, summary: g.summary ?? null,
       layerNotes: g.layerNotes ?? [],
       symbols: g.symbols.map((s) => s.stableId),
