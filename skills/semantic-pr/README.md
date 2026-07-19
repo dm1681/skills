@@ -39,6 +39,12 @@ Run against real Olympus PR #50 (`apps/server` + `apps/web` + `packages/contract
 **71 symbols, 95 edges (2 cross-package), 19 sub-groups, ~2.3 s.** Cross-package edges
 (`apps/server` → `packages/contracts`) resolve; contracts types land at layer 0.
 
+## Tests
+
+`npm test` — Node-native tests (`tests/pipeline.test.ts`) build tiny synthetic git repos and run the
+real pipeline: multi-layer layering + cross-file edge with evidence, cycle detection, small-PR
+degradation, cross-run stable ids, path globs / test detection, and `--prev` reuse.
+
 ## Known v1 limitations (from the spec's fog list)
 
 - **(A) uses ts-morph, not tree-sitter.** `enclosingNamed` in `analyze.ts` is the seam to swap in
