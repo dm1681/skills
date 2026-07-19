@@ -35,15 +35,19 @@ The stable, versioned artifact a consumer can depend on. Emitted with `--json`. 
   "symbols": [
     { "id": "apps/web/src/App.tsx::fn::promoteIdea", "name": "promoteIdea",
       "kind": "FunctionDeclaration", "file": "apps/web/src/App.tsx", "pkg": "apps/web",
-      "line": 1093, "layer": 2, "degree": 3 }
+      "line": 1093, "layer": 2, "degree": 3, "inCycle": false,
+      "snippet": "function promoteIdea(...) { … }" }              // truncated; for summarizing
   ],
   "edges": [
     { "source": "<stableId that depends on>", "target": "<stableId it depends on>",
-      "crossPkg": false, "crossFile": true }
+      "crossPkg": false, "crossFile": true,
+      "evidence": "apps/web/src/App.tsx:1101" }                   // a reference site (file:line)
   ],
+  "cycles": [ ["<stableId>", "<stableId>"] ],                     // non-trivial SCCs; [] when acyclic
   "groups": [
     { "id": "a1b2c3d4e5f6", "cohort": 0, "pkgs": ["apps/web"], "crossPkg": false,
-      "title": "Idea undo subsystem", "summary": "…",              // null when no LLM key
+      "isTest": false,                                            // all-test groups render last
+      "title": "Idea undo subsystem", "summary": null,            // summary null until the caller fills it
       "layerNotes": [ { "layer": 0, "note": "…" } ],
       "symbols": ["…stableId…"]                                    // member ids, layer order
     }
@@ -57,8 +61,10 @@ The stable, versioned artifact a consumer can depend on. Emitted with `--json`. 
 |---|---|
 | `symbols[].layer` | 0 = foundational (nothing else in the changed set depends on it downward); higher = builds on lower. Longest-path over the depends-on DAG, cycle-guarded. |
 | `symbols[].degree` | count of incident dependency edges within the changed set (a size/centrality hint). |
-| `edges[]` | `source` **depends on** `target`. `crossPkg`/`crossFile` flag boundary-crossing edges. |
-| `groups[]` | a feature group inside a dependency cohort. `cohort` is the connected-component index; groups within a large cohort are split by community detection. `symbols` are member ids in layer order. |
+| `symbols[].inCycle` | true when the symbol is in a dependency cycle (non-trivial SCC) — its layer is not a strict order. |
+| `edges[]` | `source` **depends on** `target`. `crossPkg`/`crossFile` flag boundary-crossing edges. `evidence` is a `file:line` reference site (the inspectable citation for the edge; `null` only if unavailable). |
+| `cycles[]` | dependency cycles among changed symbols, each a list of member stableIds. Empty when the changed-set is acyclic. |
+| `groups[]` | a feature group inside a dependency cohort. `cohort` is the connected-component index; groups within a large cohort are split by community detection. `isTest` groups render last (verification). `symbols` are member ids in layer order. `summary` is `null` until the invoking agent fills it. |
 
 ## Versioning policy
 

@@ -18,6 +18,8 @@ export interface Symbol {
   snippet?: string; // truncated declaration text, for the summarizer
   /** cross-commit-stable public identity: `file::kind::name` (+ `#n` on collision). Line-independent. */
   stableId: string;
+  /** true when this symbol is in a dependency cycle (non-trivial SCC) — order isn't strict */
+  inCycle?: boolean;
 }
 
 export interface Edge {
@@ -25,6 +27,8 @@ export interface Edge {
   target: string;
   crossPkg: boolean;
   crossFile: boolean;
+  /** an inspectable citation: `file:line` of a reference site where source uses target */
+  evidence?: string;
 }
 
 export interface SubGroup {
@@ -60,4 +64,6 @@ export interface Analysis {
   symbols: Symbol[];
   edges: Edge[];
   subGroups: SubGroup[];
+  /** dependency cycles among changed symbols (non-trivial SCCs), as stableId lists */
+  cycles: string[][];
 }

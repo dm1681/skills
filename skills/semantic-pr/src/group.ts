@@ -21,12 +21,39 @@ function seededRng(seed: number) {
 
 const SUBGROUP_THRESHOLD = 12; // cohorts larger than this get community-split
 
-export function group(symbols: Symbol[], edges: Edge[]): SubGroup[] {
+/** Tarjan SCC over a directed adjacency map; returns strongly-connected components. */
+function sccs(nodes: string[], adj: Map<string, string[]>): string[][] {
+  let idx = 0;
+  const index = new Map<string, number>(), low = new Map<string, number>();
+  const stack: string[] = [], onStack = new Set<string>(), comps: string[][] = [];
+  const connect = (v: string) => {
+    index.set(v, idx); low.set(v, idx); idx++; stack.push(v); onStack.add(v);
+    for (const w of adj.get(v) ?? []) {
+      if (!index.has(w)) { connect(w); low.set(v, Math.min(low.get(v)!, low.get(w)!)); }
+      else if (onStack.has(w)) low.set(v, Math.min(low.get(v)!, index.get(w)!));
+    }
+    if (low.get(v) === index.get(v)) {
+      const comp: string[] = []; let w: string;
+      do { w = stack.pop()!; onStack.delete(w); comp.push(w); } while (w !== v);
+      comps.push(comp);
+    }
+  };
+  for (const v of nodes) if (!index.has(v)) connect(v);
+  return comps;
+}
+
+export function group(symbols: Symbol[], edges: Edge[]): { subGroups: SubGroup[]; cycles: Symbol[][] } {
   const byId = new Map(symbols.map((s) => [s.id, s]));
 
   // ---- layering: longest-path over the depends-on DAG (edge source depends on target) ----
   const deps = new Map<string, string[]>(symbols.map((s) => [s.id, []]));
   for (const e of edges) if (e.source !== e.target) deps.get(e.source)!.push(e.target);
+
+  // Cycles: non-trivial SCCs. Mark members so the ordering can be flagged as non-strict.
+  const byIdScc = new Map(symbols.map((s) => [s.id, s]));
+  const cycles: Symbol[][] = sccs(symbols.map((s) => s.id), deps)
+    .filter((c) => c.length > 1).map((c) => c.map((id) => byIdScc.get(id)!));
+  for (const c of cycles) for (const s of c) s.inCycle = true;
   const layerMemo = new Map<string, number>();
   const layerOf = (id: string, stack = new Set<string>()): number => {
     if (layerMemo.has(id)) return layerMemo.get(id)!;
@@ -77,5 +104,6 @@ export function group(symbols: Symbol[], edges: Edge[]): SubGroup[] {
     cohortId++;
   }
   // Verification last: product groups keep their order; all-test groups sink to the end.
-  return [...out.filter((g) => !g.isTest), ...out.filter((g) => g.isTest)];
+  const subGroups = [...out.filter((g) => !g.isTest), ...out.filter((g) => g.isTest)];
+  return { subGroups, cycles };
 }
