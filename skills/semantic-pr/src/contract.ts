@@ -11,6 +11,7 @@ export interface Artifact {
   symbols: Array<{
     id: string; name: string; kind: string; file: string; pkg: string;
     line: number; layer: number; degree: number;
+    snippet: string; // truncated declaration text — enough for a caller to summarize the group
   }>;
   /** dependency edges (source depends on target), stable-id endpoints */
   edges: Array<{ source: string; target: string; crossPkg: boolean; crossFile: boolean }>;
@@ -30,7 +31,7 @@ export function toArtifact(a: Analysis): Artifact {
     meta: a.meta,
     symbols: a.symbols.map((s) => ({
       id: s.stableId, name: s.name, kind: s.kind, file: s.file, pkg: s.pkg,
-      line: s.line, layer: s.layer, degree: s.degree,
+      line: s.line, layer: s.layer, degree: s.degree, snippet: s.snippet ?? "",
     })),
     edges: a.edges.map((e) => ({
       source: stable.get(e.source)!, target: stable.get(e.target)!,

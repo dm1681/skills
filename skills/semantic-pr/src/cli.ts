@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { resolveRefs, changedRanges } from "./ingest.ts";
 import { analyze } from "./analyze.ts";
 import { group } from "./group.ts";
-import { summarize, type Reuse } from "./summarize.ts";
+import { label, type Reuse } from "./label.ts";
 import { render } from "./render.ts";
 import { toArtifact } from "./contract.ts";
 import type { Analysis } from "./types.ts";
@@ -46,7 +46,7 @@ async function main() {
     } catch (e) { console.error(`[prev] could not read ${args.prev}: ${(e as Error).message}`); }
   }
 
-  const summarized = await summarize(subGroups, reuse);
+  const labeled = label(subGroups, reuse);
 
   const analysis: Analysis = {
     meta: {
@@ -57,7 +57,7 @@ async function main() {
       crossPkg: edges.filter((e) => e.crossPkg).length,
       loadMs, analyzeMs,
     },
-    symbols, edges, subGroups: summarized,
+    symbols, edges, subGroups: labeled,
   };
 
   const md = render(analysis);

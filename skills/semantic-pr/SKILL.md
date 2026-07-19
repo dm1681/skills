@@ -1,6 +1,6 @@
 ---
 name: semantic-pr
-description: Generate a layered, dependency-ordered walkthrough of a pull request or branch diff for any TypeScript repository — changed symbols extracted via AST, grouped into dependency cohorts, split into feature sub-groups, ordered foundational-first, and summarized in plain language. Use when reviewing or trying to understand a PR whose flat file-by-file diff is hard to follow, when you want a reviewer-friendly walkthrough of what changed and in what order, or when you need a structured (JSON) representation of a diff's change graph. Repository-agnostic and agent-agnostic; not tied to any particular orchestrator or CI system.
+description: Generate a layered, dependency-ordered walkthrough of a pull request or branch diff for any TypeScript repository — changed symbols extracted via AST, grouped into dependency cohorts, split into feature sub-groups, ordered foundational-first, ready for you to summarize. Use when reviewing or trying to understand a PR whose flat file-by-file diff is hard to follow, when you want a reviewer-friendly walkthrough of what changed and in what order, or when you need a structured (JSON) representation of a diff's change graph. Fully deterministic: it calls no model and needs no API key — the invoking agent writes the summaries. Repository-agnostic and agent-agnostic; not tied to any particular orchestrator or CI system.
 ---
 
 # semantic-pr
@@ -37,17 +37,21 @@ Flags:
 - `--prev <artifact.json>` — a prior `--json` artifact; groups whose stable id is unchanged reuse
   their summary (no LLM call), so re-reviewing a PR after new commits only summarizes what changed.
 
-**LLM summaries are optional.** With `ANTHROPIC_API_KEY` set, each sub-group gets a plain-language
-title + summary (`claude-opus-4-8` by default; `SEMANTIC_PR_MODEL=claude-sonnet-5` for lower cost).
-Without a key, the full layered structure still renders with placeholder titles — the tool never
-hard-requires the network.
+**The skill calls no model and needs no API key.** It produces the deterministic layered structure;
+each group gets a deterministic fallback title and an **empty summary**. **You (the invoking agent)
+write the summaries** — run with `--json`, then for each group read its members' `snippet` fields
+(and `file:line` if you want more) and write a 1–2 sentence summary. Everything you need is in the
+JSON; there is no second API call and nothing to configure.
+
+**Incremental re-review:** pass a prior `--json` artifact as `--prev`. Groups whose stable id is
+unchanged carry their previous summary forward, so on a re-run you only summarize what changed.
 
 ## What it produces
 
 A Markdown walkthrough shaped `cohort → sub-group → layer → symbol (name (kind) — file:line)`,
-plus an optional JSON emit (`{ meta, symbols, edges, subGroups }`) for programmatic consumers —
-e.g. posting as a PR comment, rendering in a UI, or feeding another review step. Consumers decide
-where the output goes; the skill only produces it.
+plus a stable, versioned JSON artifact (`--json`) — see `references/cohort-contract.md`. Group
+`summary` fields are empty until you fill them; group `title` fields carry a deterministic fallback
+you may replace. Consumers decide where the output goes; the skill only produces it.
 
 ## How it works (pipeline)
 
@@ -56,8 +60,8 @@ where the output goes; the skill only produces it.
    among the changed set. Auto-detects workspace packages so **cross-package** edges resolve in a monorepo.
 3. **group** — connected-component cohorts → Louvain community sub-groups (for large cohorts) →
    longest-path layering (foundational first).
-4. **summarize** — one structured LLM call per sub-group (optional; degrades gracefully).
-5. **render** — Markdown walkthrough (+ optional JSON).
+4. **label** — deterministic fallback title per group; summaries left empty for the caller (no model).
+5. **render** — Markdown walkthrough (+ stable JSON via `--json`).
 
 ## Design notes / limitations
 
