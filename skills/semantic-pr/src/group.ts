@@ -2,6 +2,7 @@
 import { createHash } from "node:crypto";
 import Graph from "graphology";
 import louvain from "graphology-communities-louvain";
+import { isTestFile } from "./glob.ts";
 import type { Symbol, Edge, SubGroup } from "./types.ts";
 
 /** Stable id for a group = short hash of its sorted member stableIds (order-independent). */
@@ -68,9 +69,13 @@ export function group(symbols: Symbol[], edges: Edge[]): SubGroup[] {
     partitions.forEach((syms, subId) => {
       syms.sort((a, b) => a.layer - b.layer || b.degree - a.degree);
       const pkgs = [...new Set(syms.map((s) => s.pkg))];
-      out.push({ id: groupId(syms), cohortId, subId, symbols: syms, pkgs, crossPkg: pkgs.length > 1 });
+      out.push({
+        id: groupId(syms), cohortId, subId, symbols: syms, pkgs,
+        crossPkg: pkgs.length > 1, isTest: syms.every((s) => isTestFile(s.file)),
+      });
     });
     cohortId++;
   }
-  return out;
+  // Verification last: product groups keep their order; all-test groups sink to the end.
+  return [...out.filter((g) => !g.isTest), ...out.filter((g) => g.isTest)];
 }

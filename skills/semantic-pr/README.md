@@ -15,7 +15,8 @@ npx tsx src/cli.ts --repo /path/to/repo --base <ref> --head <ref> --out walkthro
 
 Flags: `--repo` (default `.`), `--base` (default = merge-base with the default branch),
 `--head` (default `HEAD`), `--out` (Markdown file; else stdout), `--json` (stable artifact),
-`--prev <artifact.json>` (reuse unchanged groups' summaries — incremental re-review).
+`--prev <artifact.json>` (reuse unchanged groups' summaries), `--include`/`--exclude` (comma-separated
+path globs; tests are included by default and rendered last as a "Verification / tests" section).
 
 **No API key, no model.** Fully deterministic — it emits the layered structure and a stable JSON
 artifact (`references/cohort-contract.md`); group summaries are left empty for the **invoking agent**

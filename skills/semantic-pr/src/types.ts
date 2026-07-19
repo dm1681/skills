@@ -35,6 +35,8 @@ export interface SubGroup {
   symbols: Symbol[]; // ordered by layer, then degree desc
   pkgs: string[];
   crossPkg: boolean;
+  /** true when every member is a test file — rendered last, as the verification layer */
+  isTest: boolean;
   /** filled by the summarizer */
   title?: string;
   summary?: string;
