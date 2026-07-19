@@ -69,6 +69,10 @@ def validate() -> list[str]:
         if not metadata.get("description"):
             errors.append(f"{entrypoint.relative_to(ROOT)} requires a description")
         for path in skill.rglob("*"):
+            # Skip dependency/build dirs — they are gitignored install artifacts, not skill
+            # content, and legitimately contain symlinks (e.g. node_modules/.bin).
+            if {"node_modules", "dist", "__pycache__", ".venv"} & set(path.parts):
+                continue
             if path.is_symlink():
                 errors.append(f"skill must be self-contained; symlink found: {path.relative_to(ROOT)}")
             if path.is_file() and path.suffix == ".py":
