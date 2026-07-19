@@ -1,11 +1,11 @@
 #!/usr/bin/env -S npx tsx
 // Layered semantic PR walkthrough — CLI. See docs/layered-semantic-pr-spec.md
-import { writeFileSync } from "node:fs";
+import { writeFileSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { resolveRefs, changedRanges } from "./ingest.ts";
 import { analyze } from "./analyze.ts";
 import { group } from "./group.ts";
-import { summarize } from "./summarize.ts";
+import { summarize, type Reuse } from "./summarize.ts";
 import { render } from "./render.ts";
 import { toArtifact } from "./contract.ts";
 import type { Analysis } from "./types.ts";
@@ -35,7 +35,18 @@ async function main() {
   const subGroups = group(symbols, edges);
   console.error(`[group] ${subGroups.length} sub-groups`);
 
-  const summarized = await summarize(subGroups);
+  // #19: incremental re-review — reuse summaries from a prior artifact by stable group id.
+  let reuse: Reuse | undefined;
+  if (args.prev) {
+    try {
+      const prev = JSON.parse(readFileSync(args.prev, "utf8"));
+      reuse = new Map();
+      for (const g of prev.groups ?? []) if (g.summary != null) reuse.set(g.id, { title: g.title, summary: g.summary, layerNotes: g.layerNotes ?? [] });
+      console.error(`[prev] ${reuse.size} reusable group summaries from ${args.prev}`);
+    } catch (e) { console.error(`[prev] could not read ${args.prev}: ${(e as Error).message}`); }
+  }
+
+  const summarized = await summarize(subGroups, reuse);
 
   const analysis: Analysis = {
     meta: {

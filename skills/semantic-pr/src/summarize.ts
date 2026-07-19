@@ -58,13 +58,32 @@ const short = (k: string) =>
      InterfaceDeclaration: "interface", TypeAliasDeclaration: "type", EnumDeclaration: "enum",
      VariableDeclaration: "const" } as Record<string, string>)[k] ?? k;
 
-export async function summarize(subGroups: SubGroup[]): Promise<SubGroup[]> {
+/** Prior summaries keyed by stable group id, for incremental re-review (ticket #19). */
+export type Reuse = Map<string, { title?: string; summary?: string; layerNotes?: SubGroup["layerNotes"] }>;
+
+export async function summarize(subGroups: SubGroup[], reuse?: Reuse): Promise<SubGroup[]> {
+  const out: SubGroup[] = new Array(subGroups.length);
+
+  // #19: reuse unchanged groups by exact stable-id match; only new/changed groups get summarized.
+  const todo: Array<[SubGroup, number]> = [];
+  let reused = 0;
+  subGroups.forEach((sg, i) => {
+    const cached = reuse?.get(sg.id);
+    if (cached && cached.summary != null) {
+      out[i] = { ...sg, title: cached.title, summary: cached.summary, layerNotes: cached.layerNotes ?? [] };
+      reused++;
+    } else {
+      todo.push([sg, i]);
+    }
+  });
+  if (reused) console.error(`[summarize] reused ${reused} unchanged group(s) from --prev; ${todo.length} to summarize`);
+
   if (!process.env.ANTHROPIC_API_KEY) {
-    console.error("[summarize] ANTHROPIC_API_KEY unset → placeholder titles (structure is still real).");
-    return subGroups.map(placeholder);
+    if (todo.length) console.error(`[summarize] ANTHROPIC_API_KEY unset → placeholder titles for ${todo.length} group(s).`);
+    for (const [sg, i] of todo) out[i] = placeholder(sg);
+    return out;
   }
   const client = new Anthropic();
-  const out: SubGroup[] = new Array(subGroups.length);
 
   const one = async (sg: SubGroup, i: number) => {
     try {
@@ -86,10 +105,11 @@ export async function summarize(subGroups: SubGroup[]): Promise<SubGroup[]> {
     }
   };
 
-  // simple concurrency pool
+  // simple concurrency pool over the groups that need summarizing
   let next = 0;
-  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, subGroups.length) }, async () => {
-    while (next < subGroups.length) { const i = next++; await one(subGroups[i], i); }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, todo.length) }, async () => {
+    while (next < todo.length) { const k = next++; await one(todo[k][0], todo[k][1]); }
   }));
+  console.error(`[summarize] summarized ${todo.length} group(s) via ${MODEL}`);
   return out;
 }
