@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Layered semantic PR walkthrough — turn one repo's diff into a dependency-ordered, LLM-summarized walkthrough. v1 spec: docs/layered-semantic-pr-spec.md",
-  "bin": { "semantic-pr": "src/cli.ts" },
+  "bin": {
+    "semantic-pr": "src/cli.ts"
+  },
   "scripts": {
     "start": "tsx src/cli.ts",
     "test": "tsx --test tests/*.test.ts"
@@ -12,6 +14,7 @@
   "dependencies": {
     "graphology": "^0.26.0",
     "graphology-communities-louvain": "^2.0.2",
+    "pyright": "^1.1.411",
     "ts-morph": "^28.0.0",
     "tsx": "^4.19.0",
     "typescript": "^6.0.0"

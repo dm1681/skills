@@ -27,7 +27,7 @@ async function main() {
 
   console.error(`[ingest] ${repo}  ${baseRef.slice(0, 12)}..${headRef.slice(0, 12)}`);
   let changed = changedRanges(repo, baseRef, headRef);
-  console.error(`[ingest] ${changed.length} changed .ts/.tsx files`);
+  console.error(`[ingest] ${changed.length} changed .ts/.tsx/.py files`);
 
   // #1 fog: optional path filtering (comma-separated globs). Tests are still shown by default —
   // exclude them explicitly (e.g. --exclude 'tests/**') for a product-only view.
@@ -38,9 +38,9 @@ async function main() {
     changed = changed.filter((c) => (inc.length ? matchAny(c.file, inc) : true) && !matchAny(c.file, exc));
     console.error(`[filter] ${before}→${changed.length} files (include:${inc.join("|") || "*"} exclude:${exc.join("|") || "none"})`);
   }
-  if (!changed.length) { console.error("No TypeScript changes in range."); process.exit(0); }
+  if (!changed.length) { console.error("No TypeScript/Python changes in range."); process.exit(0); }
 
-  const { symbols, edges, loadMs, analyzeMs, filesLoaded } = analyze(repo, changed);
+  const { symbols, edges, loadMs, analyzeMs, filesLoaded } = await analyze(repo, changed);
   console.error(`[analyze] ${symbols.length} symbols, ${edges.length} edges (load ${loadMs}ms, total ${analyzeMs}ms)`);
 
   const { subGroups, cycles } = group(symbols, edges);

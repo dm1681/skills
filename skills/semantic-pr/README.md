@@ -4,7 +4,8 @@ Turn one repository's PR (or branch diff) into a **layered, semantically-grouped
 the flat diff reorganized into dependency cohorts, split into feature sub-groups, ordered
 foundational-first, ready for the invoking agent to summarize. Implements
 [`docs/layered-semantic-pr-spec.md`](../../docs/layered-semantic-pr-spec.md)
-(wayfinder map [#3](https://github.com/dm1681/skills/issues/3)). TypeScript targets only.
+(wayfinder map [#3](https://github.com/dm1681/skills/issues/3)). Targets **TypeScript/TSX** and
+**Python**; mixed-language diffs work in one run.
 
 ## Install & run
 
@@ -27,28 +28,38 @@ forward for unchanged groups.
 
 | Module | Does | Ticket |
 |---|---|---|
-| `ingest.ts` | `git diff base..head` → changed TS files + HEAD line ranges | [#5](https://github.com/dm1681/skills/issues/5) |
-| `analyze.ts` | changed lines → enclosing symbols; ts-morph `findReferences` → edges; auto-detects workspace packages so cross-package edges resolve | [#6](https://github.com/dm1681/skills/issues/6) |
+| `ingest.ts` | `git diff base..head` → changed `.ts`/`.tsx`/`.py` files + HEAD line ranges | [#5](https://github.com/dm1681/skills/issues/5) |
+| `analyze.ts` | routes each file to its `LanguageProvider`, merges, then finalizes (crossPkg/crossFile, degree, stable ids) | [#6](https://github.com/dm1681/skills/issues/6) |
+| `providers/typescript.ts` | ts-morph AST → enclosing symbols; `findReferences` → edges; auto-detects workspace packages so cross-package edges resolve | [#6](https://github.com/dm1681/skills/issues/6) |
+| `providers/python.ts` + `py_extract.py` | stdlib `ast` → changed symbols; pyright LSP `textDocument/references` → precise edges | [#6](https://github.com/dm1681/skills/issues/6) |
 | `group.ts` | connected-component cohorts → Louvain sub-groups (cohorts >12) → longest-path layering | [#7](https://github.com/dm1681/skills/issues/7) |
 | `label.ts` | deterministic fallback titles; summaries left empty for the invoking agent; `--prev` reuse | [#20](https://github.com/dm1681/skills/issues/20) · [#19](https://github.com/dm1681/skills/issues/19) |
 | `render.ts` | Markdown walkthrough: cohort → sub-group → layer → symbol | [#8](https://github.com/dm1681/skills/issues/8) |
 
 ## Verified
 
-Run against real Olympus PR #50 (`apps/server` + `apps/web` + `packages/contracts`):
-**71 symbols, 95 edges (2 cross-package), 19 sub-groups, ~2.3 s.** Cross-package edges
-(`apps/server` → `packages/contracts`) resolve; contracts types land at layer 0.
+- **TypeScript** — real Olympus PR #50 (`apps/server` + `apps/web` + `packages/contracts`):
+  **71 symbols, 95 edges (2 cross-package), 19 sub-groups, ~2.3 s.** Cross-package edges
+  (`apps/server` → `packages/contracts`) resolve; contracts types land at layer 0.
+- **Python** — a 3-file layered app (`models` → `store` → `service`) end-to-end: cross-file method
+  edges (`Service.welcome` → `User.greeting`, `Store.add` → `make_user`) resolve via pyright,
+  land foundational-first, byte-stable across runs. On untyped indirection pyright reports **no**
+  edge rather than a guessed one (precise-not-heuristic).
 
 ## Tests
 
 `npm test` — Node-native tests (`tests/pipeline.test.ts`) build tiny synthetic git repos and run the
-real pipeline: multi-layer layering + cross-file edge with evidence, cycle detection, small-PR
-degradation, cross-run stable ids, path globs / test detection, and `--prev` reuse.
+real pipeline: TS multi-layer layering + cross-file edge with evidence, cycle detection, small-PR
+degradation, cross-run stable ids, path globs / test detection, `--prev` reuse, **Python cross-file
+edges via pyright, Python class-qualified method names, and a mixed TS+Python diff in one run**.
 
 ## Known v1 limitations (from the spec's fog list)
 
-- **(A) uses ts-morph, not tree-sitter.** `enclosingNamed` in `analyze.ts` is the seam to swap in
-  tree-sitter (faster, tolerant of non-compiling diffs) per the spec.
-- Includes test files (`tests/`) since the diff matches all `*.ts`; a path filter is a small add.
+- **TypeScript uses ts-morph, not tree-sitter.** `enclosingNamed` in `providers/typescript.ts` is the
+  seam to swap in tree-sitter (faster, tolerant of non-compiling diffs) per the spec.
+- **Python edges require resolvable types.** pyright links only references it can resolve; edges through
+  untyped indirection are missed, not guessed. Needs `python3` + the bundled `pyright` (else degrades to
+  symbols-without-edges).
+- Includes test files since the diff matches all source files; a path filter is a small add.
 - No move detection or diagrams yet (deferred). Summarization is intentionally the caller's job.
-- Program-build latency dominates; reuse the Program across a session for repeated runs.
+- Provider-build latency (TS Program / pyright startup) dominates; reuse across a session for repeated runs.

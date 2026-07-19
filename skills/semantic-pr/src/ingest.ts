@@ -20,7 +20,7 @@ export function resolveRefs(repo: string, base?: string, head?: string) {
 export function changedRanges(repo: string, base: string, head: string): ChangedRange[] {
   const raw = execFileSync(
     "git",
-    ["-C", repo, "diff", "-U0", `${base}..${head}`, "--", "*.ts", "*.tsx"],
+    ["-C", repo, "diff", "-U0", `${base}..${head}`, "--", "*.ts", "*.tsx", "*.py"],
     { encoding: "utf8", maxBuffer: 128 * 1024 * 1024 },
   );
   const byFile = new Map<string, Array<[number, number]>>();

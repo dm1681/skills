@@ -29,9 +29,9 @@ function makeRepo(base: Record<string, string>, head: Record<string, string>): s
 }
 
 /** Drive the deterministic pipeline against a repo's HEAD~1..HEAD. */
-function run(dir: string) {
+async function run(dir: string) {
   const changed = changedRanges(dir, "HEAD~1", "HEAD");
-  const { symbols, edges, filesLoaded } = analyze(dir, changed);
+  const { symbols, edges, filesLoaded } = await analyze(dir, changed);
   const { subGroups, cycles } = group(symbols, edges);
   const labeled = label(subGroups);
   const meta = { repo: "fixture", base: "HEAD~1", head: "HEAD", filesChanged: changed.length, filesLoaded,
@@ -40,7 +40,7 @@ function run(dir: string) {
   return toArtifact({ meta, symbols, edges, subGroups: labeled, cycles: cycles.map((c) => c.map((s) => s.stableId)) });
 }
 
-test("multi-layer PR: foundational-first layering + cross-file edge", () => {
+test("multi-layer PR: foundational-first layering + cross-file edge", async () => {
   const dir = makeRepo(
     { "a.ts": `export function base() { return 0; }\n`,
       "b.ts": `import { base } from "./a";\nexport function top() { return base(); }\n` },
@@ -48,7 +48,7 @@ test("multi-layer PR: foundational-first layering + cross-file edge", () => {
       "b.ts": `import { base } from "./a";\nexport function top() { return base() + 1; }\n` },
   );
   try {
-    const art = run(dir);
+    const art = await run(dir);
     const base = art.symbols.find((s) => s.name === "base")!;
     const top = art.symbols.find((s) => s.name === "top")!;
     assert.ok(base && top, "both symbols extracted");
@@ -61,13 +61,13 @@ test("multi-layer PR: foundational-first layering + cross-file edge", () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("cycle: mutual dependency is detected and flagged", () => {
+test("cycle: mutual dependency is detected and flagged", async () => {
   const dir = makeRepo(
     { "c.ts": `export function f() { return 0; }\nexport function g() { return 0; }\n` },
     { "c.ts": `export function f() { return g(); }\nexport function g() { return f(); }\n` },
   );
   try {
-    const art = run(dir);
+    const art = await run(dir);
     assert.ok(art.cycles.length >= 1, "a cycle is reported");
     const cyc = new Set(art.cycles.flat());
     assert.ok(cyc.size >= 2, "cycle has >= 2 members");
@@ -75,20 +75,20 @@ test("cycle: mutual dependency is detected and flagged", () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("small single-symbol PR degrades to one short group, no cycles", () => {
+test("small single-symbol PR degrades to one short group, no cycles", async () => {
   const dir = makeRepo(
     { "s.ts": `export function only() { return 0; }\n` },
     { "s.ts": `export function only() { return 1; }\n` },
   );
   try {
-    const art = run(dir);
+    const art = await run(dir);
     assert.equal(art.symbols.length, 1, "one changed symbol");
     assert.equal(art.groups.length, 1, "one group");
     assert.equal(art.cycles.length, 0, "no cycles");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("stable ids reproduce across runs (byte-stable minus latency)", () => {
+test("stable ids reproduce across runs (byte-stable minus latency)", async () => {
   const files = {
     base: { "a.ts": `export function base() { return 0; }\n`,
             "b.ts": `import { base } from "./a";\nexport function top() { return base(); }\n` },
@@ -98,7 +98,7 @@ test("stable ids reproduce across runs (byte-stable minus latency)", () => {
   const d1 = makeRepo(files.base, files.head);
   const d2 = makeRepo(files.base, files.head);
   try {
-    const a = run(d1), b = run(d2);
+    const a = await run(d1), b = await run(d2);
     assert.deepEqual(a.groups.map((g) => g.id), b.groups.map((g) => g.id), "group ids stable");
     assert.deepEqual(a.symbols.map((s) => s.id).sort(), b.symbols.map((s) => s.id).sort(), "symbol ids stable");
     assert.ok(a.symbols.every((s) => !s.id.includes("@")), "symbol ids are line-free");
@@ -115,7 +115,58 @@ test("path globs and test-file detection", () => {
   assert.equal(isTestFile("src/a.ts"), false);
 });
 
-test("--prev reuse: unchanged group ids carry a prior summary forward", () => {
+test("python: cross-file edge resolves via pyright, foundational-first layering", async () => {
+  const dir = makeRepo(
+    { "a.py": `def base():\n    return 0\n`,
+      "b.py": `from a import base\n\n\ndef top():\n    return base()\n` },
+    { "a.py": `def base():\n    return 1\n`,
+      "b.py": `from a import base\n\n\ndef top():\n    return base() + 1\n` },
+  );
+  try {
+    const art = await run(dir);
+    const base = art.symbols.find((s) => s.name === "base")!;
+    const top = art.symbols.find((s) => s.name === "top")!;
+    assert.ok(base && top, "both python symbols extracted");
+    assert.equal(base.layer, 0, "base is foundational (layer 0)");
+    assert.ok(top.layer > base.layer, "top builds on base");
+    const e = art.edges.find((x) => x.source === top.id && x.target === base.id)!;
+    assert.ok(e, "edge top -> base exists (pyright reference)");
+    assert.equal(e.crossFile, true, "edge is cross-file");
+    assert.ok(e.evidence && /b\.py:\d+/.test(e.evidence), "edge cites a reference site");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("python: methods are extracted with class-qualified names", async () => {
+  const dir = makeRepo(
+    { "svc.py": `class Service:\n    def run(self):\n        return 0\n` },
+    { "svc.py": `class Service:\n    def run(self):\n        return self.helper()\n\n    def helper(self):\n        return 1\n` },
+  );
+  try {
+    const art = await run(dir);
+    const run_ = art.symbols.find((s) => s.name === "Service.run")!;
+    const helper = art.symbols.find((s) => s.name === "Service.helper")!;
+    assert.ok(run_ && helper, "both methods extracted with qualified names");
+    const e = art.edges.find((x) => x.source === run_.id && x.target === helper.id)!;
+    assert.ok(e, "edge run -> helper exists (same-file method call)");
+    assert.equal(e.crossFile, false, "same-file edge");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("mixed TS + Python diff: both providers contribute symbols in one run", async () => {
+  const dir = makeRepo(
+    { "a.ts": `export function tbase() { return 0; }\n`,
+      "m.py": `def pbase():\n    return 0\n` },
+    { "a.ts": `export function tbase() { return 1; }\n`,
+      "m.py": `def pbase():\n    return 1\n` },
+  );
+  try {
+    const art = await run(dir);
+    assert.ok(art.symbols.some((s) => s.name === "tbase" && s.file === "a.ts"), "TS symbol present");
+    assert.ok(art.symbols.some((s) => s.name === "pbase" && s.file === "m.py"), "Python symbol present");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("--prev reuse: unchanged group ids carry a prior summary forward", async () => {
   const dir = makeRepo(
     { "a.ts": `export function base() { return 0; }\n`,
       "b.ts": `import { base } from "./a";\nexport function top() { return base(); }\n` },
@@ -124,7 +175,7 @@ test("--prev reuse: unchanged group ids carry a prior summary forward", () => {
   );
   try {
     const changed = changedRanges(dir, "HEAD~1", "HEAD");
-    const { symbols, edges } = analyze(dir, changed);
+    const { symbols, edges } = await analyze(dir, changed);
     const { subGroups } = group(symbols, edges);
     const gid = subGroups[0].id;
     const reuse = new Map([[gid, { title: "Prior title", summary: "prior summary" }]]);

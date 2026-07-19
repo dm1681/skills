@@ -1,4 +1,4 @@
 interface:
   display_name: "Semantic PR walkthrough"
-  short_description: "Layered, dependency-ordered walkthrough of a TypeScript PR/branch diff"
-  default_prompt: "Use $semantic-pr to turn a TypeScript repo's PR or branch diff into a layered, dependency-ordered walkthrough (cohorts → feature groups → foundational-first layers), then write a short summary per group from the JSON — no API key needed."
+  short_description: "Layered, dependency-ordered walkthrough of a TypeScript or Python PR/branch diff"
+  default_prompt: "Use $semantic-pr to turn a TypeScript or Python repo's PR or branch diff into a layered, dependency-ordered walkthrough (cohorts → feature groups → foundational-first layers), then write a short summary per group from the JSON — no API key needed."
