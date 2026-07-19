@@ -7,6 +7,7 @@ import { analyze } from "./analyze.ts";
 import { group } from "./group.ts";
 import { summarize } from "./summarize.ts";
 import { render } from "./render.ts";
+import { toArtifact } from "./contract.ts";
 import type { Analysis } from "./types.ts";
 
 function parseArgs(argv: string[]) {
@@ -51,7 +52,7 @@ async function main() {
   const md = render(analysis);
   if (args.out) { writeFileSync(args.out, md); console.error(`[render] wrote ${args.out}`); }
   else process.stdout.write(md + "\n");
-  if (args.json) { writeFileSync(args.json, JSON.stringify(analysis, null, 2)); console.error(`[render] wrote ${args.json}`); }
+  if (args.json) { writeFileSync(args.json, JSON.stringify(toArtifact(analysis), null, 2)); console.error(`[render] wrote ${args.json}`); }
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

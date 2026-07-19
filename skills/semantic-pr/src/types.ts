@@ -16,6 +16,8 @@ export interface Symbol {
   layer: number; // 0 = foundational
   degree: number;
   snippet?: string; // truncated declaration text, for the summarizer
+  /** cross-commit-stable public identity: `file::kind::name` (+ `#n` on collision). Line-independent. */
+  stableId: string;
 }
 
 export interface Edge {
@@ -26,6 +28,8 @@ export interface Edge {
 }
 
 export interface SubGroup {
+  /** cross-commit-stable id: short hash of the sorted member stableIds. */
+  id: string;
   cohortId: number;
   subId: number;
   symbols: Symbol[]; // ordered by layer, then degree desc

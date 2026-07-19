@@ -12,7 +12,7 @@ function renderGroup(sg: SubGroup, n: number): string {
   const lines: string[] = [];
   const badges = sg.pkgs.map((p) => `\`${p}\``).join(" ") + (sg.crossPkg ? " · **cross-package**" : "");
   lines.push(`### ${n}. ${sg.title ?? "Changes"}`);
-  lines.push(`${sg.symbols.length} symbols · ${badges}`);
+  lines.push(`${sg.symbols.length} symbols · ${badges} · \`group:${sg.id}\``);
   if (sg.summary) lines.push(`\n${sg.summary}`);
   const byLayer = new Map<number, typeof sg.symbols>();
   for (const s of sg.symbols) (byLayer.get(s.layer) ?? byLayer.set(s.layer, []).get(s.layer)!).push(s);

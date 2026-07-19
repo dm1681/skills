@@ -1,7 +1,22 @@
 // Ticket #7 — cohorts (connected components) → sub-groups (Louvain community detection) → layers.
+import { createHash } from "node:crypto";
 import Graph from "graphology";
 import louvain from "graphology-communities-louvain";
 import type { Symbol, Edge, SubGroup } from "./types.ts";
+
+/** Stable id for a group = short hash of its sorted member stableIds (order-independent). */
+const groupId = (syms: Symbol[]) =>
+  createHash("sha1").update(syms.map((s) => s.stableId).sort().join("\n")).digest("hex").slice(0, 12);
+
+/** Seeded PRNG so Louvain is deterministic → group membership (and thus group ids) is reproducible. */
+function seededRng(seed: number) {
+  return () => {
+    seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 const SUBGROUP_THRESHOLD = 12; // cohorts larger than this get community-split
 
@@ -42,7 +57,7 @@ export function group(symbols: Symbol[], edges: Edge[]): SubGroup[] {
       const g = new Graph({ type: "undirected" });
       for (const s of members) g.addNode(s.id);
       for (const e of edges) if (ids.has(e.source) && ids.has(e.target) && e.source !== e.target && !g.hasEdge(e.source, e.target)) g.addEdge(e.source, e.target);
-      const communities = louvain(g); // {nodeId: communityIndex}
+      const communities = louvain(g, { rng: seededRng(0x5eed) }); // deterministic partition
       const buckets = new Map<number, Symbol[]>();
       for (const s of members) { const c = communities[s.id] ?? 0; (buckets.get(c) ?? buckets.set(c, []).get(c)!).push(s); }
       partitions = [...buckets.values()];
@@ -53,7 +68,7 @@ export function group(symbols: Symbol[], edges: Edge[]): SubGroup[] {
     partitions.forEach((syms, subId) => {
       syms.sort((a, b) => a.layer - b.layer || b.degree - a.degree);
       const pkgs = [...new Set(syms.map((s) => s.pkg))];
-      out.push({ cohortId, subId, symbols: syms, pkgs, crossPkg: pkgs.length > 1 });
+      out.push({ id: groupId(syms), cohortId, subId, symbols: syms, pkgs, crossPkg: pkgs.length > 1 });
     });
     cohortId++;
   }
