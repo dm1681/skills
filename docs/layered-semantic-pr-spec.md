@@ -83,6 +83,10 @@ render: Markdown walkthrough (PR comment / file)                [#8]
 - HTML/graph view is a proven-feasible nice-to-have (`docs/olympus-pr50-semantic-layer.html`), not v1.
 
 ### LLM contract — [#9](https://github.com/dm1681/skills/issues/9)
+> **Superseded by [#20](https://github.com/dm1681/skills/issues/20):** the skill no longer calls a
+> model. It emits the deterministic layered structure + a stable JSON artifact (with code snippets);
+> the **invoking agent** writes the summaries — no API key, no model, nothing to configure. The
+> original built-in-call design below is kept for history.
 - **Model:** default `claude-opus-4-8`; `claude-sonnet-5` as the cost/latency step-down; identical contract.
 - **Call:** one per sub-group. Input = changed symbols (name/kind/file/layer) + code bodies + diff hunks,
   in dependency order. Output enforced by `output_config.format` json_schema:
