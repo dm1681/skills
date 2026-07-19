@@ -1,0 +1,255 @@
+<title>Proof: the semantic layer, running on a real Olympus PR</title>
+<style>
+:root{
+  --ground:#f6f3ec;--panel:#fffdf8;--panel2:#efeae0;--ink:#23262e;--soft:#565a62;--faint:#888b91;
+  --rule:#ddd6c8;--rule2:#e9e3d6;
+  --web:#b9762a;--web-bg:#f1e4d1;--server:#2f7d72;--server-bg:#d9e8e4;--contracts:#5f52a8;--contracts-bg:#e4e0f0;
+  --cross:#c2412f;--good:#3f8a5c;
+  --shadow:0 1px 2px rgba(40,36,28,.05),0 10px 30px rgba(40,36,28,.07);
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root{
+  --ground:#12151d;--panel:#1a1e28;--panel2:#222736;--ink:#e9e7e0;--soft:#a8aab3;--faint:#767884;
+  --rule:#2c313f;--rule2:#242938;
+  --web:#e0a34d;--web-bg:#2a2318;--server:#59b6a8;--server-bg:#15241f;--contracts:#9488d9;--contracts-bg:#1e1b2c;
+  --cross:#e8776b;--good:#63bd85;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 12px 34px rgba(0,0,0,.4);
+}}
+:root[data-theme="light"]{--ground:#f6f3ec;--panel:#fffdf8;--panel2:#efeae0;--ink:#23262e;--soft:#565a62;--faint:#888b91;--rule:#ddd6c8;--rule2:#e9e3d6;--web:#b9762a;--web-bg:#f1e4d1;--server:#2f7d72;--server-bg:#d9e8e4;--contracts:#5f52a8;--contracts-bg:#e4e0f0;--cross:#c2412f;--good:#3f8a5c;--shadow:0 1px 2px rgba(40,36,28,.05),0 10px 30px rgba(40,36,28,.07);}
+:root[data-theme="dark"]{--ground:#12151d;--panel:#1a1e28;--panel2:#222736;--ink:#e9e7e0;--soft:#a8aab3;--faint:#767884;--rule:#2c313f;--rule2:#242938;--web:#e0a34d;--web-bg:#2a2318;--server:#59b6a8;--server-bg:#15241f;--contracts:#9488d9;--contracts-bg:#1e1b2c;--cross:#e8776b;--good:#63bd85;--shadow:0 1px 2px rgba(0,0,0,.3),0 12px 34px rgba(0,0,0,.4);}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+h1,h2,h3{font-family:var(--serif);font-weight:600;text-wrap:balance;line-height:1.14}
+.eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
+header.hero{border-bottom:1px solid var(--rule);padding:64px 0 34px}
+h1{font-size:clamp(30px,5vw,50px);margin:16px 0 0;letter-spacing:-.01em}
+h1 .hl{font-style:italic;color:var(--server)}
+.dek{max-width:60ch;color:var(--soft);font-size:18px;margin:18px 0 0}
+.src{margin-top:16px;font-family:var(--mono);font-size:12px;color:var(--faint)}
+.src b{color:var(--soft);font-weight:600}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:14px;overflow:hidden;margin:30px 0 6px}
+.stat{background:var(--panel);padding:16px 18px}
+.stat .v{font-family:var(--serif);font-size:30px;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.stat .l{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-top:2px}
+.stat.ok .v{color:var(--good)}
+
+section{padding:46px 0;border-bottom:1px solid var(--rule2)}
+.sec-h{display:flex;align-items:baseline;gap:12px;margin-bottom:6px}
+.sec-n{font-family:var(--mono);font-size:12px;color:var(--server)}
+h2{font-size:clamp(22px,3.2vw,30px);margin:0}
+.lede{max-width:64ch;color:var(--soft);font-size:16px;margin:12px 0 26px}
+
+/* graph */
+.graph-wrap{position:relative;background:var(--panel);border:1px solid var(--rule);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+#g{display:block;width:100%;height:560px;touch-action:none}
+.legend{position:absolute;top:14px;left:16px;display:flex;flex-direction:column;gap:7px;font-family:var(--mono);font-size:11.5px;background:color-mix(in srgb,var(--panel) 82%,transparent);padding:10px 12px;border:1px solid var(--rule);border-radius:10px;backdrop-filter:blur(3px)}
+.legend .row{display:flex;align-items:center;gap:8px;color:var(--soft)}
+.dot{width:11px;height:11px;border-radius:50%}
+.dot.web{background:var(--web)}.dot.server{background:var(--server)}.dot.contracts{background:var(--contracts)}
+.edge-key{width:16px;height:0;border-top:2.5px solid var(--cross)}
+.axis{position:absolute;right:14px;top:0;bottom:0;display:flex;flex-direction:column;justify-content:space-between;padding:16px 0;font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);text-align:right;pointer-events:none}
+#tip{position:absolute;pointer-events:none;opacity:0;transition:opacity .1s;background:var(--ink);color:var(--ground);font-family:var(--mono);font-size:11.5px;padding:7px 9px;border-radius:7px;max-width:250px;z-index:5;line-height:1.5}
+#tip b{color:var(--ground)}#tip .t-pkg{opacity:.75}
+.hint{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:10px;text-align:center}
+
+/* walkthrough */
+.cohort{background:var(--panel);border:1px solid var(--rule);border-radius:14px;box-shadow:var(--shadow);padding:20px 22px;margin-bottom:14px}
+.cohort.muted{opacity:.82}
+.cohort header{margin-bottom:14px}
+.co-index{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+.cohort h3{font-size:19px;margin:3px 0 8px}
+.co-meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.co-count{font-family:var(--mono);font-size:12px;color:var(--soft)}
+.pill{font-family:var(--mono);font-size:10.5px;padding:3px 8px;border-radius:20px;border:1px solid var(--rule)}
+.pill.web{color:var(--web);background:var(--web-bg);border-color:transparent}
+.pill.server{color:var(--server);background:var(--server-bg);border-color:transparent}
+.pill.contracts{color:var(--contracts);background:var(--contracts-bg);border-color:transparent}
+.pill.cross{color:#fff;background:var(--cross);border-color:transparent;font-weight:600}
+.note{font-size:12px;color:var(--faint)}.note code{font-family:var(--mono);font-size:11px}
+.layer-row{display:grid;grid-template-columns:120px 1fr;gap:14px;padding:9px 0;border-top:1px dashed var(--rule)}
+.layer-tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;padding:3px 8px;border-radius:6px;height:fit-content;color:var(--soft);background:var(--panel2);text-align:center}
+.layer-tag.l0{color:var(--good);background:color-mix(in srgb,var(--good) 15%,transparent);font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-family:var(--mono);font-size:12px;padding:4px 9px;border-radius:7px;border:1px solid var(--rule);display:inline-flex;align-items:baseline;gap:6px;background:var(--panel2)}
+.chip em{font-style:normal;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)}
+.chip.web{border-left:3px solid var(--web)}.chip.server{border-left:3px solid var(--server)}.chip.contracts{border-left:3px solid var(--contracts)}
+
+.readout{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px}
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:16px 18px}
+.card h4{margin:0 0 8px;font-family:var(--sans);font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint)}
+.card p{margin:0;color:var(--soft);font-size:14.5px}
+.card b{color:var(--ink)}
+.foot{padding:34px 0 60px;color:var(--faint);font-size:13px}
+.foot .cav{border-left:3px solid var(--server);padding:3px 0 3px 15px;margin:0 0 14px;color:var(--soft);max-width:70ch}
+code{font-family:var(--mono)}
+@media (max-width:640px){.readout{grid-template-columns:1fr}.layer-row{grid-template-columns:1fr;gap:6px}#g{height:460px}.axis{display:none}}
+@media (prefers-reduced-motion:no-preference){.cohort,.stat{animation:rise .5s both}@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}}
+</style>
+
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">Ticket #6 · prototype · live on real code</div>
+  <h1>The semantic layer, <span class="hl">running on a real Olympus PR</span></h1>
+  <p class="dek">Not a mock. This is the actual dependency graph the engine extracted from <b>PR #50</b> — tree-sitter-style symbol extraction + ts-morph reference resolution — grouped into cohorts and ordered foundational-first.</p>
+  <div class="src"><b>Source:</b> dm1681/Olympus <b>·</b> PR #50 — Promote, archive, and delete Ideas <b>·</b> engine: ts-morph 28 over the pnpm monorepo <b>·</b> read-only, nothing committed</div>
+  <div class="stats">
+    <div class="stat"><div class="v">68</div><div class="l">changed symbols</div></div>
+    <div class="stat"><div class="v">95</div><div class="l">dependency edges</div></div>
+    <div class="stat ok"><div class="v">2</div><div class="l">cross-package</div></div>
+    <div class="stat"><div class="v">8</div><div class="l">cohorts</div></div>
+    <div class="stat ok"><div class="v">2.2s</div><div class="l">end-to-end</div></div>
+  </div>
+</div></header>
+
+<div class="wrap">
+  <section>
+    <div class="sec-h"><span class="sec-n">01</span><h2>The dependency graph it found</h2></div>
+    <p class="lede">Every dot is a symbol that changed in PR&nbsp;#50, colored by package. Every line is a real dependency the engine resolved between two changed symbols. Height encodes <b>layer</b> — foundational symbols sit at the top, the code that builds on them flows down. The <b style="color:var(--cross)">red edges cross package boundaries</b> — the monorepo test.</p>
+    <div class="graph-wrap">
+      <canvas id="g" aria-label="Dependency graph of the changed symbols in Olympus PR 50"></canvas>
+      <div class="legend">
+        <div class="row"><span class="dot web"></span>apps/web</div>
+        <div class="row"><span class="dot server"></span>apps/server</div>
+        <div class="row"><span class="dot contracts"></span>packages/contracts</div>
+        <div class="row"><span class="edge-key"></span>cross-package edge</div>
+      </div>
+      <div class="axis"><span>▲ foundational</span><span>depends-on ▼</span></div>
+      <div id="tip"></div>
+    </div>
+    <div class="hint">hover a node to trace its dependencies · larger dot = more connected</div>
+  </section>
+
+  <section>
+    <div class="sec-h"><span class="sec-n">02</span><h2>The same PR, as a layered walkthrough</h2></div>
+    <p class="lede">This is the product: the flat 22-file diff reorganized into dependency cohorts, each cohort's symbols stacked into layers so the foundation reads first. No summaries yet (that's ticket #9) — this is pure structure, extracted automatically.</p>
+    <article class="cohort">
+    <header>
+      <span class="co-index">Cohort 1</span>
+      <h3>App &amp; related</h3>
+      <div class="co-meta">
+        <span class="co-count">39 symbols</span>
+        <span class="pill web">apps/web</span>
+        
+      </div>
+    </header>
+    <div class="layer-row"><span class="layer-tag l0">Foundational</span><div class="chips"><span class="chip web" title="App.tsx · degree 5">IdeaUndoState<em>interface</em></span><span class="chip web" title="IdeasPage.tsx · degree 5">focusActiveTab<em>fn</em></span><span class="chip web" title="App.tsx · degree 4">refreshIdeasForRecovery<em>fn</em></span><span class="chip web" title="App.tsx · degree 4">removeStoredIdeaUndo<em>fn</em></span><span class="chip web" title="App.tsx · degree 3">applyAuthoritativeIdea<em>fn</em></span><span class="chip web" title="IdeasPage.tsx · degree 3">IdeaLifecycleActionLabel<em>type</em></span><span class="chip web" title="App.tsx · degree 2">keepFocusOnIdeaUndoToast<em>fn</em></span><span class="chip web" title="App.tsx · degree 2">removeStoredProjectUndo<em>fn</em></span><span class="chip web" title="ownerWriteResult.ts · degree 2">OwnerWriteResult<em>type</em></span><span class="chip web" title="App.tsx · degree 1">holdIdeaUndoCountdown<em>fn</em></span><span class="chip web" title="App.tsx · degree 1">releaseIdeaUndoCountdown<em>fn</em></span><span class="chip web" title="App.tsx · degree 1">updateTask<em>fn</em></span><span class="chip web" title="IdeaSheets.tsx · degree 1">IdeaActionSheet<em>fn</em></span><span class="chip web" title="IdeaSheets.tsx · degree 1">handlePromote<em>fn</em></span><span class="chip web" title="IdeaSheets.tsx · degree 1">loadLatest<em>fn</em></span><span class="chip web" title="IdeaSheets.tsx · degree 1">handleDelete<em>fn</em></span></div></div><div class="layer-row"><span class="layer-tag l1">Layer 1</span><div class="chips"><span class="chip web" title="App.tsx · degree 6">retireExternallyDeletedIdea<em>fn</em></span><span class="chip web" title="IdeaSheets.tsx · degree 4">IdeaPromoteSheet<em>fn</em></span><span class="chip web" title="App.tsx · degree 3">deleteIdea<em>fn</em></span><span class="chip web" title="IdeasPage.tsx · degree 3">runLifecycleAction<em>fn</em></span><span class="chip web" title="IdeasPage.tsx · degree 3">loadLatestIdeaForLifecycle<em>fn</em></span><span class="chip web" title="App.tsx · degree 2">reconcilePromotionAfterAmbiguousFailure<em>fn</em></span><span class="chip web" title="App.tsx · degree 2">settleIdeaUndo<em>const</em></span><span class="chip web" title="App.tsx · degree 2">settleIdeaUndo<em>const</em></span><span class="chip web" title="App.tsx · degree 2">retireAuthoritativeProjectDeletion<em>fn</em></span><span class="chip web" title="App.tsx · degree 2">readStoredIdeaUndo<em>fn</em></span><span class="chip web" title="IdeaSheets.tsx · degree 2">IdeaDeletionSheet<em>fn</em></span><span class="chip web" title="IdeasPage.tsx · degree 2">IdeaLifecycleRecovery<em>interface</em></span><span class="chip web" title="IdeasPage.tsx · degree 2">markReviewed<em>fn</em></span><span class="chip web" title="IdeasPage.tsx · degree 2">loadLatestIdeaForReview<em>fn</em></span></div></div><div class="layer-row"><span class="layer-tag l2">Layer 2</span><div class="chips"><span class="chip web" title="IdeasPage.tsx · degree 11">IdeasPage<em>fn</em></span><span class="chip web" title="App.tsx · degree 6">performIdeaUndo<em>fn</em></span><span class="chip web" title="App.tsx · degree 4">loadLatestIdeaUndo<em>fn</em></span><span class="chip web" title="App.tsx · degree 3">promoteIdea<em>fn</em></span><span class="chip web" title="App.tsx · degree 3">archiveIdea<em>fn</em></span><span class="chip web" title="App.tsx · degree 3">restoreIdea<em>fn</em></span><span class="chip web" title="App.tsx · degree 2">markIdeaReviewed<em>fn</em></span><span class="chip web" title="App.tsx · degree 2">replaceIdeaProjects<em>fn</em></span></div></div><div class="layer-row"><span class="layer-tag l3">Entry / leaf</span><div class="chips"><span class="chip web" title="App.tsx · degree 18">App<em>fn</em></span></div></div>
+  </article><article class="cohort">
+    <header>
+      <span class="co-index">Cohort 2</span>
+      <h3>createApp &amp; related</h3>
+      <div class="co-meta">
+        <span class="co-count">23 symbols</span>
+        <span class="pill server">apps/server</span><span class="pill contracts">packages/contracts</span>
+        <span class="pill cross">cross-package</span>
+      </div>
+    </header>
+    <div class="layer-row"><span class="layer-tag l0">Foundational</span><div class="chips"><span class="chip server" title="ideas.ts · degree 5">serializeIdea<em>fn</em></span><span class="chip server" title="app.ts · degree 2">sendIdeaNotFound<em>fn</em></span><span class="chip server" title="app.ts · degree 2">sendStaleWriteError<em>fn</em></span><span class="chip server" title="projectDeletion.ts · degree 2">DeletionSnapshot<em>interface</em></span><span class="chip contracts" title="index.ts · degree 2">IdeaStatus<em>type</em></span><span class="chip server" title="ideas.ts · degree 1">deleteAccepted<em>fn</em></span><span class="chip server" title="ideas.ts · degree 1">projectIdsByIdea<em>fn</em></span></div></div><div class="layer-row"><span class="layer-tag l1">Layer 1</span><div class="chips"><span class="chip server" title="app.ts · degree 3">sendIdeaNotActive<em>fn</em></span><span class="chip server" title="ideas.ts · degree 3">setStatusAccepted<em>fn</em></span><span class="chip server" title="projectDeletion.ts · degree 3">readDeletionSnapshot<em>fn</em></span><span class="chip server" title="projectDeletion.ts · degree 3">deletionToken<em>fn</em></span><span class="chip server" title="app.ts · degree 2">execute<em>const</em></span><span class="chip server" title="ideas.ts · degree 2">createAccepted<em>fn</em></span><span class="chip server" title="ideas.ts · degree 2">updateAccepted<em>fn</em></span><span class="chip server" title="ideas.ts · degree 2">markPromotedAccepted<em>fn</em></span><span class="chip server" title="ideas.ts · degree 2">deleteIdea<em>method</em></span></div></div><div class="layer-row"><span class="layer-tag l2">Layer 2</span><div class="chips"><span class="chip server" title="ideas.ts · degree 6">createIdeaModule<em>fn</em></span><span class="chip server" title="app.ts · degree 4">handleIdeaLifecycleAction<em>fn</em></span><span class="chip server" title="projectDeletion.ts · degree 3">readDeletionPreview<em>fn</em></span><span class="chip server" title="projectDeletion.ts · degree 3">deleteProjectGraph<em>fn</em></span><span class="chip server" title="ideas.ts · degree 1">archive<em>method</em></span><span class="chip server" title="ideas.ts · degree 1">restore<em>method</em></span></div></div><div class="layer-row"><span class="layer-tag l3">Entry / leaf</span><div class="chips"><span class="chip server" title="app.ts · degree 9">createApp<em>fn</em></span></div></div>
+  </article><article class="cohort muted">
+    <header>
+      <span class="co-index">Unlinked</span>
+      <h3>Changed, but no edge to another changed symbol</h3>
+      <div class="co-meta"><span class="co-count">6 symbols</span>
+      <span class="note">mostly new <code>@olympus/contracts</code> types whose consumers weren't in this diff</span></div>
+    </header>
+    <div class="layer-row"><span class="layer-tag l0">Foundational</span><div class="chips"><span class="chip server" title="workspaceExport.ts">readWorkspace<em>fn</em></span><span class="chip contracts" title="index.ts">PromoteIdeaInput<em>type</em></span><span class="chip contracts" title="index.ts">PromoteIdeaResponse<em>type</em></span><span class="chip contracts" title="index.ts">IdeaLifecycleActionInput<em>type</em></span><span class="chip contracts" title="index.ts">DeleteIdeaInput<em>type</em></span><span class="chip contracts" title="index.ts">DeleteIdeaResponse<em>type</em></span></div></div>
+  </article>
+  </section>
+
+  <section style="border-bottom:none">
+    <div class="sec-h"><span class="sec-n">03</span><h2>What this proves</h2></div>
+    <div class="readout">
+      <div class="card"><h4>Cross-package resolution works</h4><p>The engine correctly resolved <b>apps/server</b> symbols depending on the <b>packages/contracts</b> <code>IdeaStatus</code> type — across the pnpm workspace boundary, via one solution-style ts-morph Program. That was the core monorepo risk.</p></div>
+      <div class="card"><h4>Layering is real, not cosmetic</h4><p>The <code>@olympus/contracts</code> types landed at <b>layer 0</b> automatically — the foundation everything else references — computed by longest-path over the dependency DAG. Foundational-first ordering falls out of the graph.</p></div>
+      <div class="card"><h4>Latency is a non-issue</h4><p>The research feared "seconds to tens of seconds" for Program build on a monorepo. Real numbers: <b>1067 ms</b> to load, <b>887 ms</b> for all 68 findReferences calls, <b>2.2s</b> end-to-end.</p></div>
+      <div class="card"><h4>Cohorts match intent</h4><p>PR #50 split cleanly into a <b style="color:var(--web)">web/frontend</b> cohort (the Ideas UI) and a <b style="color:var(--server)">server + contracts</b> cohort (the lifecycle backend) — the two halves a human would describe.</p></div>
+    </div>
+  </section>
+
+  <div class="foot">
+    <p class="cav"><b>Honest scope.</b> This ran <b>without <code>node_modules</code></b>, so edges routing through external types are under-counted — the 95 edges are a floor, and 1067 ms is a floor too. Symbol extraction used ts-morph (production swaps in tree-sitter). The big 39-symbol web cohort is still one undifferentiated lump — splitting and ordering <em>within</em> a cohort is the next ticket (#7). No LLM summaries yet (#9).</p>
+    <p>Generated from the live spike output <code>scratchpad/spike6/graph.json</code> · wayfinder ticket #6, dm1681/skills.</p>
+  </div>
+</div>
+
+<script>
+const DATA={"meta":{"pr":"#50 — Promote, archive, and delete Ideas","filesChanged":11,"filesLoaded":43,"symbolCount":68,"edgeCount":95,"crossFile":12,"crossPkg":2,"cohortCount":8,"loadMs":1067,"refMs":887,"endMs":2226},"nodes":[{"n":"execute","k":"const","p":1,"f":"app.ts","l":1,"d":2,"c":1},{"n":"createApp","k":"fn","p":1,"f":"app.ts","l":3,"d":9,"c":1},{"n":"handleIdeaLifecycleAction","k":"fn","p":1,"f":"app.ts","l":2,"d":4,"c":1},{"n":"sendIdeaNotFound","k":"fn","p":1,"f":"app.ts","l":0,"d":2,"c":1},{"n":"sendIdeaNotActive","k":"fn","p":1,"f":"app.ts","l":1,"d":3,"c":1},{"n":"sendStaleWriteError","k":"fn","p":1,"f":"app.ts","l":0,"d":2,"c":1},{"n":"serializeIdea","k":"fn","p":1,"f":"ideas.ts","l":0,"d":5,"c":1},{"n":"createAccepted","k":"fn","p":1,"f":"ideas.ts","l":1,"d":2,"c":1},{"n":"updateAccepted","k":"fn","p":1,"f":"ideas.ts","l":1,"d":2,"c":1},{"n":"markPromotedAccepted","k":"fn","p":1,"f":"ideas.ts","l":1,"d":2,"c":1},{"n":"setStatusAccepted","k":"fn","p":1,"f":"ideas.ts","l":1,"d":3,"c":1},{"n":"deleteAccepted","k":"fn","p":1,"f":"ideas.ts","l":0,"d":1,"c":1},{"n":"projectIdsByIdea","k":"fn","p":1,"f":"ideas.ts","l":0,"d":1,"c":1},{"n":"createIdeaModule","k":"fn","p":1,"f":"ideas.ts","l":2,"d":6,"c":1},{"n":"archive","k":"method","p":1,"f":"ideas.ts","l":2,"d":1,"c":1},{"n":"restore","k":"method","p":1,"f":"ideas.ts","l":2,"d":1,"c":1},{"n":"deleteIdea","k":"method","p":1,"f":"ideas.ts","l":1,"d":2,"c":1},{"n":"DeletionSnapshot","k":"interface","p":1,"f":"projectDeletion.ts","l":0,"d":2,"c":1},{"n":"readDeletionPreview","k":"fn","p":1,"f":"projectDeletion.ts","l":2,"d":3,"c":1},{"n":"deleteProjectGraph","k":"fn","p":1,"f":"projectDeletion.ts","l":2,"d":3,"c":1},{"n":"readDeletionSnapshot","k":"fn","p":1,"f":"projectDeletion.ts","l":1,"d":3,"c":1},{"n":"deletionToken","k":"fn","p":1,"f":"projectDeletion.ts","l":1,"d":3,"c":1},{"n":"readWorkspace","k":"fn","p":1,"f":"workspaceExport.ts","l":0,"d":0,"c":2},{"n":"IdeaUndoState","k":"interface","p":0,"f":"App.tsx","l":0,"d":5,"c":0},{"n":"App","k":"fn","p":0,"f":"App.tsx","l":3,"d":18,"c":0},{"n":"retireExternallyDeletedIdea","k":"fn","p":0,"f":"App.tsx","l":1,"d":6,"c":0},{"n":"markIdeaReviewed","k":"fn","p":0,"f":"App.tsx","l":2,"d":2,"c":0},{"n":"replaceIdeaProjects","k":"fn","p":0,"f":"App.tsx","l":2,"d":2,"c":0},{"n":"refreshIdeasForRecovery","k":"fn","p":0,"f":"App.tsx","l":0,"d":4,"c":0},{"n":"applyAuthoritativeIdea","k":"fn","p":0,"f":"App.tsx","l":0,"d":3,"c":0},{"n":"reconcilePromotionAfterAmbiguousFailure","k":"fn","p":0,"f":"App.tsx","l":1,"d":2,"c":0},{"n":"promoteIdea","k":"fn","p":0,"f":"App.tsx","l":2,"d":3,"c":0},{"n":"archiveIdea","k":"fn","p":0,"f":"App.tsx","l":2,"d":3,"c":0},{"n":"restoreIdea","k":"fn","p":0,"f":"App.tsx","l":2,"d":3,"c":0},{"n":"keepFocusOnIdeaUndoToast","k":"fn","p":0,"f":"App.tsx","l":0,"d":2,"c":0},{"n":"performIdeaUndo","k":"fn","p":0,"f":"App.tsx","l":2,"d":6,"c":0},{"n":"settleIdeaUndo","k":"const","p":0,"f":"App.tsx","l":1,"d":2,"c":0},{"n":"holdIdeaUndoCountdown","k":"fn","p":0,"f":"App.tsx","l":0,"d":1,"c":0},{"n":"releaseIdeaUndoCountdown","k":"fn","p":0,"f":"App.tsx","l":0,"d":1,"c":0},{"n":"loadLatestIdeaUndo","k":"fn","p":0,"f":"App.tsx","l":2,"d":4,"c":0},{"n":"settleIdeaUndo","k":"const","p":0,"f":"App.tsx","l":1,"d":2,"c":0},{"n":"deleteIdea","k":"fn","p":0,"f":"App.tsx","l":1,"d":3,"c":0},{"n":"updateTask","k":"fn","p":0,"f":"App.tsx","l":0,"d":1,"c":0},{"n":"retireAuthoritativeProjectDeletion","k":"fn","p":0,"f":"App.tsx","l":1,"d":2,"c":0},{"n":"readStoredIdeaUndo","k":"fn","p":0,"f":"App.tsx","l":1,"d":2,"c":0},{"n":"removeStoredIdeaUndo","k":"fn","p":0,"f":"App.tsx","l":0,"d":4,"c":0},{"n":"removeStoredProjectUndo","k":"fn","p":0,"f":"App.tsx","l":0,"d":2,"c":0},{"n":"IdeaActionSheet","k":"fn","p":0,"f":"IdeaSheets.tsx","l":0,"d":1,"c":0},{"n":"IdeaPromoteSheet","k":"fn","p":0,"f":"IdeaSheets.tsx","l":1,"d":4,"c":0},{"n":"handlePromote","k":"fn","p":0,"f":"IdeaSheets.tsx","l":0,"d":1,"c":0},{"n":"loadLatest","k":"fn","p":0,"f":"IdeaSheets.tsx","l":0,"d":1,"c":0},{"n":"IdeaDeletionSheet","k":"fn","p":0,"f":"IdeaSheets.tsx","l":1,"d":2,"c":0},{"n":"handleDelete","k":"fn","p":0,"f":"IdeaSheets.tsx","l":0,"d":1,"c":0},{"n":"IdeaLifecycleActionLabel","k":"type","p":0,"f":"IdeasPage.tsx","l":0,"d":3,"c":0},{"n":"IdeaLifecycleRecovery","k":"interface","p":0,"f":"IdeasPage.tsx","l":1,"d":2,"c":0},{"n":"IdeasPage","k":"fn","p":0,"f":"IdeasPage.tsx","l":2,"d":11,"c":0},{"n":"focusActiveTab","k":"fn","p":0,"f":"IdeasPage.tsx","l":0,"d":5,"c":0},{"n":"markReviewed","k":"fn","p":0,"f":"IdeasPage.tsx","l":1,"d":2,"c":0},{"n":"loadLatestIdeaForReview","k":"fn","p":0,"f":"IdeasPage.tsx","l":1,"d":2,"c":0},{"n":"runLifecycleAction","k":"fn","p":0,"f":"IdeasPage.tsx","l":1,"d":3,"c":0},{"n":"loadLatestIdeaForLifecycle","k":"fn","p":0,"f":"IdeasPage.tsx","l":1,"d":3,"c":0},{"n":"OwnerWriteResult","k":"type","p":0,"f":"ownerWriteResult.ts","l":0,"d":2,"c":0},{"n":"IdeaStatus","k":"type","p":2,"f":"index.ts","l":0,"d":2,"c":1},{"n":"PromoteIdeaInput","k":"type","p":2,"f":"index.ts","l":0,"d":0,"c":3},{"n":"PromoteIdeaResponse","k":"type","p":2,"f":"index.ts","l":0,"d":0,"c":4},{"n":"IdeaLifecycleActionInput","k":"type","p":2,"f":"index.ts","l":0,"d":0,"c":5},{"n":"DeleteIdeaInput","k":"type","p":2,"f":"index.ts","l":0,"d":0,"c":6},{"n":"DeleteIdeaResponse","k":"type","p":2,"f":"index.ts","l":0,"d":0,"c":7}],"edges":[[1,0,0],[1,2,0],[1,3,0],[2,3,0],[1,4,0],[2,4,0],[1,5,0],[2,5,0],[7,6,0],[8,6,0],[9,6,0],[10,6,0],[13,6,0],[13,7,0],[13,8,0],[13,9,0],[14,10,0],[15,10,0],[16,11,0],[13,12,0],[1,13,0],[1,16,0],[20,17,0],[21,17,0],[1,18,0],[1,19,0],[18,20,0],[19,20,0],[18,21,0],[19,21,0],[24,23,0],[35,23,0],[36,23,0],[40,23,0],[44,23,0],[26,25,0],[27,25,0],[31,25,0],[32,25,0],[33,25,0],[24,26,0],[24,27,0],[30,28,0],[39,28,0],[41,28,0],[24,28,0],[32,29,0],[33,29,0],[35,29,0],[31,30,0],[24,31,0],[24,32,0],[24,33,0],[35,34,0],[39,34,0],[24,35,0],[35,36,0],[24,37,0],[24,38,0],[24,39,0],[39,40,0],[24,41,0],[24,42,0],[24,43,0],[24,44,0],[24,45,0],[25,45,0],[35,45,0],[41,45,0],[24,46,0],[43,46,0],[55,47,0],[55,48,0],[48,49,0],[48,50,0],[55,51,0],[51,52,0],[54,53,0],[59,53,0],[60,53,0],[55,54,0],[24,55,0],[57,56,0],[58,56,0],[59,56,0],[60,56,0],[55,56,0],[55,57,0],[55,58,0],[55,59,0],[55,60,0],[48,61,0],[55,61,0],[0,62,1],[4,62,1]]};
+(function(){
+  const cv=document.getElementById("g"),ctx=cv.getContext("2d"),tip=document.getElementById("tip");
+  const cs=()=>getComputedStyle(document.documentElement);
+  const col=(v)=>cs().getPropertyValue(v).trim();
+  const PKGV=["--web","--server","--contracts"];
+  let W=0,H=0,DPR=Math.min(devicePixelRatio||1,2),N=DATA.nodes,E=DATA.edges;
+  const maxL=Math.max(...N.map(n=>n.l)),maxD=Math.max(...N.map(n=>n.d));
+  // seeded PRNG for stable init
+  let seed=20260718;const rnd=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
+  // cohort x-centers: rank cohorts by size, spread across width
+  const cohortSizes={};N.forEach(n=>cohortSizes[n.c]=(cohortSizes[n.c]||0)+1);
+  const cohortOrder=[...new Set(N.map(n=>n.c))].sort((a,b)=>cohortSizes[b]-cohortSizes[a]);
+  const cohortX={};
+  function layout(){
+    const r=cv.getBoundingClientRect();W=r.width;H=r.height;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    const padX=70,padY=48;
+    cohortOrder.forEach((c,i)=>{cohortX[c]=padX+(cohortOrder.length===1?0.5:i/(cohortOrder.length-1))*(W-2*padX);});
+    const yOf=(l)=>padY+(maxL===0?0.5:l/maxL)*(H-2*padY);
+    seed=20260718;
+    N.forEach(n=>{n.x=cohortX[n.c]+(rnd()-0.5)*90;n.y=yOf(n.l)+(rnd()-0.5)*36;n.vx=0;n.vy=0;n._ty=yOf(n.l);});
+    // settle synchronously
+    for(let it=0;it<420;it++){
+      for(let i=0;i<N.length;i++){let a=N[i],fx=0,fy=0;
+        for(let j=0;j<N.length;j++){if(i===j)continue;let b=N[j],dx=a.x-b.x,dy=a.y-b.y,d2=dx*dx+dy*dy+.01;if(d2<9000){let f=1400/d2;fx+=dx*f;fy+=dy*f;}}
+        fx+=(cohortX[a.c]-a.x)*0.012; // cohort gravity (x)
+        fy+=(a._ty-a.y)*0.14;         // layer anchor (y, strong)
+        a.vx=(a.vx+fx)*0.82;a.vy=(a.vy+fy)*0.82;
+      }
+      for(const e of E){let a=N[e[0]],b=N[e[1]];if(!a||!b)continue;let dx=b.x-a.x,dy=b.y-a.y,dist=Math.hypot(dx,dy)||1,f=(dist-70)*0.02,ux=dx/dist,uy=dy/dist;a.vx+=ux*f;a.vy+=uy*f*0.3;b.vx-=ux*f;b.vy-=uy*f*0.3;}
+      for(const a of N){a.x+=Math.max(-6,Math.min(6,a.vx));a.y+=Math.max(-6,Math.min(6,a.vy));a.x=Math.max(24,Math.min(W-24,a.x));a.y=Math.max(24,Math.min(H-24,a.y));a.y+=(a._ty-a.y)*0.05;}
+    }
+    draw(-1);
+  }
+  function rad(n){return 3.5+Math.sqrt(n.d/(maxD||1))*8;}
+  function draw(hi){
+    ctx.clearRect(0,0,W,H);
+    const rule=col("--rule"),cross=col("--cross");
+    const nbr=new Set();if(hi>=0){for(const e of E){if(e[0]===hi)nbr.add(e[1]);if(e[1]===hi)nbr.add(e[0]);}}
+    // edges
+    for(const e of E){const a=N[e[0]],b=N[e[1]];if(!a||!b)continue;const on=hi<0||e[0]===hi||e[1]===hi;
+      ctx.beginPath();ctx.moveTo(a.x,a.y);
+      const mx=(a.x+b.x)/2,my=(a.y+b.y)/2-18;ctx.quadraticCurveTo(mx,my,b.x,b.y);
+      if(e[2]){ctx.strokeStyle=cross;ctx.globalAlpha=on?0.95:0.12;ctx.lineWidth=on?2.4:1.6;}
+      else{ctx.strokeStyle=rule;ctx.globalAlpha=hi<0?0.55:(on?0.8:0.06);ctx.lineWidth=on?1.6:1;}
+      ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+    // nodes
+    for(let i=0;i<N.length;i++){const n=N[i],on=hi<0||i===hi||nbr.has(i);
+      ctx.globalAlpha=on?1:0.18;ctx.beginPath();ctx.arc(n.x,n.y,rad(n)*(i===hi?1.35:1),0,6.2832);
+      ctx.fillStyle=col(PKGV[n.p]);ctx.fill();
+      if(i===hi){ctx.lineWidth=2;ctx.strokeStyle=col("--ink");ctx.stroke();}
+    }
+    ctx.globalAlpha=1;
+    // labels for high-degree hubs (always) + hovered
+    ctx.font="600 11px "+col("--mono").replace(/^,/,"")||"monospace";ctx.font='600 11px ui-monospace,Menlo,monospace';
+    ctx.fillStyle=col("--ink");ctx.textAlign="center";
+    for(let i=0;i<N.length;i++){const n=N[i];if(n.d>=8||i===hi){if(hi>=0&&!(i===hi||nbr.has(i)))continue;
+      ctx.globalAlpha=i===hi?1:0.8;ctx.fillText(n.n,n.x,n.y-rad(n)-5);}}
+    ctx.globalAlpha=1;
+  }
+  let hov=-1;
+  cv.addEventListener("pointermove",(ev)=>{
+    const r=cv.getBoundingClientRect(),mx=ev.clientX-r.left,my=ev.clientY-r.top;
+    let best=-1,bd=1e9;for(let i=0;i<N.length;i++){const n=N[i],d=Math.hypot(n.x-mx,n.y-my);if(d<Math.max(rad(n)+5,11)&&d<bd){bd=d;best=i;}}
+    if(best!==hov){hov=best;draw(hov);}
+    if(best>=0){const n=N[best];tip.style.opacity=1;tip.style.left=Math.min(mx+14,r.width-190)+"px";tip.style.top=(my+14)+"px";
+      tip.innerHTML="<b>"+n.n+"</b> <span class='t-pkg'>"+n.k+"</span><br><span class='t-pkg'>"+["apps/web","apps/server","packages/contracts"][n.p]+" · "+n.f+"</span><br><span class='t-pkg'>layer "+n.l+" · "+n.d+" edges</span>";}
+    else tip.style.opacity=0;
+  });
+  cv.addEventListener("pointerleave",()=>{hov=-1;tip.style.opacity=0;draw(-1);});
+  let to;addEventListener("resize",()=>{clearTimeout(to);to=setTimeout(layout,160);});
+  const mq=matchMedia("(prefers-color-scheme:dark)");mq.addEventListener&&mq.addEventListener("change",()=>draw(hov));
+  new MutationObserver(()=>draw(hov)).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+  layout();
+})();
+</script>

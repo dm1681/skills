@@ -1,0 +1,1336 @@
+{
+  "meta": {
+    "pr": "#50 — Promote, archive, and delete Ideas",
+    "filesChanged": 11,
+    "filesLoaded": 43,
+    "symbolCount": 68,
+    "edgeCount": 95,
+    "crossFile": 12,
+    "crossPkg": 2,
+    "cohortCount": 8,
+    "loadMs": 1067,
+    "refMs": 887,
+    "endMs": 2226
+  },
+  "nodes": [
+    {
+      "id": "apps/server/src/app.ts::execute@2244",
+      "name": "execute",
+      "kind": "VariableDeclaration",
+      "pkg": "apps/server",
+      "file": "app.ts",
+      "layer": 1,
+      "degree": 2,
+      "cohort": 1
+    },
+    {
+      "id": "apps/server/src/app.ts::createApp@331",
+      "name": "createApp",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/server",
+      "file": "app.ts",
+      "layer": 3,
+      "degree": 9,
+      "cohort": 1
+    },
+    {
+      "id": "apps/server/src/app.ts::handleIdeaLifecycleAction@3139",
+      "name": "handleIdeaLifecycleAction",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/server",
+      "file": "app.ts",
+      "layer": 2,
+      "degree": 4,
+      "cohort": 1
+    },
+    {
+      "id": "apps/server/src/app.ts::sendIdeaNotFound@4085",
+      "name": "sendIdeaNotFound",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/server",
+      "file": "app.ts",
+      "layer": 0,
+      "degree": 2,
+      "cohort": 1
+    },
+    {
+      "id": "apps/server/src/app.ts::sendIdeaNotActive@4094",
+      "name": "sendIdeaNotActive",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/server",
+      "file": "app.ts",
+      "layer": 1,
+      "degree": 3,
+      "cohort": 1
+    },
+    {
+      "id": "apps/server/src/app.ts::sendStaleWriteError@4114",
+      "name": "sendStaleWriteError",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/server",
+      "file": "app.ts",
+      "layer": 0,
+      "degree": 2,
+      "cohort": 1
+    },
+    {
+      "id": "apps/server/src/ideas.ts::serializeIdea@36",
+      "name": "serializeIdea",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/server",
+      "file": "ideas.ts",
+      "layer": 0,
+      "degree": 5,
+      "cohort": 1
+    },
+    {
+      "id": "apps/server/src/ideas.ts::createAccepted@87",
+      "name": "createAccepted",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/server",
+      "file": "ideas.ts",
+      "layer": 1,
+      "degree": 2,
+      "cohort": 1
+    },
+    {
+      "id": "apps/server/src/ideas.ts::updateAccepted@122",
+      "name": "updateAccepted",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/server",
+      "file": "ideas.ts",
+      "layer": 1,
+      "degree": 2,
+      "cohort": 1
+    },
+    {
+      "id": "apps/server/src/ideas.ts::markPromotedAccepted@213",
+      "name": "markPromotedAccepted",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/server",
+      "file": "ideas.ts",
+      "layer": 1,
+      "degree": 2,
+      "cohort": 1
+    },
+    {
+      "id": "apps/server/src/ideas.ts::setStatusAccepted@272",
+      "name": "setStatusAccepted",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/server",
+      "file": "ideas.ts",
+      "layer": 1,
+      "degree": 3,
+      "cohort": 1
+    },
+    {
+      "id": "apps/server/src/ideas.ts::deleteAccepted@325",
+      "name": "deleteAccepted",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/server",
+      "file": "ideas.ts",
+      "layer": 0,
+      "degree": 1,
+      "cohort": 1
+    },
+    {
+      "id": "apps/server/src/ideas.ts::projectIdsByIdea@362",
+      "name": "projectIdsByIdea",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/server",
+      "file": "ideas.ts",
+      "layer": 0,
+      "degree": 1,
+      "cohort": 1
+    },
+    {
+      "id": "apps/server/src/ideas.ts::createIdeaModule@28",
+      "name": "createIdeaModule",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/server",
+      "file": "ideas.ts",
+      "layer": 2,
+      "degree": 6,
+      "cohort": 1
+    },
+    {
+      "id": "apps/server/src/ideas.ts::archive@446",
+      "name": "archive",
+      "kind": "MethodDeclaration",
+      "pkg": "apps/server",
+      "file": "ideas.ts",
+      "layer": 2,
+      "degree": 1,
+      "cohort": 1
+    },
+    {
+      "id": "apps/server/src/ideas.ts::restore@452",
+      "name": "restore",
+      "kind": "MethodDeclaration",
+      "pkg": "apps/server",
+      "file": "ideas.ts",
+      "layer": 2,
+      "degree": 1,
+      "cohort": 1
+    },
+    {
+      "id": "apps/server/src/ideas.ts::deleteIdea@458",
+      "name": "deleteIdea",
+      "kind": "MethodDeclaration",
+      "pkg": "apps/server",
+      "file": "ideas.ts",
+      "layer": 1,
+      "degree": 2,
+      "cohort": 1
+    },
+    {
+      "id": "apps/server/src/projectDeletion.ts::DeletionSnapshot@24",
+      "name": "DeletionSnapshot",
+      "kind": "InterfaceDeclaration",
+      "pkg": "apps/server",
+      "file": "projectDeletion.ts",
+      "layer": 0,
+      "degree": 2,
+      "cohort": 1
+    },
+    {
+      "id": "apps/server/src/projectDeletion.ts::readDeletionPreview@46",
+      "name": "readDeletionPreview",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/server",
+      "file": "projectDeletion.ts",
+      "layer": 2,
+      "degree": 3,
+      "cohort": 1
+    },
+    {
+      "id": "apps/server/src/projectDeletion.ts::deleteProjectGraph@64",
+      "name": "deleteProjectGraph",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/server",
+      "file": "projectDeletion.ts",
+      "layer": 2,
+      "degree": 3,
+      "cohort": 1
+    },
+    {
+      "id": "apps/server/src/projectDeletion.ts::readDeletionSnapshot@164",
+      "name": "readDeletionSnapshot",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/server",
+      "file": "projectDeletion.ts",
+      "layer": 1,
+      "degree": 3,
+      "cohort": 1
+    },
+    {
+      "id": "apps/server/src/projectDeletion.ts::deletionToken@215",
+      "name": "deletionToken",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/server",
+      "file": "projectDeletion.ts",
+      "layer": 1,
+      "degree": 3,
+      "cohort": 1
+    },
+    {
+      "id": "apps/server/src/workspaceExport.ts::readWorkspace@42",
+      "name": "readWorkspace",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/server",
+      "file": "workspaceExport.ts",
+      "layer": 0,
+      "degree": 0,
+      "cohort": 2
+    },
+    {
+      "id": "apps/web/src/App.tsx::IdeaUndoState@176",
+      "name": "IdeaUndoState",
+      "kind": "InterfaceDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 0,
+      "degree": 5,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::App@196",
+      "name": "App",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 3,
+      "degree": 18,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::retireExternallyDeletedIdea@924",
+      "name": "retireExternallyDeletedIdea",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 1,
+      "degree": 6,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::markIdeaReviewed@940",
+      "name": "markIdeaReviewed",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 2,
+      "degree": 2,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::replaceIdeaProjects@990",
+      "name": "replaceIdeaProjects",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 2,
+      "degree": 2,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::refreshIdeasForRecovery@1041",
+      "name": "refreshIdeasForRecovery",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 0,
+      "degree": 4,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::applyAuthoritativeIdea@1057",
+      "name": "applyAuthoritativeIdea",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 0,
+      "degree": 3,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::reconcilePromotionAfterAmbiguousFailure@1075",
+      "name": "reconcilePromotionAfterAmbiguousFailure",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 1,
+      "degree": 2,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::promoteIdea@1093",
+      "name": "promoteIdea",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 2,
+      "degree": 3,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::archiveIdea@1142",
+      "name": "archiveIdea",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 2,
+      "degree": 3,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::restoreIdea@1182",
+      "name": "restoreIdea",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 2,
+      "degree": 3,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::keepFocusOnIdeaUndoToast@1218",
+      "name": "keepFocusOnIdeaUndoToast",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 0,
+      "degree": 2,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::performIdeaUndo@1229",
+      "name": "performIdeaUndo",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 2,
+      "degree": 6,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::settleIdeaUndo@1233",
+      "name": "settleIdeaUndo",
+      "kind": "VariableDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 1,
+      "degree": 2,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::holdIdeaUndoCountdown@1293",
+      "name": "holdIdeaUndoCountdown",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 0,
+      "degree": 1,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::releaseIdeaUndoCountdown@1306",
+      "name": "releaseIdeaUndoCountdown",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 0,
+      "degree": 1,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::loadLatestIdeaUndo@1325",
+      "name": "loadLatestIdeaUndo",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 2,
+      "degree": 4,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::settleIdeaUndo@1330",
+      "name": "settleIdeaUndo",
+      "kind": "VariableDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 1,
+      "degree": 2,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::deleteIdea@1355",
+      "name": "deleteIdea",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 1,
+      "degree": 3,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::updateTask@1386",
+      "name": "updateTask",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 0,
+      "degree": 1,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::retireAuthoritativeProjectDeletion@1705",
+      "name": "retireAuthoritativeProjectDeletion",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 1,
+      "degree": 2,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::readStoredIdeaUndo@3200",
+      "name": "readStoredIdeaUndo",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 1,
+      "degree": 2,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::removeStoredIdeaUndo@3236",
+      "name": "removeStoredIdeaUndo",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 0,
+      "degree": 4,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/App.tsx::removeStoredProjectUndo@3253",
+      "name": "removeStoredProjectUndo",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "App.tsx",
+      "layer": 0,
+      "degree": 2,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/IdeaSheets.tsx::IdeaActionSheet@195",
+      "name": "IdeaActionSheet",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "IdeaSheets.tsx",
+      "layer": 0,
+      "degree": 1,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/IdeaSheets.tsx::IdeaPromoteSheet@316",
+      "name": "IdeaPromoteSheet",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "IdeaSheets.tsx",
+      "layer": 1,
+      "degree": 4,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/IdeaSheets.tsx::handlePromote@346",
+      "name": "handlePromote",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "IdeaSheets.tsx",
+      "layer": 0,
+      "degree": 1,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/IdeaSheets.tsx::loadLatest@366",
+      "name": "loadLatest",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "IdeaSheets.tsx",
+      "layer": 0,
+      "degree": 1,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/IdeaSheets.tsx::IdeaDeletionSheet@491",
+      "name": "IdeaDeletionSheet",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "IdeaSheets.tsx",
+      "layer": 1,
+      "degree": 2,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/IdeaSheets.tsx::handleDelete@518",
+      "name": "handleDelete",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "IdeaSheets.tsx",
+      "layer": 0,
+      "degree": 1,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/IdeasPage.tsx::IdeaLifecycleActionLabel@11",
+      "name": "IdeaLifecycleActionLabel",
+      "kind": "TypeAliasDeclaration",
+      "pkg": "apps/web",
+      "file": "IdeasPage.tsx",
+      "layer": 0,
+      "degree": 3,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/IdeasPage.tsx::IdeaLifecycleRecovery@13",
+      "name": "IdeaLifecycleRecovery",
+      "kind": "InterfaceDeclaration",
+      "pkg": "apps/web",
+      "file": "IdeasPage.tsx",
+      "layer": 1,
+      "degree": 2,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/IdeasPage.tsx::IdeasPage@18",
+      "name": "IdeasPage",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "IdeasPage.tsx",
+      "layer": 2,
+      "degree": 11,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/IdeasPage.tsx::focusActiveTab@86",
+      "name": "focusActiveTab",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "IdeasPage.tsx",
+      "layer": 0,
+      "degree": 5,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/IdeasPage.tsx::markReviewed@90",
+      "name": "markReviewed",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "IdeasPage.tsx",
+      "layer": 1,
+      "degree": 2,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/IdeasPage.tsx::loadLatestIdeaForReview@140",
+      "name": "loadLatestIdeaForReview",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "IdeasPage.tsx",
+      "layer": 1,
+      "degree": 2,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/IdeasPage.tsx::runLifecycleAction@173",
+      "name": "runLifecycleAction",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "IdeasPage.tsx",
+      "layer": 1,
+      "degree": 3,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/IdeasPage.tsx::loadLatestIdeaForLifecycle@216",
+      "name": "loadLatestIdeaForLifecycle",
+      "kind": "FunctionDeclaration",
+      "pkg": "apps/web",
+      "file": "IdeasPage.tsx",
+      "layer": 1,
+      "degree": 3,
+      "cohort": 0
+    },
+    {
+      "id": "apps/web/src/ownerWriteResult.ts::OwnerWriteResult@1",
+      "name": "OwnerWriteResult",
+      "kind": "TypeAliasDeclaration",
+      "pkg": "apps/web",
+      "file": "ownerWriteResult.ts",
+      "layer": 0,
+      "degree": 2,
+      "cohort": 0
+    },
+    {
+      "id": "packages/contracts/src/index.ts::IdeaStatus@991",
+      "name": "IdeaStatus",
+      "kind": "TypeAliasDeclaration",
+      "pkg": "packages/contracts",
+      "file": "index.ts",
+      "layer": 0,
+      "degree": 2,
+      "cohort": 1
+    },
+    {
+      "id": "packages/contracts/src/index.ts::PromoteIdeaInput@992",
+      "name": "PromoteIdeaInput",
+      "kind": "TypeAliasDeclaration",
+      "pkg": "packages/contracts",
+      "file": "index.ts",
+      "layer": 0,
+      "degree": 0,
+      "cohort": 3
+    },
+    {
+      "id": "packages/contracts/src/index.ts::PromoteIdeaResponse@993",
+      "name": "PromoteIdeaResponse",
+      "kind": "TypeAliasDeclaration",
+      "pkg": "packages/contracts",
+      "file": "index.ts",
+      "layer": 0,
+      "degree": 0,
+      "cohort": 4
+    },
+    {
+      "id": "packages/contracts/src/index.ts::IdeaLifecycleActionInput@994",
+      "name": "IdeaLifecycleActionInput",
+      "kind": "TypeAliasDeclaration",
+      "pkg": "packages/contracts",
+      "file": "index.ts",
+      "layer": 0,
+      "degree": 0,
+      "cohort": 5
+    },
+    {
+      "id": "packages/contracts/src/index.ts::DeleteIdeaInput@997",
+      "name": "DeleteIdeaInput",
+      "kind": "TypeAliasDeclaration",
+      "pkg": "packages/contracts",
+      "file": "index.ts",
+      "layer": 0,
+      "degree": 0,
+      "cohort": 6
+    },
+    {
+      "id": "packages/contracts/src/index.ts::DeleteIdeaResponse@998",
+      "name": "DeleteIdeaResponse",
+      "kind": "TypeAliasDeclaration",
+      "pkg": "packages/contracts",
+      "file": "index.ts",
+      "layer": 0,
+      "degree": 0,
+      "cohort": 7
+    }
+  ],
+  "edges": [
+    {
+      "source": "apps/server/src/app.ts::createApp@331",
+      "target": "apps/server/src/app.ts::execute@2244",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/app.ts::createApp@331",
+      "target": "apps/server/src/app.ts::handleIdeaLifecycleAction@3139",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/app.ts::createApp@331",
+      "target": "apps/server/src/app.ts::sendIdeaNotFound@4085",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/app.ts::handleIdeaLifecycleAction@3139",
+      "target": "apps/server/src/app.ts::sendIdeaNotFound@4085",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/app.ts::createApp@331",
+      "target": "apps/server/src/app.ts::sendIdeaNotActive@4094",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/app.ts::handleIdeaLifecycleAction@3139",
+      "target": "apps/server/src/app.ts::sendIdeaNotActive@4094",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/app.ts::createApp@331",
+      "target": "apps/server/src/app.ts::sendStaleWriteError@4114",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/app.ts::handleIdeaLifecycleAction@3139",
+      "target": "apps/server/src/app.ts::sendStaleWriteError@4114",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/ideas.ts::createAccepted@87",
+      "target": "apps/server/src/ideas.ts::serializeIdea@36",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/ideas.ts::updateAccepted@122",
+      "target": "apps/server/src/ideas.ts::serializeIdea@36",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/ideas.ts::markPromotedAccepted@213",
+      "target": "apps/server/src/ideas.ts::serializeIdea@36",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/ideas.ts::setStatusAccepted@272",
+      "target": "apps/server/src/ideas.ts::serializeIdea@36",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/ideas.ts::createIdeaModule@28",
+      "target": "apps/server/src/ideas.ts::serializeIdea@36",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/ideas.ts::createIdeaModule@28",
+      "target": "apps/server/src/ideas.ts::createAccepted@87",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/ideas.ts::createIdeaModule@28",
+      "target": "apps/server/src/ideas.ts::updateAccepted@122",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/ideas.ts::createIdeaModule@28",
+      "target": "apps/server/src/ideas.ts::markPromotedAccepted@213",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/ideas.ts::archive@446",
+      "target": "apps/server/src/ideas.ts::setStatusAccepted@272",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/ideas.ts::restore@452",
+      "target": "apps/server/src/ideas.ts::setStatusAccepted@272",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/ideas.ts::deleteIdea@458",
+      "target": "apps/server/src/ideas.ts::deleteAccepted@325",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/ideas.ts::createIdeaModule@28",
+      "target": "apps/server/src/ideas.ts::projectIdsByIdea@362",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/app.ts::createApp@331",
+      "target": "apps/server/src/ideas.ts::createIdeaModule@28",
+      "crossPkg": false,
+      "crossFile": true
+    },
+    {
+      "source": "apps/server/src/app.ts::createApp@331",
+      "target": "apps/server/src/ideas.ts::deleteIdea@458",
+      "crossPkg": false,
+      "crossFile": true
+    },
+    {
+      "source": "apps/server/src/projectDeletion.ts::readDeletionSnapshot@164",
+      "target": "apps/server/src/projectDeletion.ts::DeletionSnapshot@24",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/projectDeletion.ts::deletionToken@215",
+      "target": "apps/server/src/projectDeletion.ts::DeletionSnapshot@24",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/app.ts::createApp@331",
+      "target": "apps/server/src/projectDeletion.ts::readDeletionPreview@46",
+      "crossPkg": false,
+      "crossFile": true
+    },
+    {
+      "source": "apps/server/src/app.ts::createApp@331",
+      "target": "apps/server/src/projectDeletion.ts::deleteProjectGraph@64",
+      "crossPkg": false,
+      "crossFile": true
+    },
+    {
+      "source": "apps/server/src/projectDeletion.ts::readDeletionPreview@46",
+      "target": "apps/server/src/projectDeletion.ts::readDeletionSnapshot@164",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/projectDeletion.ts::deleteProjectGraph@64",
+      "target": "apps/server/src/projectDeletion.ts::readDeletionSnapshot@164",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/projectDeletion.ts::readDeletionPreview@46",
+      "target": "apps/server/src/projectDeletion.ts::deletionToken@215",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/server/src/projectDeletion.ts::deleteProjectGraph@64",
+      "target": "apps/server/src/projectDeletion.ts::deletionToken@215",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::App@196",
+      "target": "apps/web/src/App.tsx::IdeaUndoState@176",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::performIdeaUndo@1229",
+      "target": "apps/web/src/App.tsx::IdeaUndoState@176",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::settleIdeaUndo@1233",
+      "target": "apps/web/src/App.tsx::IdeaUndoState@176",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::settleIdeaUndo@1330",
+      "target": "apps/web/src/App.tsx::IdeaUndoState@176",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::readStoredIdeaUndo@3200",
+      "target": "apps/web/src/App.tsx::IdeaUndoState@176",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::markIdeaReviewed@940",
+      "target": "apps/web/src/App.tsx::retireExternallyDeletedIdea@924",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::replaceIdeaProjects@990",
+      "target": "apps/web/src/App.tsx::retireExternallyDeletedIdea@924",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::promoteIdea@1093",
+      "target": "apps/web/src/App.tsx::retireExternallyDeletedIdea@924",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::archiveIdea@1142",
+      "target": "apps/web/src/App.tsx::retireExternallyDeletedIdea@924",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::restoreIdea@1182",
+      "target": "apps/web/src/App.tsx::retireExternallyDeletedIdea@924",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::App@196",
+      "target": "apps/web/src/App.tsx::markIdeaReviewed@940",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::App@196",
+      "target": "apps/web/src/App.tsx::replaceIdeaProjects@990",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::reconcilePromotionAfterAmbiguousFailure@1075",
+      "target": "apps/web/src/App.tsx::refreshIdeasForRecovery@1041",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::loadLatestIdeaUndo@1325",
+      "target": "apps/web/src/App.tsx::refreshIdeasForRecovery@1041",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::deleteIdea@1355",
+      "target": "apps/web/src/App.tsx::refreshIdeasForRecovery@1041",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::App@196",
+      "target": "apps/web/src/App.tsx::refreshIdeasForRecovery@1041",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::archiveIdea@1142",
+      "target": "apps/web/src/App.tsx::applyAuthoritativeIdea@1057",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::restoreIdea@1182",
+      "target": "apps/web/src/App.tsx::applyAuthoritativeIdea@1057",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::performIdeaUndo@1229",
+      "target": "apps/web/src/App.tsx::applyAuthoritativeIdea@1057",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::promoteIdea@1093",
+      "target": "apps/web/src/App.tsx::reconcilePromotionAfterAmbiguousFailure@1075",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::App@196",
+      "target": "apps/web/src/App.tsx::promoteIdea@1093",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::App@196",
+      "target": "apps/web/src/App.tsx::archiveIdea@1142",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::App@196",
+      "target": "apps/web/src/App.tsx::restoreIdea@1182",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::performIdeaUndo@1229",
+      "target": "apps/web/src/App.tsx::keepFocusOnIdeaUndoToast@1218",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::loadLatestIdeaUndo@1325",
+      "target": "apps/web/src/App.tsx::keepFocusOnIdeaUndoToast@1218",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::App@196",
+      "target": "apps/web/src/App.tsx::performIdeaUndo@1229",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::performIdeaUndo@1229",
+      "target": "apps/web/src/App.tsx::settleIdeaUndo@1233",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::App@196",
+      "target": "apps/web/src/App.tsx::holdIdeaUndoCountdown@1293",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::App@196",
+      "target": "apps/web/src/App.tsx::releaseIdeaUndoCountdown@1306",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::App@196",
+      "target": "apps/web/src/App.tsx::loadLatestIdeaUndo@1325",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::loadLatestIdeaUndo@1325",
+      "target": "apps/web/src/App.tsx::settleIdeaUndo@1330",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::App@196",
+      "target": "apps/web/src/App.tsx::deleteIdea@1355",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::App@196",
+      "target": "apps/web/src/App.tsx::updateTask@1386",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::App@196",
+      "target": "apps/web/src/App.tsx::retireAuthoritativeProjectDeletion@1705",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::App@196",
+      "target": "apps/web/src/App.tsx::readStoredIdeaUndo@3200",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::App@196",
+      "target": "apps/web/src/App.tsx::removeStoredIdeaUndo@3236",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::retireExternallyDeletedIdea@924",
+      "target": "apps/web/src/App.tsx::removeStoredIdeaUndo@3236",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::performIdeaUndo@1229",
+      "target": "apps/web/src/App.tsx::removeStoredIdeaUndo@3236",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::deleteIdea@1355",
+      "target": "apps/web/src/App.tsx::removeStoredIdeaUndo@3236",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::App@196",
+      "target": "apps/web/src/App.tsx::removeStoredProjectUndo@3253",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::retireAuthoritativeProjectDeletion@1705",
+      "target": "apps/web/src/App.tsx::removeStoredProjectUndo@3253",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/IdeasPage.tsx::IdeasPage@18",
+      "target": "apps/web/src/IdeaSheets.tsx::IdeaActionSheet@195",
+      "crossPkg": false,
+      "crossFile": true
+    },
+    {
+      "source": "apps/web/src/IdeasPage.tsx::IdeasPage@18",
+      "target": "apps/web/src/IdeaSheets.tsx::IdeaPromoteSheet@316",
+      "crossPkg": false,
+      "crossFile": true
+    },
+    {
+      "source": "apps/web/src/IdeaSheets.tsx::IdeaPromoteSheet@316",
+      "target": "apps/web/src/IdeaSheets.tsx::handlePromote@346",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/IdeaSheets.tsx::IdeaPromoteSheet@316",
+      "target": "apps/web/src/IdeaSheets.tsx::loadLatest@366",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/IdeasPage.tsx::IdeasPage@18",
+      "target": "apps/web/src/IdeaSheets.tsx::IdeaDeletionSheet@491",
+      "crossPkg": false,
+      "crossFile": true
+    },
+    {
+      "source": "apps/web/src/IdeaSheets.tsx::IdeaDeletionSheet@491",
+      "target": "apps/web/src/IdeaSheets.tsx::handleDelete@518",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/IdeasPage.tsx::IdeaLifecycleRecovery@13",
+      "target": "apps/web/src/IdeasPage.tsx::IdeaLifecycleActionLabel@11",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/IdeasPage.tsx::runLifecycleAction@173",
+      "target": "apps/web/src/IdeasPage.tsx::IdeaLifecycleActionLabel@11",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/IdeasPage.tsx::loadLatestIdeaForLifecycle@216",
+      "target": "apps/web/src/IdeasPage.tsx::IdeaLifecycleActionLabel@11",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/IdeasPage.tsx::IdeasPage@18",
+      "target": "apps/web/src/IdeasPage.tsx::IdeaLifecycleRecovery@13",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/App.tsx::App@196",
+      "target": "apps/web/src/IdeasPage.tsx::IdeasPage@18",
+      "crossPkg": false,
+      "crossFile": true
+    },
+    {
+      "source": "apps/web/src/IdeasPage.tsx::markReviewed@90",
+      "target": "apps/web/src/IdeasPage.tsx::focusActiveTab@86",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/IdeasPage.tsx::loadLatestIdeaForReview@140",
+      "target": "apps/web/src/IdeasPage.tsx::focusActiveTab@86",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/IdeasPage.tsx::runLifecycleAction@173",
+      "target": "apps/web/src/IdeasPage.tsx::focusActiveTab@86",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/IdeasPage.tsx::loadLatestIdeaForLifecycle@216",
+      "target": "apps/web/src/IdeasPage.tsx::focusActiveTab@86",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/IdeasPage.tsx::IdeasPage@18",
+      "target": "apps/web/src/IdeasPage.tsx::focusActiveTab@86",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/IdeasPage.tsx::IdeasPage@18",
+      "target": "apps/web/src/IdeasPage.tsx::markReviewed@90",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/IdeasPage.tsx::IdeasPage@18",
+      "target": "apps/web/src/IdeasPage.tsx::loadLatestIdeaForReview@140",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/IdeasPage.tsx::IdeasPage@18",
+      "target": "apps/web/src/IdeasPage.tsx::runLifecycleAction@173",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/IdeasPage.tsx::IdeasPage@18",
+      "target": "apps/web/src/IdeasPage.tsx::loadLatestIdeaForLifecycle@216",
+      "crossPkg": false,
+      "crossFile": false
+    },
+    {
+      "source": "apps/web/src/IdeaSheets.tsx::IdeaPromoteSheet@316",
+      "target": "apps/web/src/ownerWriteResult.ts::OwnerWriteResult@1",
+      "crossPkg": false,
+      "crossFile": true
+    },
+    {
+      "source": "apps/web/src/IdeasPage.tsx::IdeasPage@18",
+      "target": "apps/web/src/ownerWriteResult.ts::OwnerWriteResult@1",
+      "crossPkg": false,
+      "crossFile": true
+    },
+    {
+      "source": "apps/server/src/app.ts::execute@2244",
+      "target": "packages/contracts/src/index.ts::IdeaStatus@991",
+      "crossPkg": true,
+      "crossFile": true
+    },
+    {
+      "source": "apps/server/src/app.ts::sendIdeaNotActive@4094",
+      "target": "packages/contracts/src/index.ts::IdeaStatus@991",
+      "crossPkg": true,
+      "crossFile": true
+    }
+  ],
+  "cohorts": [
+    {
+      "id": 0,
+      "size": 39,
+      "pkgs": [
+        "apps/web"
+      ],
+      "crossPkg": false
+    },
+    {
+      "id": 1,
+      "size": 23,
+      "pkgs": [
+        "apps/server",
+        "packages/contracts"
+      ],
+      "crossPkg": true
+    },
+    {
+      "id": 2,
+      "size": 1,
+      "pkgs": [
+        "apps/server"
+      ],
+      "crossPkg": false
+    },
+    {
+      "id": 3,
+      "size": 1,
+      "pkgs": [
+        "packages/contracts"
+      ],
+      "crossPkg": false
+    },
+    {
+      "id": 4,
+      "size": 1,
+      "pkgs": [
+        "packages/contracts"
+      ],
+      "crossPkg": false
+    },
+    {
+      "id": 5,
+      "size": 1,
+      "pkgs": [
+        "packages/contracts"
+      ],
+      "crossPkg": false
+    },
+    {
+      "id": 6,
+      "size": 1,
+      "pkgs": [
+        "packages/contracts"
+      ],
+      "crossPkg": false
+    },
+    {
+      "id": 7,
+      "size": 1,
+      "pkgs": [
+        "packages/contracts"
+      ],
+      "crossPkg": false
+    }
+  ]
+}
