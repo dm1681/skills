@@ -9,6 +9,7 @@ self-contained under [`skills/`](skills/).
 | Skill | Purpose |
 | --- | --- |
 | `orchestrate-olympus` | Operate the visible, recoverable delivery control plane for `dm1681/Olympus`. |
+| `semantic-pr` | Turn any TypeScript repo's PR/branch diff into a layered, dependency-ordered, summarized walkthrough. Repository- and agent-agnostic. |
 
 Olympus now uses a parent-resident subagent loop. The current Codex task is the
 Orchestrator; it starts one reusable Reviewer first, uses one-shot Planners,
