@@ -1,8 +1,10 @@
 # Build-ready spec — Layered Semantic PR Walkthrough (v1)
 
 > Destination of wayfinder map [dm1681/skills#3](https://github.com/dm1681/skills/issues/3).
-> Every decision below traces to a resolved decision ticket. This is the spec to build v1 from.
-> Scope: **one repo at a time, TypeScript.** Olympus integration is a separate follow-on.
+> Every decision below traces to a resolved decision ticket. This is the spec v1 was built from.
+> Scope: **one repo at a time, TypeScript.** Repository- and agent-agnostic — packaged as the
+> `semantic-pr` skill (`skills/semantic-pr/`). Wiring it into any specific consumer (an orchestrator,
+> a CI job, a reviewer loop) is deliberately out of scope; the skill just produces the walkthrough.
 
 ---
 
@@ -52,8 +54,8 @@ render: Markdown walkthrough (PR comment / file)                [#8]
 - **GitHub PR adapter** = a thin later wrapper (PR number → base/head SHAs → same path).
 
 ### Target language — [#4](https://github.com/dm1681/skills/issues/4)
-- **TypeScript**, resolver backbone **ts-morph** (TS compiler API). Chosen because the review target
-  (Olympus) is a TS pnpm monorepo and TS gives compiler-accurate resolution.
+- **TypeScript**, resolver backbone **ts-morph** (TS compiler API) — compiler-accurate resolution.
+  Validated against a real TS pnpm monorepo (Olympus) as an example target, not as a dependency.
 
 ### Symbol extraction & edge detection — [#6](https://github.com/dm1681/skills/issues/6) (proven on real code)
 - **(A) hunk → symbol:** tree-sitter — smallest AST node covering each changed line, walk to the
@@ -96,7 +98,7 @@ Deferred (each is additive, none needed to make the layering land):
 - Mermaid diagrams (sequence/state/ERD)
 - Move-aware diff rendering (build body-hash detection yourself when you get to it)
 - Concept-based semantic search over summaries
-- **Olympus integration & rollout** — separate follow-on issue
+- **Consumer/orchestrator integration** (wiring into a specific reviewer loop, CI, or UI) — the skill stays general; each consumer is its own effort
 - Cross-repo / persistent cross-PR memory (LanceDB-style RAG)
 - Multi-language breadth; review-quality *judging* (this tool explains, it doesn't judge)
 
