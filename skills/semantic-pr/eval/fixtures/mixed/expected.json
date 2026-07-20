@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "1.0",
+  "meta": {
+    "repo": "mixed",
+    "base": "HEAD~1",
+    "head": "HEAD",
+    "filesChanged": 2,
+    "symbolCount": 2,
+    "edgeCount": 0,
+    "crossFile": 0,
+    "crossPkg": 0,
+    "degraded": []
+  },
+  "symbols": [
+    {
+      "id": "a.ts::fn::tbase",
+      "name": "tbase",
+      "kind": "FunctionDeclaration",
+      "file": "a.ts",
+      "pkg": "a.ts",
+      "line": 1,
+      "layer": 0,
+      "degree": 0,
+      "inCycle": false,
+      "snippet": "export function tbase() { return 1; }"
+    },
+    {
+      "id": "m.py::fn::pbase",
+      "name": "pbase",
+      "kind": "function",
+      "file": "m.py",
+      "pkg": "m.py",
+      "line": 1,
+      "layer": 0,
+      "degree": 0,
+      "inCycle": false,
+      "snippet": "def pbase():\n    return 1"
+    }
+  ],
+  "edges": [],
+  "cycles": [],
+  "groups": [
+    {
+      "id": "1f4ba1cc9939",
+      "cohort": 0,
+      "pkgs": [
+        "a.ts"
+      ],
+      "crossPkg": false,
+      "isTest": false,
+      "title": "tbase & related",
+      "summary": null,
+      "layerNotes": [],
+      "symbols": [
+        "a.ts::fn::tbase"
+      ]
+    },
+    {
+      "id": "e10277cf210e",
+      "cohort": 1,
+      "pkgs": [
+        "m.py"
+      ],
+      "crossPkg": false,
+      "isTest": false,
+      "title": "pbase & related",
+      "summary": null,
+      "layerNotes": [],
+      "symbols": [
+        "m.py::fn::pbase"
+      ]
+    }
+  ]
+}

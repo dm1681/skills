@@ -1,0 +1,115 @@
+{
+  "schemaVersion": "1.0",
+  "meta": {
+    "repo": "py-layered",
+    "base": "HEAD~1",
+    "head": "HEAD",
+    "filesChanged": 3,
+    "symbolCount": 4,
+    "edgeCount": 2,
+    "crossFile": 2,
+    "crossPkg": 0,
+    "degraded": []
+  },
+  "symbols": [
+    {
+      "id": "app/models.py::method::User.greeting",
+      "name": "User.greeting",
+      "kind": "method",
+      "file": "app/models.py",
+      "pkg": "app",
+      "line": 5,
+      "layer": 0,
+      "degree": 1,
+      "inCycle": false,
+      "snippet": "def greeting(self) -> str:\n        return \"hello \" + self.name"
+    },
+    {
+      "id": "app/models.py::fn::make_user",
+      "name": "make_user",
+      "kind": "function",
+      "file": "app/models.py",
+      "pkg": "app",
+      "line": 9,
+      "layer": 0,
+      "degree": 1,
+      "inCycle": false,
+      "snippet": "def make_user(name: str) -> User:\n    return User(name.strip())"
+    },
+    {
+      "id": "app/service.py::method::Service.welcome",
+      "name": "Service.welcome",
+      "kind": "method",
+      "file": "app/service.py",
+      "pkg": "app",
+      "line": 11,
+      "layer": 1,
+      "degree": 1,
+      "inCycle": false,
+      "snippet": "def welcome(self, name: str) -> str:\n        u = self.store.get(name)\n        return u.greeting() if u else \"no such user\""
+    },
+    {
+      "id": "app/store.py::method::Store.add",
+      "name": "Store.add",
+      "kind": "method",
+      "file": "app/store.py",
+      "pkg": "app",
+      "line": 8,
+      "layer": 1,
+      "degree": 1,
+      "inCycle": false,
+      "snippet": "def add(self, name: str) -> User:\n        u = make_user(name.lower())\n        self._users[u.name] = u\n        return u"
+    }
+  ],
+  "edges": [
+    {
+      "source": "app/service.py::method::Service.welcome",
+      "target": "app/models.py::method::User.greeting",
+      "crossPkg": false,
+      "crossFile": true,
+      "evidence": "app/service.py:13"
+    },
+    {
+      "source": "app/store.py::method::Store.add",
+      "target": "app/models.py::fn::make_user",
+      "crossPkg": false,
+      "crossFile": true,
+      "evidence": "app/store.py:9"
+    }
+  ],
+  "cycles": [],
+  "groups": [
+    {
+      "id": "e8a0dd8f658a",
+      "cohort": 0,
+      "pkgs": [
+        "app"
+      ],
+      "crossPkg": false,
+      "isTest": false,
+      "title": "User.greeting & related",
+      "summary": null,
+      "layerNotes": [],
+      "symbols": [
+        "app/models.py::method::User.greeting",
+        "app/service.py::method::Service.welcome"
+      ]
+    },
+    {
+      "id": "64a5e9a753cb",
+      "cohort": 1,
+      "pkgs": [
+        "app"
+      ],
+      "crossPkg": false,
+      "isTest": false,
+      "title": "make_user & related",
+      "summary": null,
+      "layerNotes": [],
+      "symbols": [
+        "app/models.py::fn::make_user",
+        "app/store.py::method::Store.add"
+      ]
+    }
+  ]
+}

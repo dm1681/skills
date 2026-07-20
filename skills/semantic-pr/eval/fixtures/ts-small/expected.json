@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "1.0",
+  "meta": {
+    "repo": "ts-small",
+    "base": "HEAD~1",
+    "head": "HEAD",
+    "filesChanged": 1,
+    "symbolCount": 1,
+    "edgeCount": 0,
+    "crossFile": 0,
+    "crossPkg": 0,
+    "degraded": []
+  },
+  "symbols": [
+    {
+      "id": "s.ts::fn::only",
+      "name": "only",
+      "kind": "FunctionDeclaration",
+      "file": "s.ts",
+      "pkg": "s.ts",
+      "line": 1,
+      "layer": 0,
+      "degree": 0,
+      "inCycle": false,
+      "snippet": "export function only() { return 1; }"
+    }
+  ],
+  "edges": [],
+  "cycles": [],
+  "groups": [
+    {
+      "id": "ffb549efd56f",
+      "cohort": 0,
+      "pkgs": [
+        "s.ts"
+      ],
+      "crossPkg": false,
+      "isTest": false,
+      "title": "only & related",
+      "summary": null,
+      "layerNotes": [],
+      "symbols": [
+        "s.ts::fn::only"
+      ]
+    }
+  ]
+}

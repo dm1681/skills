@@ -99,4 +99,7 @@ you may replace. Consumers decide where the output goes; the skill only produces
 - The tool reads the **working tree** while line ranges come from `head`; run it with `head` checked out.
 - Includes test files by default (the diff matches all source files); filter by path if you want product-only.
 - No move-detection or diagrams yet — deliberately deferred.
+- **Regression protection:** `npm test` runs behavioral tests plus a **golden eval** (`eval/`) that
+  snapshots the full JSON+Markdown output for six realistic fixtures. After an intended change, run
+  `UPDATE_GOLDENS=1 npm run eval` and review the diff. Output-affecting deps are version-pinned.
 - Full background: `docs/layered-semantic-pr-spec.md` and the research/prototypes under `docs/`.
