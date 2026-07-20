@@ -8,6 +8,10 @@ const short = (k: string) =>
 
 const LAYER = (l: number) => (l === 0 ? "Foundational" : `Layer ${l}`);
 
+const degradedLabel = (d: string): string =>
+  ({ "python-symbols-unavailable": "Python files skipped (python3 not found)",
+     "python-edges-unavailable": "Python dependency edges unavailable (pyright not found)" } as Record<string, string>)[d] ?? d;
+
 function renderGroup(sg: SubGroup, n: number, deps: Map<string, string[]>): string {
   const lines: string[] = [];
   const badges = sg.pkgs.map((p) => `\`${p}\``).join(" ") + (sg.crossPkg ? " · **cross-package**" : "");
@@ -45,6 +49,11 @@ export function render(a: Analysis): string {
     `analyzed in ${(m.analyzeMs / 1000).toFixed(1)}s`,
   );
   out.push("");
+  if (m.degraded?.length) {
+    out.push(`> ⚠ **Partial analysis** — ${m.degraded.map(degradedLabel).join("; ")}. ` +
+      `Some dependencies may be missing from the graph; run \`--doctor\` to see what's needed.`);
+    out.push("");
+  }
   out.push("> Changes are reorganized from the flat diff into dependency groups, each ordered " +
     "foundational-first. Read top to bottom.");
   out.push("");

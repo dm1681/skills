@@ -60,6 +60,9 @@ export interface Analysis {
     crossPkg: number;
     loadMs: number;
     analyzeMs: number;
+    /** capabilities that were unavailable this run, so the graph is partial (e.g.
+     * "python-edges-unavailable" when pyright is missing). Empty/absent = full analysis. */
+    degraded?: string[];
   };
   symbols: Symbol[];
   edges: Edge[];

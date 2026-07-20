@@ -12,7 +12,9 @@ import { analyze } from "../src/analyze.ts";
 import { group } from "../src/group.ts";
 import { label } from "../src/label.ts";
 import { toArtifact } from "../src/contract.ts";
+import { render } from "../src/render.ts";
 import { matchAny, isTestFile } from "../src/glob.ts";
+import { doctor, depsInstalled } from "../src/doctor.ts";
 
 /** Make a 2-commit repo: `base` files in commit 1, `head` files in commit 2. Returns the dir. */
 function makeRepo(base: Record<string, string>, head: Record<string, string>): string {
@@ -164,6 +166,35 @@ test("mixed TS + Python diff: both providers contribute symbols in one run", asy
     assert.ok(art.symbols.some((s) => s.name === "tbase" && s.file === "a.ts"), "TS symbol present");
     assert.ok(art.symbols.some((s) => s.name === "pbase" && s.file === "m.py"), "Python symbol present");
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("doctor: reports required checks and a coherent verdict (deps are installed under test)", () => {
+  assert.equal(depsInstalled(), true, "test run implies deps are installed");
+  const r = doctor();
+  const names = r.checks.map((c) => c.name);
+  assert.ok(names.some((n) => n.startsWith("Node.js")), "checks node version");
+  assert.ok(names.includes("git"), "checks git");
+  assert.ok(names.includes("dependencies installed"), "checks deps");
+  assert.ok(r.checks.find((c) => c.name === "dependencies installed")!.ok, "deps check passes");
+  // required checks passing means the verdict is never 'not-ready' here
+  assert.ok(["ready", "typescript-only"].includes(r.verdict), `verdict is usable: ${r.verdict}`);
+  // optional checks never flip a required failure — they only gate Python
+  for (const c of r.checks.filter((c) => c.optional)) assert.equal(typeof c.ok, "boolean");
+});
+
+test("degraded meta surfaces a Partial-analysis banner in the walkthrough", () => {
+  const analysis = {
+    meta: { repo: "x", base: "aaaa", head: "bbbb", filesChanged: 1, filesLoaded: 1, symbolCount: 1,
+      edgeCount: 0, crossFile: 0, crossPkg: 0, loadMs: 0, analyzeMs: 0, degraded: ["python-edges-unavailable"] },
+    symbols: [{ id: "x", name: "f", kind: "def", file: "m.py", pkg: "x", line: 1, layer: 0, degree: 0, stableId: "x" }],
+    edges: [], subGroups: [], cycles: [],
+  };
+  const md = render(analysis as any);
+  assert.match(md, /Partial analysis/, "banner present");
+  assert.match(md, /pyright not found/, "names the missing capability");
+  // a clean run has no banner
+  const clean = { ...analysis, meta: { ...analysis.meta, degraded: [] } };
+  assert.doesNotMatch(render(clean as any), /Partial analysis/, "no banner when not degraded");
 });
 
 test("--prev reuse: unchanged group ids carry a prior summary forward", async () => {

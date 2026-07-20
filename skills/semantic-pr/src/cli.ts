@@ -1,14 +1,16 @@
 #!/usr/bin/env -S npx tsx
 // Layered semantic PR walkthrough — CLI. See docs/layered-semantic-pr-spec.md
+// Note: heavy deps (ts-morph via analyze, graphology via group) are imported *dynamically*
+// inside main(), after the first-run guard — so a missing install yields a clear instruction
+// instead of a module-not-found stack trace, and `--doctor` runs with node builtins alone.
 import { writeFileSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { resolveRefs, changedRanges } from "./ingest.ts";
-import { analyze } from "./analyze.ts";
-import { group } from "./group.ts";
 import { label, type Reuse } from "./label.ts";
 import { render } from "./render.ts";
 import { toArtifact } from "./contract.ts";
 import { matchAny } from "./glob.ts";
+import { doctor, formatDoctor, depsInstalled } from "./doctor.ts";
 import type { Analysis } from "./types.ts";
 
 function parseArgs(argv: string[]) {
@@ -22,6 +24,22 @@ function parseArgs(argv: string[]) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+
+  // Preflight: `--doctor` prints a readiness report and exits (non-zero only if not ready).
+  if ("doctor" in args) {
+    const report = doctor();
+    process.stdout.write(formatDoctor(report) + "\n");
+    process.exit(report.verdict === "not-ready" ? 1 : 0);
+  }
+
+  // First-run guard: refuse with the exact fix instead of a cryptic module-not-found trace.
+  if (!depsInstalled()) {
+    console.error("semantic-pr: dependencies are not installed.\n→ run: npm install   (in this skill's directory)\n  then re-run, or `--doctor` to check readiness.");
+    process.exit(1);
+  }
+  const { analyze } = await import("./analyze.ts");
+  const { group } = await import("./group.ts");
+
   const repo = resolve(args.repo || ".");
   const { baseRef, headRef } = resolveRefs(repo, args.base, args.head);
 
@@ -40,8 +58,9 @@ async function main() {
   }
   if (!changed.length) { console.error("No TypeScript/Python changes in range."); process.exit(0); }
 
-  const { symbols, edges, loadMs, analyzeMs, filesLoaded } = await analyze(repo, changed);
+  const { symbols, edges, loadMs, analyzeMs, filesLoaded, degraded } = await analyze(repo, changed);
   console.error(`[analyze] ${symbols.length} symbols, ${edges.length} edges (load ${loadMs}ms, total ${analyzeMs}ms)`);
+  if (degraded.length) console.error(`[analyze] ⚠ degraded: ${degraded.join(", ")} — the graph is partial (run \`--doctor\`)`);
 
   const { subGroups, cycles } = group(symbols, edges);
   console.error(`[group] ${subGroups.length} sub-groups${cycles.length ? `, ${cycles.length} cycle(s)` : ""}`);
@@ -66,7 +85,7 @@ async function main() {
       symbolCount: symbols.length, edgeCount: edges.length,
       crossFile: edges.filter((e) => e.crossFile).length,
       crossPkg: edges.filter((e) => e.crossPkg).length,
-      loadMs, analyzeMs,
+      loadMs, analyzeMs, degraded,
     },
     symbols, edges, subGroups: labeled,
     cycles: cycles.map((c) => c.map((s) => s.stableId)),

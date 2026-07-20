@@ -30,7 +30,8 @@ The stable, versioned artifact a consumer can depend on. Emitted with `--json`. 
     "repo": "olympus", "base": "<sha>", "head": "<sha>",
     "filesChanged": 18, "filesLoaded": 43,
     "symbolCount": 71, "edgeCount": 95, "crossFile": 12, "crossPkg": 2,
-    "loadMs": 983, "analyzeMs": 2309            // run-varying; not part of stability
+    "loadMs": 983, "analyzeMs": 2309,           // run-varying; not part of stability
+    "degraded": []                             // capabilities unavailable this run (see below); [] = full
   },
   "symbols": [
     { "id": "apps/web/src/App.tsx::fn::promoteIdea", "name": "promoteIdea",
@@ -65,6 +66,7 @@ The stable, versioned artifact a consumer can depend on. Emitted with `--json`. 
 | `edges[]` | `source` **depends on** `target`. `crossPkg`/`crossFile` flag boundary-crossing edges. `evidence` is a `file:line` reference site (the inspectable citation for the edge; `null` only if unavailable). |
 | `cycles[]` | dependency cycles among changed symbols, each a list of member stableIds. Empty when the changed-set is acyclic. |
 | `groups[]` | a feature group inside a dependency cohort. `cohort` is the connected-component index; groups within a large cohort are split by community detection. `isTest` groups render last (verification). `symbols` are member ids in layer order. `summary` is `null` until the invoking agent fills it. |
+| `meta.degraded` | capabilities that were unavailable this run, so the graph is **partial**. `[]`/absent = full analysis. Known values: `"python-symbols-unavailable"` (python3 missing — Python files skipped), `"python-edges-unavailable"` (pyright missing — Python symbols present but no edges). A non-empty list means edge/symbol counts undercount reality; run `--doctor` to see what's missing. |
 
 ## Versioning policy
 

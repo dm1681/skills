@@ -29,6 +29,9 @@ export interface ProviderResult {
   symbols: RawSymbol[];
   edges: RawEdge[];
   filesLoaded: number;
+  /** capabilities this provider couldn't use this run, making its slice of the graph partial
+   * (e.g. "python-edges-unavailable" when pyright is missing). Surfaced in the artifact meta. */
+  degraded?: string[];
 }
 
 export interface LanguageProvider {
