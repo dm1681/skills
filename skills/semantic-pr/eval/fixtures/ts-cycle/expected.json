@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "1.0",
+  "meta": {
+    "repo": "ts-cycle",
+    "base": "HEAD~1",
+    "head": "HEAD",
+    "filesChanged": 1,
+    "symbolCount": 2,
+    "edgeCount": 2,
+    "crossFile": 0,
+    "crossPkg": 0,
+    "degraded": []
+  },
+  "symbols": [
+    {
+      "id": "c.ts::fn::f",
+      "name": "f",
+      "kind": "FunctionDeclaration",
+      "file": "c.ts",
+      "pkg": "c.ts",
+      "line": 1,
+      "layer": 2,
+      "degree": 2,
+      "inCycle": true,
+      "snippet": "export function f() { return g(); }"
+    },
+    {
+      "id": "c.ts::fn::g",
+      "name": "g",
+      "kind": "FunctionDeclaration",
+      "file": "c.ts",
+      "pkg": "c.ts",
+      "line": 2,
+      "layer": 1,
+      "degree": 2,
+      "inCycle": true,
+      "snippet": "export function g() { return f(); }"
+    }
+  ],
+  "edges": [
+    {
+      "source": "c.ts::fn::g",
+      "target": "c.ts::fn::f",
+      "crossPkg": false,
+      "crossFile": false,
+      "evidence": "c.ts:2"
+    },
+    {
+      "source": "c.ts::fn::f",
+      "target": "c.ts::fn::g",
+      "crossPkg": false,
+      "crossFile": false,
+      "evidence": "c.ts:1"
+    }
+  ],
+  "cycles": [
+    [
+      "c.ts::fn::g",
+      "c.ts::fn::f"
+    ]
+  ],
+  "groups": [
+    {
+      "id": "95815bebfb24",
+      "cohort": 0,
+      "pkgs": [
+        "c.ts"
+      ],
+      "crossPkg": false,
+      "isTest": false,
+      "title": "g & related",
+      "summary": null,
+      "layerNotes": [],
+      "symbols": [
+        "c.ts::fn::g",
+        "c.ts::fn::f"
+      ]
+    }
+  ]
+}

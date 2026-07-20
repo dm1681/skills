@@ -1,0 +1,137 @@
+{
+  "schemaVersion": "1.0",
+  "meta": {
+    "repo": "ts-layered",
+    "base": "HEAD~1",
+    "head": "HEAD",
+    "filesChanged": 4,
+    "symbolCount": 5,
+    "edgeCount": 5,
+    "crossFile": 4,
+    "crossPkg": 3,
+    "degraded": []
+  },
+  "symbols": [
+    {
+      "id": "apps/server/src/service.ts::fn::createIdea",
+      "name": "createIdea",
+      "kind": "FunctionDeclaration",
+      "file": "apps/server/src/service.ts",
+      "pkg": "apps/server",
+      "line": 2,
+      "layer": 2,
+      "degree": 4,
+      "inCycle": false,
+      "snippet": "export function createIdea(title: string): Idea { return makeIdea(\"gen\", title.trim()); }"
+    },
+    {
+      "id": "apps/server/tests/service.test.ts::fn::testCreate",
+      "name": "testCreate",
+      "kind": "FunctionDeclaration",
+      "file": "apps/server/tests/service.test.ts",
+      "pkg": "apps/server",
+      "line": 2,
+      "layer": 3,
+      "degree": 1,
+      "inCycle": false,
+      "snippet": "export function testCreate(): boolean { return createIdea(\" x \").title === \"x\"; }"
+    },
+    {
+      "id": "apps/web/src/ui.ts::fn::onSubmit",
+      "name": "onSubmit",
+      "kind": "FunctionDeclaration",
+      "file": "apps/web/src/ui.ts",
+      "pkg": "apps/web",
+      "line": 2,
+      "layer": 3,
+      "degree": 1,
+      "inCycle": false,
+      "snippet": "export function onSubmit(title: string) { return createIdea(title.toUpperCase()); }"
+    },
+    {
+      "id": "packages/contracts/src/index.ts::interface::Idea",
+      "name": "Idea",
+      "kind": "InterfaceDeclaration",
+      "file": "packages/contracts/src/index.ts",
+      "pkg": "packages/contracts",
+      "line": 1,
+      "layer": 0,
+      "degree": 2,
+      "inCycle": false,
+      "snippet": "export interface Idea { id: string; title: string; createdAt: number; }"
+    },
+    {
+      "id": "packages/contracts/src/index.ts::fn::makeIdea",
+      "name": "makeIdea",
+      "kind": "FunctionDeclaration",
+      "file": "packages/contracts/src/index.ts",
+      "pkg": "packages/contracts",
+      "line": 2,
+      "layer": 1,
+      "degree": 2,
+      "inCycle": false,
+      "snippet": "export function makeIdea(id: string, title: string): Idea { return { id, title, createdAt: 0 }; }"
+    }
+  ],
+  "edges": [
+    {
+      "source": "apps/server/tests/service.test.ts::fn::testCreate",
+      "target": "apps/server/src/service.ts::fn::createIdea",
+      "crossPkg": false,
+      "crossFile": true,
+      "evidence": "apps/server/tests/service.test.ts:2"
+    },
+    {
+      "source": "apps/web/src/ui.ts::fn::onSubmit",
+      "target": "apps/server/src/service.ts::fn::createIdea",
+      "crossPkg": true,
+      "crossFile": true,
+      "evidence": "apps/web/src/ui.ts:2"
+    },
+    {
+      "source": "packages/contracts/src/index.ts::fn::makeIdea",
+      "target": "packages/contracts/src/index.ts::interface::Idea",
+      "crossPkg": false,
+      "crossFile": false,
+      "evidence": "packages/contracts/src/index.ts:2"
+    },
+    {
+      "source": "apps/server/src/service.ts::fn::createIdea",
+      "target": "packages/contracts/src/index.ts::interface::Idea",
+      "crossPkg": true,
+      "crossFile": true,
+      "evidence": "apps/server/src/service.ts:2"
+    },
+    {
+      "source": "apps/server/src/service.ts::fn::createIdea",
+      "target": "packages/contracts/src/index.ts::fn::makeIdea",
+      "crossPkg": true,
+      "crossFile": true,
+      "evidence": "apps/server/src/service.ts:2"
+    }
+  ],
+  "cycles": [],
+  "groups": [
+    {
+      "id": "04e499fcac3d",
+      "cohort": 0,
+      "pkgs": [
+        "packages/contracts",
+        "apps/server",
+        "apps/web"
+      ],
+      "crossPkg": true,
+      "isTest": false,
+      "title": "createIdea & related",
+      "summary": null,
+      "layerNotes": [],
+      "symbols": [
+        "packages/contracts/src/index.ts::interface::Idea",
+        "packages/contracts/src/index.ts::fn::makeIdea",
+        "apps/server/src/service.ts::fn::createIdea",
+        "apps/server/tests/service.test.ts::fn::testCreate",
+        "apps/web/src/ui.ts::fn::onSubmit"
+      ]
+    }
+  ]
+}

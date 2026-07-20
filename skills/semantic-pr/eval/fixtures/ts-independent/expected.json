@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "1.0",
+  "meta": {
+    "repo": "ts-independent",
+    "base": "HEAD~1",
+    "head": "HEAD",
+    "filesChanged": 2,
+    "symbolCount": 2,
+    "edgeCount": 0,
+    "crossFile": 0,
+    "crossPkg": 0,
+    "degraded": []
+  },
+  "symbols": [
+    {
+      "id": "x.ts::fn::alpha",
+      "name": "alpha",
+      "kind": "FunctionDeclaration",
+      "file": "x.ts",
+      "pkg": "x.ts",
+      "line": 1,
+      "layer": 0,
+      "degree": 0,
+      "inCycle": false,
+      "snippet": "export function alpha() { return 1; }"
+    },
+    {
+      "id": "y.ts::fn::beta",
+      "name": "beta",
+      "kind": "FunctionDeclaration",
+      "file": "y.ts",
+      "pkg": "y.ts",
+      "line": 1,
+      "layer": 0,
+      "degree": 0,
+      "inCycle": false,
+      "snippet": "export function beta() { return 2; }"
+    }
+  ],
+  "edges": [],
+  "cycles": [],
+  "groups": [
+    {
+      "id": "17619231c633",
+      "cohort": 0,
+      "pkgs": [
+        "x.ts"
+      ],
+      "crossPkg": false,
+      "isTest": false,
+      "title": "alpha & related",
+      "summary": null,
+      "layerNotes": [],
+      "symbols": [
+        "x.ts::fn::alpha"
+      ]
+    },
+    {
+      "id": "3121d396d486",
+      "cohort": 1,
+      "pkgs": [
+        "y.ts"
+      ],
+      "crossPkg": false,
+      "isTest": false,
+      "title": "beta & related",
+      "summary": null,
+      "layerNotes": [],
+      "symbols": [
+        "y.ts::fn::beta"
+      ]
+    }
+  ]
+}

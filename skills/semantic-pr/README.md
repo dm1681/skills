@@ -53,10 +53,37 @@ forward for unchanged groups.
 
 ## Tests
 
-`npm test` — Node-native tests (`tests/pipeline.test.ts`) build tiny synthetic git repos and run the
-real pipeline: TS multi-layer layering + cross-file edge with evidence, cycle detection, small-PR
-degradation, cross-run stable ids, path globs / test detection, `--prev` reuse, **Python cross-file
-edges via pyright, Python class-qualified method names, and a mixed TS+Python diff in one run**.
+`npm test` runs two layers:
+
+- **Behavioral** (`tests/pipeline.test.ts`) — build tiny synthetic git repos and assert specific
+  properties: TS multi-layer layering + cross-file edge with evidence, cycle detection, small-PR
+  degradation, cross-run stable ids, path globs / test detection, `--prev` reuse, Python cross-file
+  edges via pyright, Python class-qualified method names, a mixed TS+Python diff, `--doctor`
+  readiness, and the degraded-analysis banner.
+- **Golden** (`tests/golden.test.ts` + `eval/`) — snapshot the *entire* artifact (JSON + Markdown)
+  for six realistic fixtures, so any unintended change anywhere in the output fails the gate.
+
+### Golden eval (`eval/`)
+
+Each fixture is `eval/fixtures/<name>/{base,head}/**` (plain source; a throwaway git repo is
+materialized at run time). Deterministic output makes full-output snapshotting reliable.
+
+```bash
+npm run eval                      # assert every fixture matches its checked-in golden
+UPDATE_GOLDENS=1 npm run eval     # regenerate goldens after an intended change; review the diff
+```
+
+| Fixture | Exercises |
+|---|---|
+| `ts-layered` | monorepo `apps/`→`packages/`: multi-layer foundation→consumer, **cross-package** edges, a test ordered last |
+| `ts-cycle` | cycle surfaced, no false topological order |
+| `ts-independent` | unrelated changes stay separate cohorts |
+| `ts-small` | single-symbol PR → short walkthrough |
+| `py-layered` | Python cross-file edges via pyright (typed `models`→`store`→`service`) |
+| `mixed` | TS + Python in one diff |
+
+Output-affecting deps (`ts-morph`, `typescript`, `graphology*`, `pyright`) are **pinned** so goldens
+stay reproducible; a deliberate dep bump is a golden regeneration you review.
 
 ## Known v1 limitations (from the spec's fog list)
 
