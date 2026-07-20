@@ -11,10 +11,15 @@ foundational-first, ready for the invoking agent to summarize. Implements
 
 ```bash
 cd skills/semantic-pr && npm install
+npx tsx src/cli.ts --doctor      # readiness check (node, git, deps, python3, pyright) — run this first
 npx tsx src/cli.ts --repo /path/to/repo --base <ref> --head <ref> --out walkthrough.md --json out.json
 ```
 
-Flags: `--repo` (default `.`), `--base` (default = merge-base with the default branch),
+Requires **Node ≥ 18** + **git**; **python3** + bundled **pyright** are optional and enable Python.
+Missing deps → the run refuses with `→ run: npm install` (not a stack trace); missing python3/pyright
+→ the run succeeds but stamps a `degraded` list into the JSON meta and a banner in the walkthrough.
+
+Flags: `--doctor` (readiness report, then exit), `--repo` (default `.`), `--base` (default = merge-base with the default branch),
 `--head` (default `HEAD`), `--out` (Markdown file; else stdout), `--json` (stable artifact),
 `--prev <artifact.json>` (reuse unchanged groups' summaries), `--include`/`--exclude` (comma-separated
 path globs; tests are included by default and rendered last as a "Verification / tests" section).

@@ -21,15 +21,16 @@ interface PySym extends RawSymbol {
   nameChar: number; // 0-based
 }
 
-/** Extract changed symbols via the stdlib-`ast` helper. Returns [] if python3/parse fails. */
-function extract(repo: string, changed: ChangedRange[]): PySym[] {
+/** Extract changed symbols via the stdlib-`ast` helper. Returns null if python3 is
+ * unavailable (a degraded run), or the symbol list (possibly empty) on success. */
+function extract(repo: string, changed: ChangedRange[]): PySym[] | null {
   const job = JSON.stringify({ repo, files: changed.map((c) => ({ file: c.file, ranges: c.ranges })) });
   let raw: string;
   try {
     raw = execFileSync("python3", [EXTRACT], { input: job, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   } catch (e) {
-    console.error(`[python] extraction failed (python3 available?): ${(e as Error).message}`);
-    return [];
+    console.error(`[python] python3 unavailable — cannot extract Python symbols: ${(e as Error).message}`);
+    return null;
   }
   const parsed = JSON.parse(raw) as { symbols: Array<Omit<PySym, "pkg">> };
   return parsed.symbols.map((s) => ({ ...s, pkg: pkgOf(repo, join(repo, s.file)) }));
@@ -78,11 +79,12 @@ class Pyright {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Drive pyright to find edges among the changed symbols. Degrades to [] on any LSP failure. */
-async function edgesViaPyright(repo: string, syms: PySym[]): Promise<RawEdge[]> {
+/** Drive pyright to find edges among the changed symbols. `pyrightOk` is false when pyright is
+ * unavailable (symbols emitted without edges — a degraded run), true otherwise even if 0 edges. */
+async function edgesViaPyright(repo: string, syms: PySym[]): Promise<{ edges: RawEdge[]; pyrightOk: boolean }> {
   if (!existsSync(PYRIGHT)) {
     console.error("[python] pyright-langserver not found — emitting symbols without edges");
-    return [];
+    return { edges: [], pyrightOk: false };
   }
   // per-file changed-symbol intervals, innermost-first, for enclosing lookup
   const byFile = new Map<string, PySym[]>();
@@ -135,13 +137,14 @@ async function edgesViaPyright(repo: string, syms: PySym[]): Promise<RawEdge[]> 
         }
       }
     }
-    return [...edgeEv].map(([e, evidence]) => {
+    const edges = [...edgeEv].map(([e, evidence]) => {
       const [source, target] = e.split("==>");
       return { source, target, evidence };
     });
+    return { edges, pyrightOk: true };
   } catch (e) {
     console.error(`[python] pyright edge resolution failed: ${(e as Error).message}`);
-    return [];
+    return { edges: [], pyrightOk: false };
   } finally {
     py.kill();
   }
@@ -149,12 +152,16 @@ async function edgesViaPyright(repo: string, syms: PySym[]): Promise<RawEdge[]> 
 
 async function analyzePy(repo: string, changed: ChangedRange[]): Promise<ProviderResult> {
   const pySyms = extract(repo, changed);
+  if (pySyms === null) {
+    // python3 unavailable: the whole Python slice is missing, not just edges.
+    return { symbols: [], edges: [], filesLoaded: 0, degraded: ["python-symbols-unavailable"] };
+  }
   if (!pySyms.length) return { symbols: [], edges: [], filesLoaded: 0 };
-  const edges = await edgesViaPyright(repo, pySyms);
+  const { edges, pyrightOk } = await edgesViaPyright(repo, pySyms);
   const filesLoaded = new Set(pySyms.map((s) => s.file)).size;
   // strip Python-only positional fields; the shared finalize wants a plain RawSymbol
   const symbols: RawSymbol[] = pySyms.map(({ endLine, nameLine, nameChar, ...s }) => s);
-  return { symbols, edges, filesLoaded };
+  return { symbols, edges, filesLoaded, degraded: pyrightOk ? [] : ["python-edges-unavailable"] };
 }
 
 export const pythonProvider: LanguageProvider = {

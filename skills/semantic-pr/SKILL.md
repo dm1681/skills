@@ -21,17 +21,33 @@ Scope today: **TypeScript / TSX** (via the TS compiler, ts-morph) and **Python**
 for extraction + pyright's language server for precise references). Mixed-language diffs work in one
 run — each file is routed to its language provider and the results are merged. One repo at a time.
 
-## How to run
+## Before first run (preconditions)
 
-The tool lives in this skill directory. First run installs dependencies.
+Required: **Node.js ≥ 18** and **git**. Optional (enables Python): **python3** and the bundled
+**pyright** (installed by `npm install`). The tool reads the working tree, so check out `head` first.
+
+One-time setup, then a readiness check:
 
 ```bash
 cd "$(dirname SKILL.md)"        # this skill's directory
-npm install                     # once
+npm install                     # once — installs ts-morph, graphology, pyright, tsx
+npx tsx src/cli.ts --doctor     # ✓/✗ readiness report with the exact fix for anything missing
+```
+
+`--doctor` prints one of three verdicts: **ready** (TS + Python), **typescript-only** (TS works;
+install python3/deps for Python), or **not-ready** (required deps missing — it names them and how to
+fix). If dependencies aren't installed, a normal run refuses with `→ run: npm install` rather than a
+stack trace. If python3/pyright are missing while Python files are in the diff, the run still succeeds
+but **stamps the partial result** — a banner in the walkthrough and a `degraded` list in the JSON meta.
+
+## How to run
+
+```bash
 npx tsx src/cli.ts --repo /path/to/checkout --out walkthrough.md
 ```
 
 Flags:
+- `--doctor` — print the readiness report and exit (non-zero only if not-ready); run no analysis.
 - `--repo <path>` — any local git checkout (default `.`).
 - `--base <ref>` — default = merge-base with the default branch.
 - `--head <ref>` — default `HEAD`.

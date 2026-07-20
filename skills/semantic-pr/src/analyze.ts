@@ -29,12 +29,14 @@ export async function analyze(repo: string, changed: ChangedRange[]) {
   // across providers; merge order = provider registration order (deterministic).
   const rawSymbols: import("./providers/types.ts").RawSymbol[] = [];
   const rawEdges: import("./providers/types.ts").RawEdge[] = [];
+  const degraded: string[] = [];
   let filesLoaded = 0;
   for (const { provider, files } of active) {
     const res = await provider.analyze(repo, files);
     rawSymbols.push(...res.symbols);
     rawEdges.push(...res.edges);
     filesLoaded += res.filesLoaded;
+    if (res.degraded?.length) degraded.push(...res.degraded);
   }
   const loadMs = Date.now() - t0;
 
@@ -68,5 +70,5 @@ export async function analyze(repo: string, changed: ChangedRange[]) {
     s.stableId = n === 0 ? base : `${base}#${n + 1}`;
   }
 
-  return { symbols, edges, loadMs, analyzeMs: Date.now() - t0, filesLoaded };
+  return { symbols, edges, loadMs, analyzeMs: Date.now() - t0, filesLoaded, degraded };
 }
