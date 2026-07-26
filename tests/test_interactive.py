@@ -250,7 +250,9 @@ class InteractiveTests(unittest.TestCase):
 
     def test_project_wizard_uses_explicit_agent_and_link_mode(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            args = INSTALLER.parser().parse_args([])
+            home = Path(directory) / "home"
+            home.mkdir()
+            args = INSTALLER.parser().parse_args(["--home", str(home)])
             # project, path, Codex, link, no Matt skills, no Graphify, proceed
             answers = f"2\n{directory}\n2\n2\nn\nn\ny\n"
             console = INSTALLER.Console(
@@ -278,32 +280,102 @@ class InteractiveTests(unittest.TestCase):
         self.assertLessEqual(max(map(len, output.getvalue().splitlines())), 24)
 
     def test_cancel_returns_without_changes(self) -> None:
-        args = INSTALLER.parser().parse_args([])
-        # default scope, agent, mode, no Matt skills, no Graphify, cancel at review
-        output = TTYBuffer()
-        console = INSTALLER.Console(
-            TTYBuffer("\n\n\nn\nn\nn\n"),
-            output,
-            color=False,
-            unicode=False,
-            width=72,
-        )
-        self.assertFalse(INSTALLER.run_wizard(args, [SKILL], console))
-        self.assertIn("No changes made", output.getvalue())
+        with tempfile.TemporaryDirectory() as directory:
+            args = INSTALLER.parser().parse_args(["--home", directory])
+            # default scope, agent, mode, no Matt skills, no Graphify, cancel at review
+            output = TTYBuffer()
+            console = INSTALLER.Console(
+                TTYBuffer("\n\n\nn\nn\nn\n"),
+                output,
+                color=False,
+                unicode=False,
+                width=72,
+            )
+            self.assertFalse(INSTALLER.run_wizard(args, [SKILL], console))
+            self.assertIn("No changes made", output.getvalue())
 
     def test_declining_matt_skills_warns_that_olympus_is_incomplete(self) -> None:
-        args = INSTALLER.parser().parse_args([])
-        output = TTYBuffer()
-        console = INSTALLER.Console(
-            TTYBuffer("\n\n\nn\nn\ny\n"),
-            output,
-            color=False,
-            unicode=False,
-            width=72,
-        )
-        self.assertTrue(INSTALLER.run_wizard(args, [SKILL], console))
-        self.assertFalse(args.matt_skills)
-        self.assertIn("required by Olympus", output.getvalue())
+        with tempfile.TemporaryDirectory() as directory:
+            args = INSTALLER.parser().parse_args(["--home", directory])
+            output = TTYBuffer()
+            console = INSTALLER.Console(
+                TTYBuffer("\n\n\nn\nn\ny\n"),
+                output,
+                color=False,
+                unicode=False,
+                width=72,
+            )
+            self.assertTrue(INSTALLER.run_wizard(args, [SKILL], console))
+            self.assertFalse(args.matt_skills)
+            self.assertIn("required by Olympus", output.getvalue())
+
+    def stale_home(self, directory: str) -> Path:
+        """A home directory holding an installed skill that differs from this release."""
+        home = Path(directory)
+        destination = home / ".agents" / "skills" / SKILL
+        destination.mkdir(parents=True)
+        (destination / "SKILL.md").write_text("stale local edit\n", encoding="utf-8")
+        return home
+
+    def test_existing_differing_installations_ask_before_replacing(self) -> None:
+        """The backup confirmation is an extra prompt, so it must be covered.
+
+        Without it, every wizard test that omits --home silently inherits the
+        developer's own skill directories and passes or fails on whether those
+        happen to match the repository.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            home = self.stale_home(directory)
+            args = INSTALLER.parser().parse_args(["--home", str(home)])
+            output = TTYBuffer()
+            # scope, agents, mode, no Matt skills, no Graphify, back up, apply
+            console = INSTALLER.Console(
+                TTYBuffer("\n\n\nn\nn\ny\ny\n"),
+                output,
+                color=False,
+                unicode=False,
+                width=72,
+            )
+            self.assertTrue(INSTALLER.run_wizard(args, [SKILL], console))
+            self.assertTrue(args.force)
+            rendered = output.getvalue()
+            self.assertIn("Existing installations", rendered)
+            self.assertIn("1 installed skill path differs", rendered)
+
+    def test_backup_warning_agrees_with_the_number_of_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = self.stale_home(directory)
+            for root in (".claude",):
+                destination = home / root / "skills" / SKILL
+                destination.mkdir(parents=True)
+                (destination / "SKILL.md").write_text("stale\n", encoding="utf-8")
+            args = INSTALLER.parser().parse_args(["--home", str(home)])
+            output = TTYBuffer()
+            console = INSTALLER.Console(
+                TTYBuffer("\n\n\nn\nn\ny\ny\n"),
+                output,
+                color=False,
+                unicode=False,
+                width=72,
+            )
+            self.assertTrue(INSTALLER.run_wizard(args, [SKILL], console))
+            self.assertIn("2 installed skill paths differ from", output.getvalue())
+
+    def test_declining_the_backup_confirmation_makes_no_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = self.stale_home(directory)
+            args = INSTALLER.parser().parse_args(["--home", str(home)])
+            output = TTYBuffer()
+            console = INSTALLER.Console(
+                TTYBuffer("\n\n\nn\nn\nn\n"),
+                output,
+                color=False,
+                unicode=False,
+                width=72,
+            )
+            self.assertFalse(INSTALLER.run_wizard(args, [SKILL], console))
+            self.assertFalse(args.force)
+            self.assertIn("No changes made", output.getvalue())
 
 
 if __name__ == "__main__":
