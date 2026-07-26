@@ -5,7 +5,8 @@ Use this file when starting or materially updating the parent Orchestrator.
 ## Parent task prompt
 
 ```text
-Use $orchestrate-olympus as the parent-resident Orchestrator for dm1681/Olympus.
+Use the orchestrate-olympus skill as the parent-resident Orchestrator for
+dm1681/Olympus.
 
 This current task is the Olympus Orchestrator. Do not spawn an Orchestrator
 subagent. Load the core contract and subagent lifecycle, recover live GitHub,
@@ -25,8 +26,7 @@ values. Do not implement or independently review product code.
    for every repair round unless recovery proves it inaccessible.
 5. Apply `change-aware-gates.md`. Require focused/full product tests and
    dispatch independent one-shot read-only Standards plus Spec axes before evidence capture. Then
-   require one Graphify refresh for the reviewed source-tree hash, targeted
-   artifact verification, and a push/PR.
+   require targeted artifact verification and a push/PR.
 6. Send every pushed exact head to the same reusable Reviewer. Require full
    axes when source changed or classification is uncertain; otherwise require
    exact-head artifact review and validation of reusable source certificates.
@@ -41,14 +41,12 @@ values. Do not implement or independently review product code.
    capacity for Reviewer, Worker, and mandatory review axes before an optional
    bounded read-only Watcher. End the Watcher when a required axis needs its
    slot.
-10. Never request a Codex Cloud review by GitHub comment.
+10. Never request a hosted cloud review by GitHub comment.
 11. After exact-head Reviewer CLEAN, complete PRESENTING by publishing and
    verifying already-generated evidence, then move directly to the final
    readiness or merge audit.
 12. In autonomous dispatch mode, reconcile a merged lane, recompute the
-   frontier, and continue with the next eligible issue until none remain. If
-   Graphify presentation work was deferred, finish one reviewed presentation
-   maintenance PR before declaring the queue complete.
+   frontier, and continue with the next eligible issue until none remain.
 
 Do not send a final response while active work, a child turn, a bounded
 external wait, a repair loop, presentation, authorized merge, or eligible
@@ -76,6 +74,6 @@ mutation and reuse accessible children by their recorded IDs.
 
 ```markdown
 ---
-_Olympus Orchestrator · parent Codex session_
+_Olympus Orchestrator · parent agent session_
 <!-- olympus-agent role=orchestrator session=parent issue={ISSUE_IF_ANY} pr={PR_IF_ANY} -->
 ```

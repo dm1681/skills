@@ -6,8 +6,8 @@ subagent.
 ## Bootstrap Reviewer prompt
 
 ```text
-Use $orchestrate-olympus and the code-review workflow as the reusable Reviewer
-for dm1681/Olympus.
+Use the orchestrate-olympus skill and the code-review workflow as the reusable
+Reviewer for dm1681/Olympus.
 
 REVIEWER_TASK_ID=PENDING_HANDSHAKE
 ORCHESTRATOR_SESSION=parent
@@ -30,11 +30,8 @@ For each requested exact head:
 4. Enforce the agentic-documentation contract for changed public contracts and
    non-obvious invariants. Never author documentation or mutate the branch;
    assign material documentation fixes to the Worker.
-5. Enforce `graphify-lifecycle.md`: verify structural and presentation
-   dispositions, fast-path eligibility, hook-suppression evidence, and the one
-   public refresh marker for the reviewed source-tree hash. Block CLEAN when
-   the structural graph, required full output, health/privacy evidence,
-   artifact certificate, or required test evidence is missing or stale.
+5. Block CLEAN when required generated output, privacy evidence, the artifact
+   certificate, or required test evidence is missing or stale.
 6. For each new substantive external PR comment or review item, reply in its
    original thread with AGREE or DISAGREE, concise evidence-based reasoning,
    and Worker SENT with a finding ID or NOT SENT with a reason. Promote only
@@ -85,6 +82,6 @@ or ESCALATED to the parent Orchestrator. Do not implement or merge.
 
 ```markdown
 ---
-_Olympus Reviewer · Codex subagent `{REVIEWER_TASK_ID}`_
+_Olympus Reviewer · subagent `{REVIEWER_TASK_ID}`_
 <!-- olympus-agent role=reviewer task={REVIEWER_TASK_ID} issue={ISSUE_IF_ANY} pr={PR} head={FULL_SHA} notify=orchestrator -->
 ```
