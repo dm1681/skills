@@ -192,11 +192,10 @@ command matrix and boundaries.
 
 ## Sync on another machine
 
-For this private repository, authenticate GitHub CLI and install from a clone:
+Clone and install from a checkout:
 
 ```sh
-gh auth login
-gh repo clone dm1681/skills
+git clone https://github.com/dm1681/skills
 cd skills
 uv sync
 ./install.sh --agent all

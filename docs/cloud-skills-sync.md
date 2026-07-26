@@ -38,8 +38,9 @@ neutral installer, wired into each agent's own startup mechanism.
    directory with `<skill>/SKILL.md` entries), it copies them straight from the
    working tree. No network, no auth. This runs inside this repo and for any
    repo that vendors the skills.
-2. **Clone** — otherwise it clones the source repo and installs from it. The
-   source repo must be reachable from the session (see private-repo note below).
+2. **Clone** — otherwise it clones the source repo and installs from it. This
+   repo is public, so the clone needs no auth and works from any session (see
+   the source note below).
 
 Installing = copying each `<skill>/SKILL.md` directory into every destination
 root, replacing any existing copy of the same skill name. Safe to re-run.
@@ -97,20 +98,24 @@ optional):
 The Claude hook maps `CLAUDE_PROJECT_DIR` onto `AGENT_SKILLS_PROJECT_DIR`
 automatically; set the rest only if you need to override a default.
 
-## Private source repos
+## Choosing a source: vendor vs. clone
 
-`dm1681/skills` is private. In **local mode** this is a non-issue — the skills
-are read from the current working tree. In **clone mode**, the clone only
-succeeds if the source repo is reachable from that session's credentials. For a
-private source, the reliable options are:
+`dm1681/skills` is public, so **clone mode works from any session with no auth**
+and without adding the repo to the session's scope. That makes both sources
+viable — pick by what you want:
 
-- **Vendor the skills** into the target repo (copy them in, or add a git
-  submodule) so the installer uses local mode — no auth required. Set
-  `AGENT_SKILLS_SUBDIR` if you vendor them somewhere other than `skills/`.
-- **Add the source repo to the session's scope** so the clone is authorized.
+- **Vendor** (the `init-repo.sh` default) — copy the skills into the target repo
+  (or add a git submodule) so the installer uses local mode. Self-contained,
+  works offline, and pins the exact skill versions committed to that repo; the
+  cost is refreshing the copies when skills change. Set `AGENT_SKILLS_SUBDIR` if
+  you vendor them somewhere other than `skills/`.
+- **Clone** (`init-repo.sh --no-vendor`) — vendor nothing and let the installer
+  clone the source at session start. Single source of truth with no duplicated
+  content; the cost is a startup dependency on the source repo being reachable.
+  Pin with `AGENT_SKILLS_REF` if you don't want `main`.
 
-If the clone fails, the installer logs a warning and lets the session start
-normally rather than blocking it.
+If a clone ever fails (network, a private fork, a bad ref), the installer logs a
+warning and lets the session start normally rather than blocking it.
 
 ## Notes
 
