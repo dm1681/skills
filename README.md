@@ -213,13 +213,19 @@ Subagent autonomy lasts for the active parent task. If Codex exits, the machine
 restarts, or the task is ended, start a new parent task with
 `$orchestrate-olympus`; it recovers from GitHub and the compact checkpoint.
 
-## Cloud sessions (Claude Code on the web)
+## Cloud sessions (agent-agnostic)
 
-Web sessions run in a fresh, ephemeral container and do not carry your local
-`~/.claude/skills`. A `SessionStart` hook installs these skills into the
-session's `~/.claude/skills` on startup so they are discovered like any other
-skill. It is registered for this repo in [`.claude/settings.json`](.claude/settings.json)
-and is reusable in any repo. See [`docs/cloud-skills-sync.md`](docs/cloud-skills-sync.md).
+Cloud/web sessions run in a fresh, ephemeral container that does not carry your
+local user-scope skills. The agent-neutral installer
+[`scripts/sync-agent-skills.sh`](scripts/sync-agent-skills.sh) copies these
+skills into every agent's skill root (`~/.claude/skills` for Claude Code and the
+shared `~/.agents/skills` for Codex/Cursor/Copilot) so whichever agent runs the
+session discovers them. A Claude Code `SessionStart` hook
+([`.claude/hooks/session-start.sh`](.claude/hooks/session-start.sh), registered
+in [`.claude/settings.json`](.claude/settings.json)) runs it in web sessions;
+other agents can invoke the same installer from their own startup hook. The
+pattern is reusable in any repo — see
+[`docs/cloud-skills-sync.md`](docs/cloud-skills-sync.md).
 
 ## Agent directory policy
 
