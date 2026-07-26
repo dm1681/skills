@@ -16,6 +16,44 @@ This directory ships two pieces that close that gap:
   thin Claude Code `SessionStart` hook that runs the installer in web sessions.
   Registered for this repo in [`.claude/settings.json`](../.claude/settings.json).
 
+## Lightest setup: no per-repo files
+
+The hook is the per-repo route. Two options need **nothing committed to each
+repo** and are usually what you want for "spin up a new repo and forget it":
+
+### Enable skills on claude.ai (zero files, always current)
+
+Claude Code on the web loads skills you enable on claude.ai into every cloud
+session automatically. Package each skill and upload it once:
+
+```sh
+scripts/package-skills.sh          # writes dist/<skill>.zip (SKILL.md at the archive root)
+```
+
+Then in claude.ai: **Settings → Capabilities → Skills → "Upload skill"** and drag
+in each `dist/<skill>.zip`. Enabled skills appear in every cloud session with no
+repo files and no setup script, and update when you re-upload. This is the
+lightest path when the skills are yours to enable on your account.
+
+### Cloud environment setup script (zero per-repo files)
+
+A setup script is attached to the **cloud environment** (configured in the
+claude.ai web UI, not in any repo) and runs before Claude launches for every
+session in that environment. Paste this into the environment's **Setup script**
+field to install these skills from the public source repo:
+
+```bash
+#!/bin/bash
+rm -rf /opt/agent-skills
+git clone --depth 1 https://github.com/dm1681/skills /opt/agent-skills || true
+AGENT_SKILLS_PROJECT_DIR=/opt/agent-skills /opt/agent-skills/scripts/sync-agent-skills.sh || true
+```
+
+It applies to every repo used in that environment. The result is cached (the
+script re-runs only when you change the environment or after the cache expires),
+so new skills appear on the next cache rebuild; use the per-repo hook if you need
+them always fresh. Requires network access that allows cloning GitHub.
+
 ## What "agent-agnostic" means here
 
 The **installer** is fully agent-neutral: it writes to every user-scope skill
