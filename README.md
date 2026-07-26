@@ -106,8 +106,9 @@ required when `uv` is present.
 
 The interface adapts to narrow terminals and automatically uses plain text when
 color or Unicode is unavailable. Its recommended default is a user-scoped copy
-in `~/.agents/skills`, the shared location supported by Codex, Cursor, and
-GitHub Copilot.
+into every skill root: `~/.agents/skills`, the shared location supported by
+Codex, Cursor, and GitHub Copilot, and `~/.claude/skills`, which Claude Code
+reads instead of the shared directory.
 
 In an interactive terminal, use Up and Down to move between options, Space to
 toggle or choose the focused option, and Enter to confirm. Multi-select screens
@@ -118,17 +119,28 @@ Passing installer options keeps the command non-interactive, which makes it
 safe for scripts and CI. Use `--interactive` to open the wizard with preset
 options, or `--non-interactive` to explicitly suppress it.
 
-Install for every supported agent family. This writes one shared copy to
-`.agents/skills` and one Claude-specific copy to `.claude/skills`:
+Install for every supported agent family. This is the default, and writes one
+shared copy to `.agents/skills` and one Claude-specific copy to
+`.claude/skills`:
 
 ```sh
-./install.sh --agent all
+./install.sh
+```
+
+Narrow the install with `--agent` when you want only one root. Note that a
+shared-only install is invisible to Claude Code, which reads `.claude/skills`
+and never `.agents/skills`:
+
+```sh
+./install.sh --agent universal
 ```
 
 Useful options:
 
 ```text
 --agent universal|codex|cursor|copilot|claude|all
+                             defaults to all: every skill root, so the
+                             install is visible to whichever agent you use
 --scope user|project
 --project-dir PATH
 --skill NAME                 repeatable; defaults to all skills

@@ -32,15 +32,36 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(expected, result.returncode, result.stdout + result.stderr)
         return result
 
-    def test_default_prefers_shared_agents_directory(self) -> None:
+    def test_default_installs_into_every_skill_root(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
             self.run_installer("--home", str(home))
             destination = home / ".agents" / "skills" / SKILL
             self.assertTrue((destination / "SKILL.md").is_file())
+            self.assertTrue((home / ".claude" / "skills" / SKILL / "SKILL.md").is_file())
             receipt = json.loads((destination.parent / ".dm1681-skills.json").read_text())
             expected_version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
             self.assertEqual(expected_version, receipt["version"])
+
+    def test_default_single_skill_install_reaches_the_claude_root(self) -> None:
+        """A bare --skill must be visible to Claude Code, not shared roots only."""
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            self.run_installer("--home", str(home), "--skill", EXPLAINER_SKILL)
+            for root in (".agents", ".claude"):
+                destination = home / root / "skills" / EXPLAINER_SKILL
+                self.assertTrue(
+                    (destination / "SKILL.md").is_file(),
+                    f"{EXPLAINER_SKILL} missing from {root}/skills",
+                )
+                self.assertFalse((home / root / "skills" / SKILL).exists())
+
+    def test_explicit_agent_still_narrows_to_one_root(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            self.run_installer("--home", str(home), "--agent", "universal")
+            self.assertTrue((home / ".agents" / "skills" / SKILL / "SKILL.md").is_file())
+            self.assertFalse((home / ".claude").exists())
 
     def test_all_agents_install_once_per_distinct_root(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -69,6 +90,35 @@ class InstallerTests(unittest.TestCase):
             )
             self.assertEqual(1, len(backups))
             self.assertEqual("local change\n", (backups[0] / "SKILL.md").read_text())
+
+    def test_mode_change_reinstalls_even_when_contents_match(self) -> None:
+        """Switching --mode must convert the destination, not report it current."""
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            destination = home / ".claude" / "skills" / SKILL
+            self.run_installer("--home", str(home), "--agent", "claude", "--skill", SKILL)
+            self.assertFalse(destination.is_symlink())
+
+            refused = self.run_installer(
+                "--home", str(home), "--agent", "claude", "--skill", SKILL,
+                "--mode", "link", expected=2,
+            )
+            self.assertIn("destination is a copy, not a link", refused.stderr)
+
+            self.run_installer(
+                "--home", str(home), "--agent", "claude", "--skill", SKILL,
+                "--mode", "link", "--force",
+            )
+            self.assertTrue(destination.is_symlink())
+            self.assertEqual((ROOT / "skills" / SKILL).resolve(), destination.resolve())
+
+    def test_matching_mode_and_contents_are_reported_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            arguments = ("--home", str(home), "--agent", "claude", "--skill", SKILL)
+            self.run_installer(*arguments, "--mode", "link")
+            repeated = self.run_installer(*arguments, "--mode", "link")
+            self.assertIn("unchanged", repeated.stdout)
 
     def test_dry_run_does_not_write(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -14,6 +14,12 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Changed
 
+- `--agent` now defaults to `all`, so a plain `./install.sh` or a bare
+  `--skill NAME` installs into every skill root instead of the shared
+  `.agents/skills` directory alone. The previous default silently produced an
+  install that Claude Code could not see, because Claude reads `.claude/skills`
+  and never `.agents/skills`. Narrowing with an explicit `--agent` is unchanged,
+  and the guided installer now pre-selects every root.
 - Made the `orchestrate-olympus` contract host-neutral. The normative
   documents now describe the parent agent session, host tasks, subagents, and
   hosted cloud reviews instead of Codex-specific features; Codex remains a
