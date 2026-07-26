@@ -36,6 +36,21 @@ All notable changes to this repository are documented here. Versions follow
   identifier (4–128 characters) instead of requiring a Codex-style UUID, and
   renders the recovery prompt with a host-neutral skill invocation.
 
+### Fixed
+
+- Guided-installer tests no longer read the developer's real home directory.
+  Three wizard tests parsed an empty argument list, so `--home` fell back to
+  `Path.home()` and the wizard inspected whatever was already installed there.
+  A pre-existing install that differed from the checkout added a backup
+  confirmation the scripted input never answered, so
+  `test_declining_matt_skills_warns_that_olympus_is_incomplete` failed on some
+  machines and passed on others. Each test now supplies a temporary home.
+- The backup confirmation is now covered deliberately, for both the accept and
+  decline paths and for one and several differing paths, instead of being
+  reached by accident through ambient state.
+- The backup warning agrees in number: one differing path reads `1 installed
+  skill path differs`, not `1 installed skill path differ`.
+
 ### Removed
 
 - Removed the Graphify lifecycle from `orchestrate-olympus`, including its

@@ -1045,9 +1045,10 @@ def run_wizard(
     differing = _replacement_paths(args, args.skill)
     if differing and not args.force:
         console.section("Existing installations")
-        plural = "s" if len(differing) != 1 else ""
+        many = len(differing) != 1
         console.warning(
-            f"{len(differing)} installed skill path{plural} differ from this release. "
+            f"{len(differing)} installed skill path{'s' if many else ''} "
+            f"{'differ' if many else 'differs'} from this release. "
             "Each will be backed up before replacement."
         )
         for path in differing:
