@@ -39,20 +39,32 @@ lightest path when the skills are yours to enable on your account.
 
 A setup script is attached to the **cloud environment** (configured in the
 claude.ai web UI, not in any repo) and runs before Claude launches for every
-session in that environment. Paste this into the environment's **Setup script**
-field to install these skills from the public source repo:
+session in that environment. Copy the contents of
+[`scripts/cloud-setup-script.sh`](../scripts/cloud-setup-script.sh) into the
+environment's **Setup script** field:
+
+- In claude.ai/code, click the cloud icon showing the environment's name, hover
+  the environment, and click its gear icon (a new environment's **Add
+  environment** dialog has the same field). Paste, then save.
+
+That script installs your own skills from `dm1681/skills` **and** the Matt Pocock
+engineering skills from `mattpocock/skills` — the same installer, just pointed at
+a second source via `AGENT_SKILLS_REPO` / `AGENT_SKILLS_SUBDIR`:
 
 ```bash
-#!/bin/bash
-rm -rf /opt/agent-skills
-git clone --depth 1 https://github.com/dm1681/skills /opt/agent-skills || true
-AGENT_SKILLS_PROJECT_DIR=/opt/agent-skills /opt/agent-skills/scripts/sync-agent-skills.sh || true
+# install a second (or third) source by re-invoking the installer with env vars
+AGENT_SKILLS_REPO=mattpocock/skills AGENT_SKILLS_SUBDIR=skills/engineering \
+AGENT_SKILLS_PROJECT_DIR=/opt/agent-skills \
+  /opt/agent-skills/scripts/sync-agent-skills.sh || true
 ```
 
-It applies to every repo used in that environment. The result is cached (the
-script re-runs only when you change the environment or after the cache expires),
-so new skills appear on the next cache rebuild; use the per-repo hook if you need
-them always fresh. Requires network access that allows cloning GitHub.
+It applies to every repo used in that environment and needs nothing committed per
+repo. The result is cached (the script re-runs only when you change the
+environment or after the cache expires), so new skills appear on the next cache
+rebuild; use the per-repo hook if you need them always fresh. Requires network
+access that allows cloning GitHub. Note that Matt's `code-review` shares a name
+with Claude's built-in `/code-review` and replaces it — the script has a
+commented line to keep the built-in instead.
 
 ## What "agent-agnostic" means here
 
