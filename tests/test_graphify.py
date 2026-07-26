@@ -26,8 +26,11 @@ class GraphifyTests(unittest.TestCase):
                     INSTALLER.graphify_install_commands([agent], "user"),
                 )
 
+    def test_default_covers_every_graphify_platform(self) -> None:
+        self.assertEqual(["agents", "claude"], INSTALLER.graphify_platforms([]))
+
     def test_universal_and_all_use_shared_agents_platform(self) -> None:
-        self.assertEqual(["agents"], INSTALLER.graphify_platforms([]))
+        self.assertEqual(["agents"], INSTALLER.graphify_platforms(["universal"]))
         self.assertEqual(["agents", "claude"], INSTALLER.graphify_platforms(["all"]))
         self.assertEqual(
             ["agents"], INSTALLER.graphify_platforms(["codex", "cursor", "copilot"])

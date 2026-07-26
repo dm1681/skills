@@ -116,7 +116,7 @@ class InteractiveTests(unittest.TestCase):
             console, _ = self.navigable_console(
                 [
                     "enter",  # user scope
-                    "enter",  # shared agents
+                    "enter",  # every skill root
                     "down",
                     "enter",  # link mode
                     "enter",  # Matt Pocock skills yes
@@ -127,7 +127,7 @@ class InteractiveTests(unittest.TestCase):
             )
             self.assertTrue(INSTALLER.run_wizard(args, [SKILL], console))
             self.assertEqual("user", args.scope)
-            self.assertEqual(["universal"], args.agent)
+            self.assertEqual(["universal", "claude"], args.agent)
             self.assertEqual("link", args.mode)
             self.assertTrue(args.matt_skills)
             self.assertTrue(args.graphify)
@@ -239,7 +239,7 @@ class InteractiveTests(unittest.TestCase):
             )
             self.assertTrue(INSTALLER.run_wizard(args, [SKILL], console))
             self.assertEqual("user", args.scope)
-            self.assertEqual(["universal"], args.agent)
+            self.assertEqual(["universal", "claude"], args.agent)
             self.assertEqual([SKILL], args.skill)
             self.assertEqual("copy", args.mode)
             self.assertTrue(args.matt_skills)

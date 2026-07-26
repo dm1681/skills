@@ -26,7 +26,7 @@ pass before any GitHub write. The identity handshake does not waive those
 gates. Until both the handshake and gates are complete, research and draft only:
 do not comment, assign, label, open a PR, approve, resolve, or merge.
 
-Read repository instructions, the issue/spec, exact code/tests, Graphify or other project context required by AGENTS.md, domain/ADR/acceptance material, and prior PR/review discussion. Do not expand scope.
+Read repository instructions, the issue/spec, exact code/tests, project context required by AGENTS.md, domain/ADR/acceptance material, and prior PR/review discussion. Do not expand scope.
 
 Publish one canonical brief containing:
 - exact issue/PR/base/head and scope version;
@@ -39,8 +39,6 @@ Publish one canonical brief containing:
 - documented commands that require exact fresh-clone or public-seam proof;
 - new tests and the aggregate suite that must discover them;
 - generated-artifact and upstream provenance expectations;
-- `GRAPHIFY_REQUIRED` or `GRAPHIFY_NOT_REQUIRED`, with indexed-file impact,
-  public refresh command, tracked outputs, health checks, and aggregate tests;
 - smallest useful visual evidence plan, or an explicit statement that none is material;
 - risks, final verification, unknowns, and owner decisions;
 - Worker, Reviewer, presentation, and readiness gates.
@@ -61,6 +59,6 @@ canonical brief only after the exact-base and live-eligibility gates pass.
 
 ```markdown
 ---
-_Olympus Planner · Codex subagent `{PLANNER_TASK_ID}`_
+_Olympus Planner · subagent `{PLANNER_TASK_ID}`_
 <!-- olympus-agent role=planner task={PLANNER_TASK_ID} issue={ISSUE} pr={PR_OR_NONE} base={FULL_SHA} scope={SCOPE_VERSION} notify=orchestrator -->
 ```

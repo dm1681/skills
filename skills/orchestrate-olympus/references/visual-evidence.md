@@ -58,7 +58,7 @@ Every material artifact records:
 - caption or alt text;
 - relevant limitations.
 
-Store durable project evidence in the repository when appropriate; otherwise use the Codex visualization workspace. Never make an ephemeral local path the only handoff. Maintain one canonical artifact index rather than scattering duplicate lists.
+Store durable project evidence in the repository when appropriate; otherwise use the host agent's durable artifact or visualization workspace. Never make an ephemeral local path the only handoff. Maintain one canonical artifact index rather than scattering duplicate lists.
 
 Surface every material artifact in the canonical issue brief, PR body or disposition, Reviewer evidence when applicable, and the final delivery report. Prefer a direct link plus a small preview or concise caption so the evidence is visible without hunting through task history.
 
@@ -67,8 +67,8 @@ Inspect artifacts for secrets, credentials, idempotency keys, sensitive Session 
 ## 5. Presentation gate
 
 Generate required acceptance screenshots, recordings, and other expensive
-evidence after source Standards and Spec CLEAN and before the one final
-Graphify refresh. Verify those artifacts in the artifact phase. If capture or
+evidence after source Standards and Spec CLEAN. Verify those artifacts in the
+artifact phase. If capture or
 replay reveals a source defect, return to `WORKING` and invalidate the source
 certificates.
 

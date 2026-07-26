@@ -13,11 +13,14 @@ self-contained under [`skills/`](skills/).
 
 ## Orchestrate Olympus
 
-Olympus now uses a parent-resident subagent loop. The current Codex task is the
-Orchestrator; it starts one reusable Reviewer first, uses one-shot Planners,
-reuses one Worker through implementation and repair, and can create bounded
-read-only Watchers for CI or other external waits. It does not depend on Codex
-scheduled tasks.
+Olympus now uses a parent-resident subagent loop. The current parent agent
+session — a Codex task, Claude Code session, or another supported host — is
+the Orchestrator; it starts one reusable Reviewer first, uses one-shot
+Planners, reuses one Worker through implementation and repair, and can create
+bounded read-only Watchers for CI or other external waits. It does not depend
+on host scheduled tasks. The orchestration contract is host-neutral; the
+skill's `references/host-adaptation.md` maps required capabilities and
+fallbacks per agent host.
 
 The parent stays active until a true terminal state. In autonomous dispatch
 mode it continues through the eligible issue frontier, including review,
@@ -26,8 +29,8 @@ a timer to wake it between role handoffs.
 
 The reusable Reviewer is the final code-review authority. After its
 exact-head CLEAN signal and a stable presentation audit, Olympus moves directly
-to the readiness or authorized merge audit; it does not summon Codex Cloud by
-GitHub comment.
+to the readiness or authorized merge audit; it does not summon a hosted cloud
+review by GitHub comment.
 
 For substantive PR feedback from a person, app, or bot, the Reviewer replies in
 the source thread with an evidence-based **AGREE** or **DISAGREE** assessment,
@@ -41,15 +44,6 @@ qualified item is deduplicated and created by the parent Orchestrator as a
 self-contained `needs-triage` issue, then linked from the original assessment.
 It is not assigned or marked `ready-for-agent`, and it cannot widen or block
 the current PR.
-
-When tracked `graphify-out/` exists and an Olympus lane changes indexed files,
-the Worker suppresses duplicate commit-hook rebuilds and runs one final public
-Graphify refresh after ordinary tests. Eligible code-only work uses the fast
-structural path without clustering; semantic or material architecture changes
-still refresh every presentation artifact. The Reviewer verifies structural
-freshness and requires any deferred report/HTML views to be disclosed. An
-autonomous queue closes accumulated presentation work in one reviewed
-maintenance PR, never by writing directly to `main`.
 
 Olympus also treats documentation as an agent navigation layer. Planners
 identify material documentation surfaces, Workers author concise contract
@@ -112,8 +106,9 @@ required when `uv` is present.
 
 The interface adapts to narrow terminals and automatically uses plain text when
 color or Unicode is unavailable. Its recommended default is a user-scoped copy
-in `~/.agents/skills`, the shared location supported by Codex, Cursor, and
-GitHub Copilot.
+into every skill root: `~/.agents/skills`, the shared location supported by
+Codex, Cursor, and GitHub Copilot, and `~/.claude/skills`, which Claude Code
+reads instead of the shared directory.
 
 In an interactive terminal, use Up and Down to move between options, Space to
 toggle or choose the focused option, and Enter to confirm. Multi-select screens
@@ -124,17 +119,28 @@ Passing installer options keeps the command non-interactive, which makes it
 safe for scripts and CI. Use `--interactive` to open the wizard with preset
 options, or `--non-interactive` to explicitly suppress it.
 
-Install for every supported agent family. This writes one shared copy to
-`.agents/skills` and one Claude-specific copy to `.claude/skills`:
+Install for every supported agent family. This is the default, and writes one
+shared copy to `.agents/skills` and one Claude-specific copy to
+`.claude/skills`:
 
 ```sh
-./install.sh --agent all
+./install.sh
+```
+
+Narrow the install with `--agent` when you want only one root. Note that a
+shared-only install is invisible to Claude Code, which reads `.claude/skills`
+and never `.agents/skills`:
+
+```sh
+./install.sh --agent universal
 ```
 
 Useful options:
 
 ```text
 --agent universal|codex|cursor|copilot|claude|all
+                             defaults to all: every skill root, so the
+                             install is visible to whichever agent you use
 --scope user|project
 --project-dir PATH
 --skill NAME                 repeatable; defaults to all skills
@@ -158,7 +164,7 @@ Examples:
 ./install.sh --agent claude
 
 # Install one skill only.
-./install.sh --agent all --skill semantic-pr-review
+./install.sh --skill semantic-pr-review
 
 # Install shared skills into a repository.
 ./install.sh --scope project --project-dir /path/to/repo
@@ -245,9 +251,11 @@ git checkout v7.1.0
 ./install.sh --agent all
 ```
 
-Subagent autonomy lasts for the active parent task. If Codex exits, the machine
-restarts, or the task is ended, start a new parent task with
-`$orchestrate-olympus`; it recovers from GitHub and the compact checkpoint.
+Subagent autonomy lasts for the active parent task. If the host agent exits,
+the machine restarts, or the task is ended, start a new parent task with the
+orchestrate-olympus skill (`$orchestrate-olympus` on Codex,
+`/orchestrate-olympus` on Claude Code); it recovers from GitHub and the
+compact checkpoint.
 
 ## Cloud sessions (agent-agnostic)
 

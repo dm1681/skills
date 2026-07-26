@@ -43,7 +43,7 @@ class ReviewerCleanReadinessTests(unittest.TestCase):
             SKILL_ROOT / "references" / "orchestrator-prompt.md"
         ).read_text(encoding="utf-8")
         normalized = " ".join(prompt.split())
-        self.assertIn("Never request a Codex Cloud review by GitHub comment", normalized)
+        self.assertIn("Never request a hosted cloud review by GitHub comment", normalized)
         self.assertIn("move directly to the final readiness or merge audit", normalized)
 
 

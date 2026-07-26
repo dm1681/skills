@@ -27,6 +27,10 @@ VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
 SHARED_AGENTS = {"universal", "agents", "codex", "cursor", "copilot"}
 KNOWN_AGENTS = SHARED_AGENTS | {"claude", "all"}
+# Install into every known skill root unless the caller narrows it. A shared-only
+# default silently produces an install that Claude Code cannot see, because Claude
+# reads ~/.claude/skills and never ~/.agents/skills.
+DEFAULT_AGENTS = ["all"]
 GRAPHIFY_PLATFORMS = {
     "universal": "agents",
     "agents": "agents",
@@ -634,7 +638,7 @@ def skill_summary(name: str) -> str:
 
 
 def expand_agents(values: Iterable[str]) -> list[str]:
-    requested = list(values) or ["universal"]
+    requested = list(values) or list(DEFAULT_AGENTS)
     unknown = sorted(set(requested) - KNOWN_AGENTS)
     if unknown:
         raise InstallError(f"unknown agent: {', '.join(unknown)}")
@@ -673,7 +677,7 @@ def resolve_roots(
 
 
 def graphify_platforms(values: Iterable[str]) -> list[str]:
-    requested = list(values) or ["universal"]
+    requested = list(values) or list(DEFAULT_AGENTS)
     unknown = sorted(set(requested) - KNOWN_AGENTS)
     if unknown:
         raise InstallError(f"unknown agent: {', '.join(unknown)}")
@@ -770,7 +774,7 @@ def install_graphify(
 
 def matt_skills_agents(agent_names: Iterable[str]) -> list[str]:
     """Map this installer's agent names to the skills CLI agent names."""
-    requested = list(agent_names) or ["universal"]
+    requested = list(agent_names) or list(DEFAULT_AGENTS)
     unknown = sorted(set(requested) - KNOWN_AGENTS)
     if unknown:
         raise InstallError(f"unknown agent: {', '.join(unknown)}")
@@ -895,6 +899,16 @@ def trees_equal(left: Path, right: Path) -> bool:
     return all(trees_equal(left / name, right / name) for name in comparison.common_dirs)
 
 
+def destination_matches_mode(destination: Path, mode: str) -> bool:
+    """Whether an existing destination is already the shape `mode` asks for.
+
+    Equal contents are not enough to call an install current: a copy and a
+    symlink can hold identical trees, so switching `--mode` has to reinstall
+    even when nothing about the content changed.
+    """
+    return destination.is_symlink() if mode == "link" else not destination.is_symlink()
+
+
 def _replacement_paths(args: argparse.Namespace, skills: list[str]) -> list[Path]:
     roots = resolve_roots(
         args.agent,
@@ -950,7 +964,7 @@ def run_wizard(
         console.section("Installation target")
         console.note(str(args.target.expanduser().resolve()))
 
-    agent_defaults = args.agent or ["universal"]
+    agent_defaults = args.agent or list(DEFAULT_AGENTS)
     if "all" in agent_defaults:
         agent_defaults = ["universal", "claude"]
     args.agent = _select_many(
@@ -1100,11 +1114,18 @@ def install_one(
 ) -> str:
     destination = root / source.name
     exists = destination.exists() or destination.is_symlink()
-    if exists and trees_equal(destination, source):
+    current = exists and destination_matches_mode(destination, mode)
+    if current and trees_equal(destination, source):
         return f"unchanged  {destination}"
     if exists and not force:
+        actual = "link" if destination.is_symlink() else "copy"
+        detail = (
+            f"destination is a {actual}, not a {mode}"
+            if trees_equal(destination, source)
+            else "destination differs"
+        )
         raise InstallError(
-            f"destination differs: {destination} (rerun with --force to back up and replace it)"
+            f"{detail}: {destination} (rerun with --force to back up and replace it)"
         )
 
     backup = backup_path(root, source.name) if exists else None
@@ -1160,7 +1181,7 @@ def parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         metavar="NAME",
-        help="universal, codex, cursor, copilot, claude, or all (repeatable; default universal)",
+        help="universal, codex, cursor, copilot, claude, or all (repeatable; default all)",
     )
     result.add_argument("--scope", choices=("user", "project"), default="user")
     result.add_argument("--project-dir", type=Path, default=Path.cwd())
