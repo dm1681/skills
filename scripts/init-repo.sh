@@ -142,21 +142,11 @@ project section below with real context. -->
 
 TODO: one paragraph on what this repo is, plus how to build, run, and test it.
 
-## Agent skills (cloud sync)
+## Agent skills
 
-This repo vendors version-controlled agent skills so cloud/web sessions have
-them. They are installed into each agent's user-scope skill directory at
-session start.
-
-- Installer: `scripts/sync-agent-skills.sh` (agent-neutral; installs into
-  `~/.claude/skills` and the shared `~/.agents/skills`).
-- Claude Code trigger: `.claude/hooks/session-start.sh`, registered in
-  `.claude/settings.json`, runs the installer in web sessions.
-- Other agents: run `scripts/sync-agent-skills.sh` from that agent's own
-  startup hook.
-
-Refresh the vendored skills by re-running the source repo's
-`scripts/init-repo.sh` against this repo.
+Version-controlled skills auto-install at session start (`.claude/hooks/session-start.sh`).
+If a skill seems missing, run `./scripts/sync-agent-skills.sh`.
+Setup, options, and updating: https://github.com/dm1681/skills/blob/main/docs/cloud-skills-sync.md
 MD
     log "created AGENTS.md"
   elif grep -qi "agent skills" "$AGENTS"; then
@@ -164,12 +154,11 @@ MD
   else
     cat >> "$AGENTS" <<'MD'
 
-## Agent skills (cloud sync)
+## Agent skills
 
-This repo vendors version-controlled agent skills so cloud/web sessions have
-them, installed at session start via `scripts/sync-agent-skills.sh` (Claude Code
-runs it from `.claude/hooks/session-start.sh`; other agents call it from their
-own startup hook).
+Version-controlled skills auto-install at session start; if one seems missing,
+run `./scripts/sync-agent-skills.sh`. Details:
+https://github.com/dm1681/skills/blob/main/docs/cloud-skills-sync.md
 MD
     log "appended agent-skills section to existing AGENTS.md"
   fi
