@@ -26,9 +26,11 @@ This repository is a version-controlled collection of agent skills in the open
 ## Cloud sessions and new repos
 
 Cloud/web sessions start from a fresh, ephemeral container without your local
-`~/.claude/skills`. The `SessionStart` hook installs these skills at startup so
-they are discovered. To set another repo up the same way, run
-`scripts/init-repo.sh <target-repo>`. See
+`~/.claude/skills`. Options, lightest first: enable skills on claude.ai
+(auto-load, zero files), a cloud environment setup script (zero per-repo files),
+or the per-repo `SessionStart` hook. Scaffold another repo with
+`scripts/init-repo.sh <target-repo>`; package skills for claude.ai upload with
+`scripts/package-skills.sh`. See
 [`docs/cloud-skills-sync.md`](docs/cloud-skills-sync.md).
 
 ## Conventions
