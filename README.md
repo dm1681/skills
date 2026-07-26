@@ -213,6 +213,14 @@ Subagent autonomy lasts for the active parent task. If Codex exits, the machine
 restarts, or the task is ended, start a new parent task with
 `$orchestrate-olympus`; it recovers from GitHub and the compact checkpoint.
 
+## Cloud sessions (Claude Code on the web)
+
+Web sessions run in a fresh, ephemeral container and do not carry your local
+`~/.claude/skills`. A `SessionStart` hook installs these skills into the
+session's `~/.claude/skills` on startup so they are discovered like any other
+skill. It is registered for this repo in [`.claude/settings.json`](.claude/settings.json)
+and is reusable in any repo. See [`docs/cloud-skills-sync.md`](docs/cloud-skills-sync.md).
+
 ## Agent directory policy
 
 The installer deliberately prefers `.agents/skills` wherever an agent supports
