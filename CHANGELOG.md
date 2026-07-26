@@ -5,6 +5,30 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- Added `references/host-adaptation.md` to `orchestrate-olympus`, defining the
+  required host capabilities, the stable-identifier rule for task and subagent
+  IDs, and explicit fallbacks for missing host features such as pinning,
+  follow-up turns, parallel child slots, bounded waits, and archiving.
+
+### Changed
+
+- Made the `orchestrate-olympus` contract host-neutral. The normative
+  documents now describe the parent agent session, host tasks, subagents, and
+  hosted cloud reviews instead of Codex-specific features; Codex remains a
+  named example only in the host-adaptation reference, the OpenAI interface
+  file, and legacy checkpoint-schema history.
+- `scripts/checkpoint.py` now accepts any stable whitespace-free host task
+  identifier (4–128 characters) instead of requiring a Codex-style UUID, and
+  renders the recovery prompt with a host-neutral skill invocation.
+
+### Removed
+
+- Removed the Graphify lifecycle from `orchestrate-olympus`, including its
+  role gates, checkpoint state, and dedicated reference. The repository's
+  separate opt-in Graphify installer remains available.
+
 ## [7.1.0] - 2026-07-26
 
 ### Added

@@ -52,8 +52,6 @@ class CheckpointTests(unittest.TestCase):
                 "artifact_review": "not-run",
                 "artifact_review_head": None,
                 "test_evidence": [],
-                "graphify_disposition": "not-assessed",
-                "graphify_marker": None,
                 "actions_state": "not-checked",
                 "actions_head": None,
                 "actions_degraded_evidence": None,
@@ -182,8 +180,6 @@ class CheckpointTests(unittest.TestCase):
                     "result": "pass",
                 }
             ],
-            "graphify_disposition": "not-required",
-            "graphify_marker": None,
             "actions_state": "green",
             "actions_head": head,
             "actions_degraded_evidence": None,
@@ -256,13 +252,6 @@ class CheckpointTests(unittest.TestCase):
                             "result": "pass",
                         }
                     ],
-                    "graphify_disposition": "current",
-                    "graphify_marker": {
-                        "source_tree_hash": "b" * 64,
-                        "graphify_version": "1.2.3",
-                        "command": "graphify update . --no-cluster",
-                        "output_hash": "e" * 64,
-                    },
                     "actions_state": "pending",
                     "actions_head": None,
                     "actions_degraded_evidence": None,
@@ -329,21 +318,18 @@ class CheckpointTests(unittest.TestCase):
         self.assertNotEqual(0, stale_scope.returncode)
         self.assertIn("must match the current scope_version", stale_scope.stderr)
 
-    def test_graphify_current_requires_marker_and_green_actions_require_exact_head(self) -> None:
+    def test_green_actions_require_exact_head(self) -> None:
         head = "a" * 40
         data = self.idle_checkpoint()
         data.update({"lane_kind": "repair", "phase": "REVIEWING", "pr": 35, "head": head})
         data["gate_evidence"].update(
             {
-                "source_tree_hash": "b" * 64,
-                "graphify_disposition": "current",
                 "actions_state": "green",
                 "actions_head": "d" * 40,
             }
         )
         invalid = self.run_checkpoint(data)
         self.assertNotEqual(0, invalid.returncode)
-        self.assertIn("requires graphify_marker", invalid.stderr)
         self.assertIn("green Actions evidence must match the current head", invalid.stderr)
 
     def test_degraded_actions_requires_bounded_retry_evidence(self) -> None:

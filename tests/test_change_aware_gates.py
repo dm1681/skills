@@ -20,8 +20,8 @@ class ChangeAwareGateTests(unittest.TestCase):
         entrypoint = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("references/change-aware-gates.md", entrypoint)
 
-    def test_source_review_precedes_evidence_and_graphify(self) -> None:
-        self.assertIn("Do not capture required screenshots or run the final Graphify refresh until both source axes are CLEAN", self.normalized)
+    def test_source_review_precedes_evidence_and_artifacts(self) -> None:
+        self.assertIn("Do not capture required screenshots or generate final artifacts until both source axes are CLEAN", self.normalized)
         contract = (SKILL_ROOT / "references" / "orchestration-contract.md").read_text(encoding="utf-8")
         normalized_contract = " ".join(contract.split())
         self.assertIn("WORKING -> SOURCE_REVIEWING", normalized_contract)
@@ -41,14 +41,10 @@ class ChangeAwareGateTests(unittest.TestCase):
         self.assertIn("required=<true|false> source_tree_hash=<hash> runtime_fingerprint=<hash> result=PASS", self.normalized)
         self.assertIn("serialize that suite", self.normalized)
 
-    def test_graphify_refresh_marker_prevents_duplicate_work(self) -> None:
-        self.assertIn("`GRAPHIFY_REFRESH_MARKER`", self.normalized)
-        self.assertIn("never run a second public refresh for the same source tree", self.normalized)
-
-    def test_metadata_only_and_semantic_incrementality_have_safe_boundaries(self) -> None:
-        self.assertIn("only when the path is excluded from Graphify's semantic corpus", self.normalized)
-        self.assertIn("upstream Graphify engine improvement", self.normalized)
-        self.assertIn("Do not hand-edit Graphify output", self.normalized)
+    def test_metadata_only_and_semantic_documents_have_safe_boundaries(self) -> None:
+        self.assertIn("only for a dedicated evidence record or index", self.normalized)
+        self.assertIn("A Markdown document, code comment, runbook", self.normalized)
+        self.assertIn("remains `SOURCE` whenever its meaning may change", self.normalized)
 
     def test_actions_degradation_never_reaches_clean_or_merge(self) -> None:
         self.assertIn("continue only through one initial branch push and its corresponding WIP PR creation or update", self.normalized)

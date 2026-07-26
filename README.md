@@ -13,11 +13,14 @@ self-contained under [`skills/`](skills/).
 
 ## Orchestrate Olympus
 
-Olympus now uses a parent-resident subagent loop. The current Codex task is the
-Orchestrator; it starts one reusable Reviewer first, uses one-shot Planners,
-reuses one Worker through implementation and repair, and can create bounded
-read-only Watchers for CI or other external waits. It does not depend on Codex
-scheduled tasks.
+Olympus now uses a parent-resident subagent loop. The current parent agent
+session — a Codex task, Claude Code session, or another supported host — is
+the Orchestrator; it starts one reusable Reviewer first, uses one-shot
+Planners, reuses one Worker through implementation and repair, and can create
+bounded read-only Watchers for CI or other external waits. It does not depend
+on host scheduled tasks. The orchestration contract is host-neutral; the
+skill's `references/host-adaptation.md` maps required capabilities and
+fallbacks per agent host.
 
 The parent stays active until a true terminal state. In autonomous dispatch
 mode it continues through the eligible issue frontier, including review,
@@ -26,8 +29,8 @@ a timer to wake it between role handoffs.
 
 The reusable Reviewer is the final code-review authority. After its
 exact-head CLEAN signal and a stable presentation audit, Olympus moves directly
-to the readiness or authorized merge audit; it does not summon Codex Cloud by
-GitHub comment.
+to the readiness or authorized merge audit; it does not summon a hosted cloud
+review by GitHub comment.
 
 For substantive PR feedback from a person, app, or bot, the Reviewer replies in
 the source thread with an evidence-based **AGREE** or **DISAGREE** assessment,
@@ -41,15 +44,6 @@ qualified item is deduplicated and created by the parent Orchestrator as a
 self-contained `needs-triage` issue, then linked from the original assessment.
 It is not assigned or marked `ready-for-agent`, and it cannot widen or block
 the current PR.
-
-When tracked `graphify-out/` exists and an Olympus lane changes indexed files,
-the Worker suppresses duplicate commit-hook rebuilds and runs one final public
-Graphify refresh after ordinary tests. Eligible code-only work uses the fast
-structural path without clustering; semantic or material architecture changes
-still refresh every presentation artifact. The Reviewer verifies structural
-freshness and requires any deferred report/HTML views to be disclosed. An
-autonomous queue closes accumulated presentation work in one reviewed
-maintenance PR, never by writing directly to `main`.
 
 Olympus also treats documentation as an agent navigation layer. Planners
 identify material documentation surfaces, Workers author concise contract
@@ -245,9 +239,11 @@ git checkout v7.1.0
 ./install.sh --agent all
 ```
 
-Subagent autonomy lasts for the active parent task. If Codex exits, the machine
-restarts, or the task is ended, start a new parent task with
-`$orchestrate-olympus`; it recovers from GitHub and the compact checkpoint.
+Subagent autonomy lasts for the active parent task. If the host agent exits,
+the machine restarts, or the task is ended, start a new parent task with the
+orchestrate-olympus skill (`$orchestrate-olympus` on Codex,
+`/orchestrate-olympus` on Claude Code); it recovers from GitHub and the
+compact checkpoint.
 
 ## Cloud sessions (agent-agnostic)
 

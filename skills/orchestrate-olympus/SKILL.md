@@ -6,8 +6,9 @@ description: Create, resume, pause, recover, inspect, or operate the Olympus mul
 # Orchestrate Olympus
 
 Operate one visible, recoverable delivery control plane. The current parent
-Codex task is the Orchestrator, reusable subagents perform review and active
-lane work, and GitHub remains the durable audit ledger.
+agent session is the Orchestrator, reusable subagents perform review and
+active lane work, and GitHub remains the durable audit ledger. The contract is
+host-neutral; map host capabilities with `references/host-adaptation.md`.
 
 ## Verify prerequisites
 
@@ -50,11 +51,12 @@ Always read `references/orchestration-contract.md` before any mutation. Then rea
   `references/follow-up-issues.md`.
 - Planning, authoring, or reviewing code comments and durable documentation for
   agent usefulness: `references/agentic-documentation.md`.
-- Graphify impact, pre-review refresh, artifact review, or post-merge drift:
-  `references/graphify-lifecycle.md`.
 - Source/artifact classification, reusable test evidence, runtime isolation,
   gate ordering, or degraded Actions reads:
   `references/change-aware-gates.md`.
+- Running under a new agent host, capability mapping, or a missing host
+  feature such as pinning, follow-up turns, or parallel child slots:
+  `references/host-adaptation.md`.
 - Matt Pocock issue/PR label setup, verification, or repair:
   `references/matt-triage-labels.md`.
 - Creating, recovering, steering, waiting on, or retiring role subagents:
@@ -73,7 +75,7 @@ Treat live `AGENTS.md` and linked repository instructions as higher-priority pro
 ## Recover before every mutation
 
 Inspect live GitHub state, exact SHAs, blockers, checks, reviews, threads,
-mergeability, agent markers, Codex tasks, subagents, and worktrees. Match child
+mergeability, agent markers, host tasks, subagents, and worktrees. Match child
 roles by actual subagent IDs. Do not duplicate reusable roles or active lanes.
 
 Use GitHub as the recoverable ledger and a compact checkpoint only as a host-local cache. Validate checkpoint JSON with:
@@ -142,14 +144,9 @@ Live recovery supersedes stale checkpoint values.
   `Worker: NOT SENT`; let only the parent Orchestrator deduplicate and create
   the mapped `needs-triage` issue.
 - Require product tests and independent source Standards/Spec CLEAN before
-  expensive evidence capture or Graphify generation. Classify later commits
+  expensive evidence capture or generated-artifact work. Classify later commits
   with `change-aware-gates.md`; reuse source certificates only when their
   source-tree hash and runtime fingerprint remain unchanged.
-- When tracked `graphify-out/` exists and indexed files change, require one
-  public Graphify refresh for the reviewed source-tree hash before targeted
-  artifact verification. Use the structural fast path for eligible code-only
-  work, disclose deferred presentation artifacts, record the refresh marker,
-  and suppress duplicate commit-hook rebuilds.
 
 ## Enforce exact-head completion
 
@@ -163,7 +160,7 @@ handoff, or partial review is insufficient. After Reviewer CLEAN, enter
 links, visual status, limitations, and owner action; then re-audit that the
 head and readiness gates remain unchanged.
 
-Never request a Codex Cloud review by GitHub comment. It is not an Olympus
+Never request a hosted cloud review by GitHub comment. It is not an Olympus
 phase, readiness gate, repair actor, or merge requirement. After stable
 presentation, move directly to the final readiness or merge audit while the
 reusable Reviewer's exact-head CLEAN remains valid. Treat any external review

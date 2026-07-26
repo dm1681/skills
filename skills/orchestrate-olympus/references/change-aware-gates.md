@@ -10,8 +10,8 @@ Classify every changed path before reusing evidence:
 - `SOURCE`: product code, tests, configuration, dependency or lock files,
   scripts, durable documentation, and comments that can change behavior,
   contracts, acceptance meaning, or agent understanding.
-- `DETERMINISTIC_ARTIFACT`: generated Graphify output, screenshots,
-  recordings, reports, indexes, or packages reproduced from an already
+- `DETERMINISTIC_ARTIFACT`: generated screenshots, recordings, reports,
+  indexes, or packages reproduced from an already
   reviewed source tree by a recorded command.
 - `PROVENANCE_METADATA_ONLY`: a mechanical evidence SHA, path, size, or
   timestamp correction that changes neither source behavior nor the meaning of
@@ -64,29 +64,19 @@ correctness. Record separate CLEAN certificates with the source head,
 source-tree hash, scope version, and runtime fingerprint.
 
 Any source-axis finding returns the lane to `WORKING`. Do not capture required
-screenshots or run the final Graphify refresh until both source axes are CLEAN.
+screenshots or generate final artifacts until both source axes are CLEAN.
 
 ## Evidence and artifact phase
 
 After source CLEAN:
 
 1. Capture required evidence and replay its acceptance path.
-2. Run exactly one supported public Graphify refresh for the reviewed source
-   tree when required.
-3. Commit deterministic artifacts with duplicate hooks suppressed.
-4. Run targeted exact-head artifact verification: provenance, reproducibility,
-   privacy, integrity, diff, packaging, links, presentation claims, Graphify
-   health, and evidence replay.
-5. Push the exact artifact-verified head and open or update the PR.
-
-Record a `GRAPHIFY_REFRESH_MARKER` containing source-tree hash, Graphify
-version, public command, and generated-output hash. The marker is valid only
-when those values still match. Hooks, explicit refreshes, and later phases must
-consult it; never run a second public refresh for the same source tree and
-expected output merely to recreate already verified bytes.
-Also record an explicit Graphify disposition: `not-required`, `current`,
-`stale`, or `failed`. `current` requires a matching marker; `not-required`
-requires recorded impact evidence and no marker.
+2. Generate and commit deterministic artifacts once, suppressing duplicate
+   generation hooks when the repository provides that seam.
+3. Run targeted exact-head artifact verification: provenance, reproducibility,
+   privacy, integrity, diff, packaging, links, presentation claims, and
+   evidence replay.
+4. Push the exact artifact-verified head and open or update the PR.
 
 Evidence that reveals a source defect returns the lane to `WORKING` and
 invalidates source certificates. An artifact defect returns to the evidence or
@@ -99,8 +89,8 @@ does not necessarily invalidate source evidence:
 
 | New head class | Reusable evidence | Required reruns |
 |---|---|---|
-| `SOURCE` or `MIXED_OR_UNKNOWN` | Nothing affected by the changed source | Impacted tests, required aggregate, Standards, Spec, evidence, Graphify when indexed corpus content changed, artifact verification |
-| `DETERMINISTIC_ARTIFACT` | Product tests and source-axis certificates when source hash and runtime fingerprint match | Evidence replay, marker/output freshness, privacy, diff, packaging, artifact verification; refresh only if marker inputs or output mismatch |
+| `SOURCE` or `MIXED_OR_UNKNOWN` | Nothing affected by the changed source | Impacted tests, required aggregate, Standards, Spec, evidence, artifact generation, artifact verification |
+| `DETERMINISTIC_ARTIFACT` | Product tests and source-axis certificates when source hash and runtime fingerprint match | Evidence replay, provenance, privacy, diff, packaging, artifact verification |
 | `PROVENANCE_METADATA_ONLY` | Same as deterministic artifact, only after the eligibility rule below | Provenance, claims, links, privacy, diff, packaging, targeted artifact verification |
 
 The final reusable Reviewer must still issue one exact-head CLEAN before
@@ -112,24 +102,14 @@ is uncertain; it does not silently manufacture or reuse them.
 
 ## Provenance metadata and semantic documents
 
-Use `PROVENANCE_METADATA_ONLY` only when the path is excluded from Graphify's
-semantic corpus by reviewed repository configuration, or live Graphify
-metadata proves it is not semantically indexed. Otherwise a Markdown change
-remains semantic input and requires the public semantic update path.
-The metadata must not change the evidence subject, reviewed source-tree hash,
-scope version, acceptance meaning, or PASS/FAIL result. A recorded source SHA
-identifies the source commit being evidenced, never the containing artifact
-commit; otherwise the record would be self-referential. Treat any violation as
-`SOURCE` or `MIXED_OR_UNKNOWN`.
-
-Prefer excluding mechanical evidence indexes from the semantic corpus in a
-separate reviewed configuration change. Do not hand-edit Graphify output or
-call internal APIs to simulate incrementality.
-
-Current public Graphify updates may replace the semantic nodes of an entire
-modified Markdown document. Preserving unchanged section nodes inside that
-document is an upstream Graphify engine improvement, not behavior this skill
-can safely implement. Record the limitation and use supported public commands.
+Use `PROVENANCE_METADATA_ONLY` only for a dedicated evidence record or index
+whose changed fields are purely mechanical. A Markdown document, code comment,
+runbook, or other agent-facing text remains `SOURCE` whenever its meaning may
+change. The metadata must not change the evidence subject, reviewed
+source-tree hash, scope version, acceptance meaning, or PASS/FAIL result. A
+recorded source SHA identifies the source commit being evidenced, never the
+containing artifact commit; otherwise the record would be self-referential.
+Treat any violation as `SOURCE` or `MIXED_OR_UNKNOWN`.
 
 ## GitHub Actions degradation
 

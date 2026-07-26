@@ -14,7 +14,10 @@ from typing import Any
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 HASH_RE = re.compile(r"^[0-9a-f]{64}$")
-TASK_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+# Host-neutral task/subagent identifier: whatever stable token the agent host
+# exposes (Codex UUID, Claude Code session slug, path-like ID, ...). It must be
+# a single whitespace-free token so signatures and hidden markers stay parseable.
+TASK_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{3,127}$")
 
 DISPATCH_MODES = {"human-controlled", "autonomous"}
 MERGE_MODES = {"owner-only", "autonomous"}
@@ -88,7 +91,6 @@ HEAD_CHANGE_CLASSES = {
     "mixed-or-unknown",
 }
 GATE_STATUSES = {"not-run", "clean", "stale", "failed"}
-GRAPHIFY_DISPOSITIONS = {"not-assessed", "not-required", "current", "stale", "failed"}
 ACTIONS_STATES = {
     "not-checked",
     "pending",
@@ -145,8 +147,6 @@ def empty_gate_evidence() -> dict[str, Any]:
         "artifact_review": "not-run",
         "artifact_review_head": None,
         "test_evidence": [],
-        "graphify_disposition": "not-assessed",
-        "graphify_marker": None,
         "actions_state": "not-checked",
         "actions_head": None,
         "actions_degraded_evidence": None,
@@ -185,7 +185,9 @@ def _nullable_nonempty_string(errors: list[str], field: str, value: Any) -> None
 
 def _nullable_task(errors: list[str], field: str, value: Any) -> None:
     if value is not None and (not isinstance(value, str) or not TASK_RE.fullmatch(value)):
-        errors.append(f"{field} must be null or a Codex task UUID")
+        errors.append(
+            f"{field} must be null or a stable whitespace-free host task identifier"
+        )
 
 
 def _nullable_positive_int(errors: list[str], field: str, value: Any) -> None:
@@ -261,7 +263,6 @@ def _validate_gate_evidence(
         _nullable_positive_int(errors, f"{prefix}.{axis}_scope_version", value[f"{axis}_scope_version"])
     _enum(errors, f"{prefix}.artifact_review", value["artifact_review"], GATE_STATUSES)
     _nullable_sha(errors, f"{prefix}.artifact_review_head", value["artifact_review_head"])
-    _enum(errors, f"{prefix}.graphify_disposition", value["graphify_disposition"], GRAPHIFY_DISPOSITIONS)
     _enum(errors, f"{prefix}.actions_state", value["actions_state"], ACTIONS_STATES)
     _nullable_sha(errors, f"{prefix}.actions_head", value["actions_head"])
 
@@ -326,29 +327,6 @@ def _validate_gate_evidence(
             errors.append("clean source certificates require matching required aggregate test evidence")
         if clean_axes and any(item.get("result") != "pass" for item in matching_required):
             errors.append("clean source certificates require all matching required aggregate tests to pass")
-
-    marker = value["graphify_marker"]
-    if marker is not None:
-        marker_prefix = f"{prefix}.graphify_marker"
-        required_marker = {"source_tree_hash", "graphify_version", "command", "output_hash"}
-        if not isinstance(marker, dict):
-            errors.append(f"{marker_prefix} must be null or an object")
-        else:
-            missing_marker = sorted(required_marker - marker.keys())
-            if missing_marker:
-                errors.append(f"{marker_prefix} missing fields: {', '.join(missing_marker)}")
-            else:
-                _hash(errors, f"{marker_prefix}.source_tree_hash", marker["source_tree_hash"])
-                _hash(errors, f"{marker_prefix}.output_hash", marker["output_hash"])
-                for field in ("graphify_version", "command"):
-                    if not isinstance(marker[field], str) or not marker[field].strip():
-                        errors.append(f"{marker_prefix}.{field} must be a non-empty string")
-                if marker["source_tree_hash"] != value["source_tree_hash"]:
-                    errors.append("graphify marker must match gate_evidence.source_tree_hash")
-    if value["graphify_disposition"] == "current" and marker is None:
-        errors.append("graphify_disposition=current requires graphify_marker")
-    if value["graphify_disposition"] == "not-required" and marker is not None:
-        errors.append("graphify_disposition=not-required requires graphify_marker=null")
 
     degraded = value["actions_degraded_evidence"]
     if degraded is not None:
@@ -515,8 +493,6 @@ def validate_data(data: Any) -> list[str]:
                 errors.append("clean_signal requires clean Standards and Spec certificates")
             if gate_evidence.get("artifact_review") != "clean" or gate_evidence.get("artifact_review_head") != data["head"]:
                 errors.append("clean_signal requires clean artifact review at current head")
-            if gate_evidence.get("graphify_disposition") not in {"not-required", "current"}:
-                errors.append("clean_signal requires a final Graphify disposition")
             if gate_evidence.get("actions_state") != "green" or gate_evidence.get("actions_head") != data["head"]:
                 errors.append("clean_signal requires successful Actions evidence at current head")
 
@@ -557,8 +533,6 @@ def validate_data(data: Any) -> list[str]:
                 errors.append(f"{data['phase']} requires clean Standards and Spec certificates")
             if gate_evidence.get("artifact_review") != "clean" or gate_evidence.get("artifact_review_head") != data["head"]:
                 errors.append(f"{data['phase']} requires clean artifact review at current head")
-            if gate_evidence.get("graphify_disposition") not in {"not-required", "current"}:
-                errors.append(f"{data['phase']} requires a final Graphify disposition")
             if gate_evidence.get("actions_state") != "green" or gate_evidence.get("actions_head") != data["head"]:
                 errors.append(f"{data['phase']} requires successful Actions evidence at current head")
 
@@ -673,7 +647,6 @@ def render_state(data: dict[str, Any]) -> str:
             f"standards:{data['gate_evidence']['standards_status']},"
             f"spec:{data['gate_evidence']['spec_status']},"
             f"artifact:{data['gate_evidence']['artifact_review']},"
-            f"graphify:{data['gate_evidence']['graphify_disposition']},"
             f"actions:{data['gate_evidence']['actions_state']}",
             f"artifacts={len(data['artifacts'])} escalation={_fmt(data['escalation'])}",
         ]
@@ -690,7 +663,7 @@ def render_state(data: dict[str, Any]) -> str:
 
 def render_resume(data: dict[str, Any]) -> str:
     state = render_state(data)
-    return f"""Use $orchestrate-olympus in this parent task for dm1681/Olympus.
+    return f"""Use the orchestrate-olympus skill in this parent task for dm1681/Olympus.
 
 This parent task is the Olympus Orchestrator. Do not spawn an Orchestrator subagent. This checkpoint is a validated host-local cache, not authority. Recover live GitHub, child-subagent, and worktree state before every mutation; live evidence supersedes stale values.
 
@@ -714,7 +687,7 @@ def sample_checkpoint() -> dict[str, Any]:
         "scope_version": 1,
         "issue": 11,
         "pr": None,
-        "branch": "codex/issue-11-example",
+        "branch": "agent/issue-11-example",
         "base": sha,
         "head": sha,
         "orchestrator_task": "11111111-1111-1111-1111-111111111111",
@@ -798,7 +771,6 @@ def self_test() -> None:
                         "result": "pass",
                     }
                 ],
-                "graphify_disposition": "not-required",
                 "actions_state": "green",
                 "actions_head": "a" * 40,
             },
@@ -876,13 +848,13 @@ def self_test() -> None:
             "phase": "MAINTENANCE_WORKING",
             "issue": None,
             "pr": 35,
-            "branch": "codex/setup-example",
+            "branch": "agent/setup-example",
             "paused_lane": {
                 "lane_kind": "issue",
                 "scope_version": 1,
                 "issue": 11,
                 "pr": None,
-                "branch": "codex/issue-11-example",
+                "branch": "agent/issue-11-example",
                 "base": "a" * 40,
                 "head": "a" * 40,
                 "worker_task": "22222222-2222-2222-2222-222222222222",
