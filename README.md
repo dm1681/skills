@@ -229,11 +229,10 @@ command matrix and boundaries.
 
 ## Sync on another machine
 
-For this private repository, authenticate GitHub CLI and install from a clone:
+Clone and install from a checkout:
 
 ```sh
-gh auth login
-gh repo clone dm1681/skills
+git clone https://github.com/dm1681/skills
 cd skills
 uv sync
 ./install.sh --agent all
@@ -249,6 +248,25 @@ git checkout v7.1.0
 Subagent autonomy lasts for the active parent task. If Codex exits, the machine
 restarts, or the task is ended, start a new parent task with
 `$orchestrate-olympus`; it recovers from GitHub and the compact checkpoint.
+
+## Cloud sessions (agent-agnostic)
+
+Cloud/web sessions run in a fresh, ephemeral container that does not carry your
+local user-scope skills. The agent-neutral installer
+[`scripts/sync-agent-skills.sh`](scripts/sync-agent-skills.sh) copies these
+skills into every agent's skill root (`~/.claude/skills` for Claude Code and the
+shared `~/.agents/skills` for Codex/Cursor/Copilot) so whichever agent runs the
+session discovers them. A Claude Code `SessionStart` hook
+([`.claude/hooks/session-start.sh`](.claude/hooks/session-start.sh), registered
+in [`.claude/settings.json`](.claude/settings.json)) runs it in web sessions;
+other agents can invoke the same installer from their own startup hook.
+
+To set another repo up the same way in one step, run
+[`scripts/init-repo.sh <target-repo>`](scripts/init-repo.sh) from a checkout of
+this repo. It copies the machinery, vendors the skills, and scaffolds shared
+`AGENTS.md` + `CLAUDE.md` guidance (`CLAUDE.md` is a one-line `@AGENTS.md` import
+so both agents share one source of truth). See
+[`docs/cloud-skills-sync.md`](docs/cloud-skills-sync.md).
 
 ## Agent directory policy
 
