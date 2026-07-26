@@ -164,7 +164,7 @@ Examples:
 ./install.sh --agent claude
 
 # Install one skill only.
-./install.sh --agent all --skill semantic-pr-review
+./install.sh --skill semantic-pr-review
 
 # Install shared skills into a repository.
 ./install.sh --scope project --project-dir /path/to/repo
