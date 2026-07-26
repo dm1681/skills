@@ -44,10 +44,34 @@ neutral installer, wired into each agent's own startup mechanism.
 Installing = copying each `<skill>/SKILL.md` directory into every destination
 root, replacing any existing copy of the same skill name. Safe to re-run.
 
-## Reuse in another repo
+## Set up another repo in one command
 
-Copy both files into the target repo, then wire the installer into each agent's
-startup mechanism:
+From a checkout of this repo, scaffold a target repo with the machinery, the
+vendored skills, and the `AGENTS.md`/`CLAUDE.md` pair:
+
+```sh
+scripts/init-repo.sh /path/to/target-repo
+```
+
+It is non-destructive and idempotent: it copies the installer + Claude hook,
+registers the hook in `.claude/settings.json` (merging if that file already
+exists), vendors every skill from `skills/` (so the installer uses local mode —
+no auth), and creates `AGENTS.md` plus a one-line `@AGENTS.md` `CLAUDE.md`.
+Options: `--subdir DIR` (vendor elsewhere and point the hook at it),
+`--no-vendor` (use submodule/clone mode instead), `--no-agents-md`, `--force`.
+Then commit the listed paths to the target's **default branch**.
+
+## Shared agent guidance: AGENTS.md + CLAUDE.md
+
+Keep one source of truth. `AGENTS.md` holds the guidance (Codex, Cursor, and
+Copilot read it natively); `CLAUDE.md` is a one-line `@AGENTS.md` import so
+Claude Code pulls in the exact same content. Edit `AGENTS.md` only — never
+duplicate the text into `CLAUDE.md`. `init-repo.sh` scaffolds both this way.
+
+## Reuse in another repo (manual)
+
+If you prefer not to use `init-repo.sh`, copy both files into the target repo,
+then wire the installer into each agent's startup mechanism:
 
 1. Copy `scripts/sync-agent-skills.sh` (keep it executable).
 2. **Claude Code** — copy `.claude/hooks/session-start.sh` and add the

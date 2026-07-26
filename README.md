@@ -223,8 +223,13 @@ shared `~/.agents/skills` for Codex/Cursor/Copilot) so whichever agent runs the
 session discovers them. A Claude Code `SessionStart` hook
 ([`.claude/hooks/session-start.sh`](.claude/hooks/session-start.sh), registered
 in [`.claude/settings.json`](.claude/settings.json)) runs it in web sessions;
-other agents can invoke the same installer from their own startup hook. The
-pattern is reusable in any repo — see
+other agents can invoke the same installer from their own startup hook.
+
+To set another repo up the same way in one step, run
+[`scripts/init-repo.sh <target-repo>`](scripts/init-repo.sh) from a checkout of
+this repo. It copies the machinery, vendors the skills, and scaffolds shared
+`AGENTS.md` + `CLAUDE.md` guidance (`CLAUDE.md` is a one-line `@AGENTS.md` import
+so both agents share one source of truth). See
 [`docs/cloud-skills-sync.md`](docs/cloud-skills-sync.md).
 
 ## Agent directory policy
