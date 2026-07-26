@@ -13,6 +13,7 @@ assert SPEC is not None and SPEC.loader is not None
 INSTALLER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(INSTALLER)
 SKILL = "orchestrate-olympus"
+EXPLAINER_SKILL = "semantic-pr-review"
 
 
 class TTYBuffer(io.StringIO):
@@ -130,6 +131,67 @@ class InteractiveTests(unittest.TestCase):
             self.assertEqual("link", args.mode)
             self.assertTrue(args.matt_skills)
             self.assertTrue(args.graphify)
+
+    def test_multiple_bundled_skills_are_selectable_with_summaries(self) -> None:
+        bundled = INSTALLER.available_skills()
+        self.assertIn(SKILL, bundled)
+        self.assertIn(EXPLAINER_SKILL, bundled)
+        with tempfile.TemporaryDirectory() as directory:
+            args = INSTALLER.parser().parse_args(["--home", directory])
+            output = TTYBuffer()
+            console = INSTALLER.Console(
+                # scope, agents, skills, mode, Graphify, proceed
+                TTYBuffer(f"\n\n{bundled.index(EXPLAINER_SKILL) + 1}\n\nn\ny\n"),
+                output,
+                color=False,
+                unicode=False,
+                width=72,
+            )
+            self.assertTrue(INSTALLER.run_wizard(args, bundled, console))
+            self.assertEqual([EXPLAINER_SKILL], args.skill)
+        rendered = output.getvalue()
+        for name in bundled:
+            with self.subTest(skill=name):
+                self.assertIn(name, rendered)
+                self.assertIn(INSTALLER.skill_summary(name), rendered)
+
+    def test_olympus_prerequisites_are_skipped_when_olympus_is_not_selected(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = INSTALLER.parser().parse_args(["--home", directory])
+            output = TTYBuffer()
+            console = INSTALLER.Console(
+                # scope, agents, skills, mode, Graphify, proceed
+                TTYBuffer("\n\n2\n\nn\ny\n"),
+                output,
+                color=False,
+                unicode=False,
+                width=72,
+            )
+            self.assertTrue(
+                INSTALLER.run_wizard(args, [SKILL, EXPLAINER_SKILL], console)
+            )
+            self.assertEqual([EXPLAINER_SKILL], args.skill)
+            self.assertFalse(args.matt_skills)
+            self.assertFalse(args.graphify)
+        rendered = output.getvalue()
+        self.assertNotIn("Olympus prerequisites", rendered)
+        self.assertNotIn("mattpocock/skills", rendered)
+
+    def test_skill_summaries_come_from_the_bundled_agent_interface(self) -> None:
+        self.assertEqual(
+            "Run, pause, recover, and present Olympus work",
+            INSTALLER.skill_summary(SKILL),
+        )
+        self.assertEqual(
+            "Build portable, snapshot-verified PR flows",
+            INSTALLER.skill_summary(EXPLAINER_SKILL),
+        )
+        self.assertEqual(
+            "Bundled in this collection.",
+            INSTALLER.skill_summary("skill-without-an-interface-file"),
+        )
 
     def test_windows_extended_arrow_codes_are_normalized(self) -> None:
         self.assertEqual("up", INSTALLER._normalize_windows_key("\xe0", "H"))

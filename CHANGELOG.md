@@ -5,6 +5,33 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+## [7.1.0] - 2026-07-26
+
+### Added
+
+- Added the `semantic-pr-review` skill. It pins a pull request's immutable head
+  SHA, derives semantic layers from responsibilities rather than directories,
+  records DTO-labeled runtime handoffs, and builds a self-contained interactive
+  explorer through bundled scaffold, render, and strict verification scripts.
+- Added packaging and pipeline tests for the new skill covering entrypoint
+  routing, install-location portability, standard-library-only scripts, a full
+  scaffold/render/verify pass against a Git snapshot, and the fail-closed paths
+  for hand-edited previews, mismatched models, and drifting editor worktrees.
+- Added installer coverage for multi-skill collections: every bundled skill is
+  installed by default, `--skill` still installs exactly one, and `--list`
+  reports the full bundled set.
+
+### Changed
+
+- The guided installer now shows the skill selection screen whenever more than
+  one skill is bundled and labels each option with that skill's own
+  `agents/openai.yaml` short description instead of a generic line.
+- The Olympus prerequisite screen is offered only when `orchestrate-olympus` is
+  part of the selection, so installing `semantic-pr-review` alone no longer
+  proposes an unrelated third-party download.
+- `README.md` documents both skills, the new per-skill install example, and the
+  snapshot-verification boundary for PR explorers.
+
 ## [7.0.0] - 2026-07-16
 
 ### Added

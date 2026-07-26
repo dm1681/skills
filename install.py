@@ -35,6 +35,7 @@ GRAPHIFY_PLATFORMS = {
     "copilot": "copilot",
     "claude": "claude",
 }
+OLYMPUS_SKILL = "orchestrate-olympus"
 MATT_SKILLS_SOURCE = "mattpocock/skills"
 MATT_SKILLS_AGENTS = {
     "universal": "codex",
@@ -619,6 +620,19 @@ def available_skills() -> list[str]:
     )
 
 
+def skill_summary(name: str) -> str:
+    """Return one short line describing a bundled skill."""
+    interface = SOURCE_ROOT / name / "agents" / "openai.yaml"
+    if interface.is_file():
+        for line in interface.read_text(encoding="utf-8").splitlines():
+            key, separator, value = line.strip().partition(":")
+            if key == "short_description" and separator:
+                summary = value.strip().strip('"').strip("'")
+                if summary:
+                    return summary
+    return "Bundled in this collection."
+
+
 def expand_agents(values: Iterable[str]) -> list[str]:
     requested = list(values) or ["universal"]
     unknown = sorted(set(requested) - KNOWN_AGENTS)
@@ -968,7 +982,7 @@ def run_wizard(
         args.skill = _select_many(
             console,
             "Skills",
-            [(name, name, "Bundled in this collection.") for name in bundled],
+            [(name, name, skill_summary(name)) for name in bundled],
             args.skill or bundled,
         )
 
@@ -989,22 +1003,25 @@ def run_wizard(
         ],
         args.mode,
     )
-    console.section("Olympus prerequisites")
-    console.note(
-        "Matt Pocock's engineering skills provide the implement, TDD, and "
-        "two-axis code-review workflows used by Olympus orchestration."
-    )
-    matt_default = True if args.matt_skills is None else args.matt_skills
-    args.matt_skills = _confirm(
-        console,
-        "Install all mattpocock/skills for the selected agents?",
-        matt_default,
-    )
-    if not args.matt_skills:
-        console.warning(
-            "These workflows are required by Olympus; orchestration will be "
-            "incomplete until mattpocock/skills are installed."
+    if OLYMPUS_SKILL in args.skill:
+        console.section("Olympus prerequisites")
+        console.note(
+            "Matt Pocock's engineering skills provide the implement, TDD, and "
+            "two-axis code-review workflows used by Olympus orchestration."
         )
+        matt_default = True if args.matt_skills is None else args.matt_skills
+        args.matt_skills = _confirm(
+            console,
+            "Install all mattpocock/skills for the selected agents?",
+            matt_default,
+        )
+        if not args.matt_skills:
+            console.warning(
+                "These workflows are required by Olympus; orchestration will be "
+                "incomplete until mattpocock/skills are installed."
+            )
+    else:
+        args.matt_skills = bool(args.matt_skills)
     args.graphify = _confirm(
         console,
         "Install Graphify and configure it for the selected agents?",

@@ -9,6 +9,9 @@ self-contained under [`skills/`](skills/).
 | Skill | Purpose |
 | --- | --- |
 | `orchestrate-olympus` | Operate the visible, recoverable delivery control plane for `dm1681/Olympus`. |
+| `semantic-pr-review` | Explain a pull request as a source-verified semantic hierarchy and interactive flowchart. |
+
+## Orchestrate Olympus
 
 Olympus now uses a parent-resident subagent loop. The current Codex task is the
 Orchestrator; it starts one reusable Reviewer first, uses one-shot Planners,
@@ -52,6 +55,37 @@ Olympus also treats documentation as an agent navigation layer. Planners
 identify material documentation surfaces, Workers author concise contract
 comments and durable docs, and the Reviewer blocks only missing or misleading
 documentation that creates a material risk of agent misuse.
+
+## Semantic PR review
+
+`semantic-pr-review` turns one pull request into an architectural walkthrough
+and a self-contained interactive flowchart instead of a file-by-file diff
+summary. It pins the immutable head SHA, derives semantic layers from
+responsibilities rather than directories, and records every runtime handoff
+with its transferred DTOs, optionality, containers, and evidence.
+
+The skill is deliberately host-neutral. It uses any available read-only GitHub
+integration, CLI, or local Git ref, and it requires no companion skill or
+visualization surface: filesystem access, Python 3, Git, and a browser are
+enough. A code graph such as Graphify is used only as an optional navigation
+fast path, never as a source of truth.
+
+Every rendered code excerpt, label, and link is derived from the analyzed Git
+blob by the bundled scripts rather than hand-copied:
+
+```sh
+python3 <skill-root>/scripts/scaffold_pr_explorer.py --data pr-model.json \
+  --output pr-fragment.html --repo-root /path/to/repo --source-ref <head-sha>
+python3 <skill-root>/scripts/render_standalone.py --fragment pr-fragment.html \
+  --output page.html --title "PR 54 Dispatch Explorer"
+python3 <skill-root>/scripts/verify_pr_explorer.py pr-fragment.html \
+  --standalone page.html --source-repo /path/to/repo --source-ref <head-sha> --strict
+```
+
+Strict verification compares every preview byte-for-byte with its Git blob and
+fails closed when a link, label, or editor target drifts from the analyzed
+snapshot. Editor deep links are emitted only for a worktree whose `HEAD` and
+source bytes match that snapshot exactly.
 
 ## Install
 
@@ -122,6 +156,9 @@ Examples:
 ```sh
 # Install all skills for Claude Code.
 ./install.sh --agent claude
+
+# Install one skill only.
+./install.sh --agent all --skill semantic-pr-review
 
 # Install shared skills into a repository.
 ./install.sh --scope project --project-dir /path/to/repo
@@ -205,7 +242,7 @@ uv sync
 To pin a machine to a release, check out its tag first:
 
 ```sh
-git checkout v7.0.0
+git checkout v7.1.0
 ./install.sh --agent all
 ```
 

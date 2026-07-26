@@ -1,0 +1,1151 @@
+<div id="__PR_EXPLORER_ROOT_ID__" data-pr-explorer data-view="full">
+  <style>
+    #__PR_EXPLORER_ROOT_ID__ {
+      --ctp-base: light-dark(#eff1f5, #1e1e2e);
+      --ctp-surface-0: light-dark(#ccd0da, #313244);
+      --ctp-surface-1: light-dark(#bcc0cc, #45475a);
+      --ctp-overlay-0: light-dark(#9ca0b0, #6c7086);
+      --ctp-text: light-dark(#4c4f69, #cdd6f4);
+      --ctp-mauve: light-dark(#8839ef, #cba6f7);
+      --ctp-pink: light-dark(#ea76cb, #f5c2e7);
+      --ctp-blue: light-dark(#1e66f5, #89b4fa);
+      --ctp-sapphire: light-dark(#209fb5, #74c7ec);
+      --ctp-sky: light-dark(#04a5e5, #89dceb);
+      --ctp-teal: light-dark(#179299, #94e2d5);
+      --ctp-green: light-dark(#40a02b, #a6e3a1);
+      --ctp-yellow: light-dark(#df8e1d, #f9e2af);
+      --ctp-peach: light-dark(#fe640b, #fab387);
+      color: var(--foreground);
+      width: 100%;
+      font-size: var(--font-size-base);
+      position: relative;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-overview,
+    #__PR_EXPLORER_ROOT_ID__ .prx-detail {
+      display: grid;
+      gap: 12px;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-overview h2,
+    #__PR_EXPLORER_ROOT_ID__ .prx-overview p,
+    #__PR_EXPLORER_ROOT_ID__ .prx-detail p {
+      margin: 0;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-ownership,
+    #__PR_EXPLORER_ROOT_ID__ .prx-toolbar,
+    #__PR_EXPLORER_ROOT_ID__ .prx-scope-row,
+    #__PR_EXPLORER_ROOT_ID__ .prx-controls,
+    #__PR_EXPLORER_ROOT_ID__ .prx-step-controls,
+    #__PR_EXPLORER_ROOT_ID__ .prx-change-legend,
+    #__PR_EXPLORER_ROOT_ID__ .prx-legend,
+    #__PR_EXPLORER_ROOT_ID__ .prx-source-links {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-ownership {
+      justify-content: space-between;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-payoff {
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-toolbar {
+      justify-content: flex-end;
+      margin: 16px 0 8px;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-scope-row {
+      justify-content: space-between;
+      margin: 12px 0 8px;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-change-legend {
+      color: var(--muted-foreground);
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-change-key {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-change-key::before {
+      content: "";
+      width: 11px;
+      height: 11px;
+      border: 1px solid var(--ring);
+      border-radius: 3px;
+      background: var(--accent);
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-change-key[data-kind="context"]::before {
+      border-style: dashed;
+      border-color: var(--muted-foreground);
+      background: transparent;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-legend {
+      justify-content: center;
+      margin: 12px 0 18px;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-legend-item,
+    #__PR_EXPLORER_ROOT_ID__ .prx-system-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--prx-series, var(--border));
+      flex: 0 0 auto;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-flow,
+    #__PR_EXPLORER_ROOT_ID__ .prx-sequence,
+    #__PR_EXPLORER_ROOT_ID__ .prx-lane {
+      display: grid;
+      justify-items: stretch;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-flow {
+      justify-items: center;
+      width: 100%;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-sequence {
+      width: min(620px, 100%);
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-branches {
+      display: grid;
+      grid-template-columns: repeat(var(--prx-branch-count, 1), minmax(0, 1fr));
+      gap: 24px;
+      width: 100%;
+      align-items: start;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-lane {
+      border-top: 2px solid var(--prx-series, var(--border));
+      padding-top: 10px;
+      transition: opacity 140ms ease;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__[data-path-hover="true"]
+      .prx-lane[data-path-highlighted="false"] {
+      opacity: 0.24;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-lane-header {
+      display: grid;
+      justify-items: center;
+      min-height: 48px;
+      text-align: center;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-node {
+      width: 100%;
+      max-width: 100%;
+      min-height: 48px;
+      white-space: normal;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-node code {
+      display: inline;
+      padding: 0;
+      color: inherit;
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      white-space: normal;
+      overflow-wrap: normal;
+      word-break: normal;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-rich-tooltip {
+      position: absolute;
+      z-index: 20;
+      width: min(560px, calc(100% - 8px));
+      max-width: calc(100% - 8px);
+      pointer-events: auto;
+      user-select: text;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-rich-tooltip[hidden] {
+      display: none;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-rich-tooltip > code,
+    #__PR_EXPLORER_ROOT_ID__ .prx-tooltip-copy code {
+      white-space: normal;
+      overflow-wrap: normal;
+      word-break: normal;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-tooltip-code {
+      display: grid;
+      gap: 6px;
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-tooltip-code-label {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 4px 10px;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-tooltip-source {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 4px;
+      color: var(--primary);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-tooltip-source code {
+      color: inherit;
+      background: transparent;
+      border: 0;
+      padding: 0;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-code-preview {
+      margin: 0;
+      padding: 10px;
+      color: var(--ctp-text);
+      background: var(--ctp-base);
+      border: 1px solid var(--ctp-surface-0);
+      border-radius: var(--radius);
+      white-space: pre-wrap;
+      overflow-wrap: normal;
+      word-break: normal;
+      tab-size: 2;
+      text-align: left;
+      cursor: text;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-code-preview code {
+      display: block;
+      padding: 0;
+      color: inherit;
+      background: transparent;
+      border: 0;
+      white-space: inherit;
+      font: inherit;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-token-keyword {
+      color: var(--ctp-mauve);
+      font-weight: 500;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-token-section,
+    #__PR_EXPLORER_ROOT_ID__ .prx-token-function {
+      color: var(--ctp-blue);
+      font-weight: 500;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-token-builtin,
+    #__PR_EXPLORER_ROOT_ID__ .prx-token-number {
+      color: var(--ctp-peach);
+      font-weight: 500;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-token-string {
+      color: var(--ctp-green);
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-token-decorator {
+      color: var(--ctp-pink);
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-token-operator {
+      color: var(--ctp-sky);
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-token-type {
+      color: var(--ctp-yellow);
+      font-weight: 500;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-token-key {
+      color: var(--ctp-sapphire);
+      font-weight: 500;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-token-variable {
+      color: var(--ctp-text);
+      font-weight: 500;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-token-function {
+      text-decoration: underline;
+      text-decoration-color: var(--ctp-surface-1);
+      text-underline-offset: 2px;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-token-property {
+      color: var(--ctp-teal);
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-token-punctuation,
+    #__PR_EXPLORER_ROOT_ID__ .prx-token-comment {
+      color: var(--ctp-overlay-0);
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-token-comment {
+      font-style: italic;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-change {
+      display: block;
+      color: var(--muted-foreground);
+    }
+
+    #__PR_EXPLORER_ROOT_ID__[data-view="delta"]
+      .prx-node[data-change-status="context"],
+    #__PR_EXPLORER_ROOT_ID__[data-view="delta"]
+      .prx-edge[data-change-status="context"] {
+      opacity: 0.38;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-edge {
+      display: grid;
+      justify-items: center;
+      min-height: 54px;
+      padding: 4px 8px;
+      color: var(--muted-foreground);
+      cursor: help;
+      text-align: center;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-edge::before {
+      content: "";
+      width: 2px;
+      height: 18px;
+      background: var(--prx-series, var(--border));
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-edge::after {
+      content: "▼";
+      color: var(--prx-series, var(--border));
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-edge[data-change-status="context"]::before {
+      background: repeating-linear-gradient(
+        to bottom,
+        var(--prx-series, var(--border)) 0 4px,
+        transparent 4px 7px
+      );
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-fanout,
+    #__PR_EXPLORER_ROOT_ID__ .prx-convergence {
+      width: min(1040px, 92%);
+      min-height: 58px;
+      border-top: 2px solid var(--border);
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-fanout {
+      margin-top: 4px;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-convergence {
+      border-top: 0;
+      border-bottom: 2px solid var(--border);
+      margin-bottom: 8px;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-detail {
+      margin-top: 20px;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-detail-grid {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      gap: 6px 12px;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-evidence-rail {
+      display: grid;
+      justify-items: center;
+      gap: 8px;
+      margin-top: 18px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    @media (max-width: 560px) {
+      #__PR_EXPLORER_ROOT_ID__ .prx-branches {
+        grid-template-columns: 1fr;
+      }
+
+      #__PR_EXPLORER_ROOT_ID__ .prx-fanout,
+      #__PR_EXPLORER_ROOT_ID__ .prx-convergence {
+        display: none;
+      }
+
+      #__PR_EXPLORER_ROOT_ID__ .prx-detail-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #__PR_EXPLORER_ROOT_ID__ .prx-lane {
+        transition: none;
+      }
+    }
+  </style>
+
+  <section class="card prx-overview" data-pr-summary aria-label="PR orientation">
+    <span class="viz-badge" data-role="pr-label"></span>
+    <span class="viz-badge" data-role="pr-snapshot"></span>
+    <h2 data-role="goal"></h2>
+    <p data-role="old-to-new"></p>
+    <div class="prx-ownership" data-role="ownership"></div>
+    <p class="prx-payoff" data-role="payoff"></p>
+    <p data-role="residual-debt"></p>
+  </section>
+
+  <div class="prx-scope-row">
+    <div class="prx-controls viz-controls" role="group" aria-label="Choose change scope">
+      <button type="button" class="btn btn-primary" data-view-choice="full" aria-pressed="true">Full request path</button>
+      <button type="button" class="btn" data-view-choice="delta" aria-pressed="false">PR delta</button>
+    </div>
+    <div class="prx-change-legend text-small" data-change-legend aria-label="Change status legend">
+      <span class="prx-change-key" data-kind="delta">PR delta</span>
+      <span class="prx-change-key" data-kind="context">Context</span>
+    </div>
+  </div>
+  <p class="text-small text-muted" data-role="view-note" aria-live="polite">Full request path shows PR changes together with unchanged or externally owned context.</p>
+
+  <div class="prx-toolbar">
+    <div class="prx-step-controls">
+      <span class="text-muted" data-role="progress" aria-live="polite"></span>
+      <button type="button" class="btn btn-ghost" data-action="previous">Previous</button>
+      <button type="button" class="btn" data-action="next">Next</button>
+    </div>
+  </div>
+
+  <p class="text-small text-muted">Hover or keyboard-focus a branch to emphasize its complete path, hover arrows for transferred objects, and select a node for source-backed details.</p>
+  <div class="prx-legend text-small" data-role="legend" aria-label="System color legend"></div>
+
+  <div class="prx-flow" role="group" aria-label="PR runtime flowchart">
+    <div class="prx-sequence" data-role="shared-before"></div>
+    <div class="prx-fanout" aria-label="Execution branches fan out"></div>
+    <section class="prx-branches" data-role="branches" aria-label="Execution branches"></section>
+    <div class="prx-convergence" data-pr-convergence aria-label="Branches converge"></div>
+    <div class="prx-sequence" data-role="shared-after"></div>
+    <section class="prx-evidence-rail" data-role="evidence-rail" aria-label="Cross-cutting evidence"></section>
+  </div>
+
+  <section class="card prx-detail" data-role="detail" aria-live="polite">
+    <strong data-role="detail-name"></strong>
+    <p data-role="detail-purpose"></p>
+    <div class="prx-detail-grid text-small">
+      <strong>Receives</strong><span data-role="detail-receives"></span>
+      <strong>Sends</strong><span data-role="detail-sends"></span>
+      <strong>Architectural role</strong><span data-role="detail-role"></span>
+      <strong>Connection</strong><span data-role="detail-connection"></span>
+      <strong>Why it matters</strong><span data-role="detail-tradeoff"></span>
+      <strong>PR status</strong><span data-role="detail-status"></span>
+    </div>
+    <div class="prx-source-links" data-role="detail-sources" aria-label="Relevant code"></div>
+  </section>
+
+  <div class="tooltip prx-rich-tooltip text-small" data-pr-rich-tooltip role="tooltip" hidden></div>
+
+  <p class="sr-only" data-role="accessible-summary"></p>
+
+  <script>
+    (() => {
+      const root = document.getElementById("__PR_EXPLORER_ROOT_ID__");
+      if (!root) return;
+
+      const model = __PR_EXPLORER_DATA__;
+      const nodes = new Map(model.nodes.map((node) => [node.id, node]));
+      const systems = new Map(model.systems.map((system) => [system.id, system]));
+      const edges = new Map(model.edges.map((edge) => [`${edge.from}::${edge.to}`, edge]));
+      const roles = (name) => root.querySelector(`[data-role="${name}"]`);
+      const richTooltip = root.querySelector("[data-pr-rich-tooltip]");
+      let activeBranch = model.branches[0]?.id || null;
+      let activeNode = model.shared_before[0] || model.convergence_node;
+      let view = "full";
+      let activeTooltipTrigger = null;
+      let tooltipHideTimer = null;
+
+      function appendSemanticCode(target, value) {
+        const code = document.createElement("code");
+        const text = String(value);
+        for (let index = 0; index < text.length; index += 1) {
+          const character = text[index];
+          const previous = text[index - 1] || "";
+          const next = text[index + 1] || "";
+          const camelBoundary =
+            index > 0 &&
+            /[A-Z]/.test(character) &&
+            (/[a-z0-9]/.test(previous) ||
+              (/[A-Z]/.test(previous) && /[a-z]/.test(next)));
+          if (camelBoundary || previous === "_") {
+            code.append(document.createElement("wbr"));
+          }
+          code.append(document.createTextNode(character));
+        }
+        target.append(code);
+      }
+
+      function renderCodeAware(target, value) {
+        target.replaceChildren();
+        String(value || "")
+          .split(/(`[^`]+`)/g)
+          .filter(Boolean)
+          .forEach((part) => {
+            if (part.startsWith("`") && part.endsWith("`")) {
+              appendSemanticCode(target, part.slice(1, -1));
+            } else {
+              target.append(document.createTextNode(part));
+            }
+          });
+      }
+
+      const pythonKeywords = new Set([
+        "and", "as", "async", "await", "class", "def", "elif", "else",
+        "except", "False", "for", "from", "if", "import", "in", "is",
+        "lambda", "None", "not", "or", "pass", "raise", "return", "True",
+        "try", "with", "yield"
+      ]);
+      const pythonBuiltins = new Set([
+        "Any", "ABC", "BaseModel", "Field", "Generic", "Mapping", "TypeVar",
+        "bool", "dict", "float", "int", "isinstance", "len", "list", "set",
+        "str", "super", "tuple", "type", "self"
+      ]);
+      const scriptKeywords = new Set([
+        "as", "async", "await", "break", "case", "catch", "class", "const",
+        "continue", "debugger", "default", "delete", "do", "else", "export",
+        "extends", "false", "finally", "for", "from", "function", "if",
+        "implements", "import", "in", "instanceof", "interface", "let", "new",
+        "null", "of", "private", "protected", "public", "readonly", "return",
+        "static", "super", "switch", "this", "throw", "true", "try", "type",
+        "typeof", "undefined", "var", "void", "while", "with", "yield"
+      ]);
+      const scriptBuiltins = new Set([
+        "Array", "Boolean", "Date", "Error", "JSON", "Map", "Math", "Number",
+        "Object", "Promise", "Record", "RegExp", "Set", "String", "console",
+        "document", "window"
+      ]);
+      const shellKeywords = new Set([
+        "case", "do", "done", "elif", "else", "esac", "fi", "for", "function",
+        "if", "in", "select", "then", "until", "while"
+      ]);
+
+      function follows(token, index, source, value) {
+        return source.slice(index + token.length).trimStart().startsWith(value);
+      }
+
+      function tokenClass(token, language, index, source) {
+        const scriptLanguage =
+          language === "javascript" || language === "typescript";
+        if (language === "python") {
+          if (token.startsWith("#")) return "prx-token-comment";
+          if (/^[fFrRbBuU]{0,2}["']/.test(token)) return "prx-token-string";
+          if (token.startsWith("@")) return "prx-token-decorator";
+          if (pythonKeywords.has(token)) return "prx-token-keyword";
+          if (pythonBuiltins.has(token)) return "prx-token-builtin";
+          if (/^\d/.test(token)) return "prx-token-number";
+          if (/^[A-Z]/.test(token)) return "prx-token-type";
+          if (token.startsWith(".")) return "prx-token-property";
+          if (/^[A-Za-z_]/.test(token) && follows(token, index, source, "(")) {
+            return "prx-token-function";
+          }
+          if (/^[A-Za-z_]/.test(token)) return "prx-token-variable";
+          if (/^[()[\]{},:]$/.test(token)) return "prx-token-punctuation";
+          return "prx-token-operator";
+        }
+        if (scriptLanguage) {
+          if (token.startsWith("//") || token.startsWith("/*")) {
+            return "prx-token-comment";
+          }
+          if (/^["'`]/.test(token)) return "prx-token-string";
+          if (scriptKeywords.has(token)) return "prx-token-keyword";
+          if (scriptBuiltins.has(token)) return "prx-token-builtin";
+          if (/^\d/.test(token)) return "prx-token-number";
+          if (/^[A-Z]/.test(token)) return "prx-token-type";
+          if (token.startsWith(".")) return "prx-token-property";
+          if (/^[A-Za-z_$]/.test(token) && follows(token, index, source, "(")) {
+            return "prx-token-function";
+          }
+          if (/^[A-Za-z_$]/.test(token)) return "prx-token-variable";
+          if (/^[()[\]{},;:]$/.test(token)) return "prx-token-punctuation";
+          return "prx-token-operator";
+        }
+        if (language === "toml") {
+          if (token.startsWith("#")) return "prx-token-comment";
+          if (token.startsWith("[")) return "prx-token-section";
+          if (token.startsWith("\"")) {
+            return follows(token, index, source, "=")
+              ? "prx-token-key"
+              : "prx-token-string";
+          }
+          if (token === "true" || token === "false") return "prx-token-keyword";
+          if (/^\d/.test(token)) return "prx-token-number";
+          if (/^[A-Za-z_]/.test(token)) return "prx-token-key";
+          return "prx-token-punctuation";
+        }
+        if (language === "json" || language === "yaml") {
+          if (token.startsWith("#")) return "prx-token-comment";
+          if (/^["']/.test(token)) {
+            return follows(token, index, source, ":")
+              ? "prx-token-key"
+              : "prx-token-string";
+          }
+          if (/^(?:true|false|null)$/.test(token)) return "prx-token-keyword";
+          if (/^-?\d/.test(token)) return "prx-token-number";
+          if (/^[A-Za-z_]/.test(token)) return "prx-token-key";
+          return "prx-token-punctuation";
+        }
+        if (language === "shell") {
+          if (token.startsWith("#")) return "prx-token-comment";
+          if (/^["']/.test(token)) return "prx-token-string";
+          if (token.startsWith("$")) return "prx-token-variable";
+          if (shellKeywords.has(token)) return "prx-token-keyword";
+          if (/^\d/.test(token)) return "prx-token-number";
+          if (/^[A-Za-z_]/.test(token) && follows(token, index, source, "(")) {
+            return "prx-token-function";
+          }
+          return "prx-token-operator";
+        }
+        if (language === "markdown") {
+          if (token.startsWith("#")) return "prx-token-section";
+          if (token.startsWith("`")) return "prx-token-string";
+          if (token.startsWith("**")) return "prx-token-keyword";
+          if (token.startsWith("[")) return "prx-token-function";
+          return "prx-token-operator";
+        }
+        if (/^(?:#|\/\/)/.test(token)) return "prx-token-comment";
+        if (/^["']/.test(token)) return "prx-token-string";
+        if (/^\d/.test(token)) return "prx-token-number";
+        if (/^[A-Z]/.test(token)) return "prx-token-type";
+        if (follows(token, index, source, "(")) return "prx-token-function";
+        if (/^[()[\]{},;:]$/.test(token)) return "prx-token-punctuation";
+        return "prx-token-keyword";
+      }
+
+      function syntaxPattern(language) {
+        if (language === "python") {
+          return /(#[^\n]*|[fFrRbBuU]{0,2}"(?:\\.|[^"\\])*"|[fFrRbBuU]{0,2}'(?:\\.|[^'\\])*'|@[A-Za-z_][A-Za-z0-9_.]*|\b(?:and|as|async|await|class|def|elif|else|except|False|for|from|if|import|in|is|lambda|None|not|or|pass|raise|return|True|try|with|yield)\b|\b(?:Any|ABC|BaseModel|Field|Generic|Mapping|TypeVar|bool|dict|float|int|isinstance|len|list|set|str|super|tuple|type|self)\b|\b\d[\d_]*(?:\.\d[\d_]*)?\b|\.[A-Za-z_][A-Za-z0-9_]*|\b[A-Z][A-Za-z0-9_]*\b|\b[A-Za-z_][A-Za-z0-9_]*(?=\s*\()|\b[A-Za-z_][A-Za-z0-9_]*(?=\s*=)|->|:=|==|!=|<=|>=|\*\*|\/\/|[+\-*\/%=|&<>]|[()[\]{},:])/g;
+        }
+        if (language === "javascript" || language === "typescript") {
+          return /(\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b(?:as|async|await|break|case|catch|class|const|continue|debugger|default|delete|do|else|export|extends|false|finally|for|from|function|if|implements|import|in|instanceof|interface|let|new|null|of|private|protected|public|readonly|return|static|super|switch|this|throw|true|try|type|typeof|undefined|var|void|while|with|yield)\b|\b(?:Array|Boolean|Date|Error|JSON|Map|Math|Number|Object|Promise|Record|RegExp|Set|String|console|document|window)\b|\b\d[\d_]*(?:\.\d[\d_]*)?\b|\.[A-Za-z_$][A-Za-z0-9_$]*|\b[A-Z][A-Za-z0-9_$]*\b|\b[A-Za-z_$][A-Za-z0-9_$]*(?=\s*\()|\b[A-Za-z_$][A-Za-z0-9_$]*(?=\s*=)|=>|===|!==|==|!=|<=|>=|\?\?|\?\.|&&|\|\||[+\-*\/%=!<>?&|]|[()[\]{},;:])/g;
+        }
+        if (language === "toml") {
+          return /(\[[^\]\n]+\]|#[^\n]*|"(?:\\.|[^"\\])*"(?=\s*=)|"(?:\\.|[^"\\])*"|\b(?:true|false)\b|\b\d+(?:\.\d+)?\b|^[A-Za-z0-9_.-]+(?=\s*=)|[.=])/gm;
+        }
+        if (language === "json") {
+          return /("(?:\\.|[^"\\])*"(?=\s*:)|"(?:\\.|[^"\\])*"|\b(?:true|false|null)\b|-?\b\d+(?:\.\d+)?\b|[{}\[\],:])/g;
+        }
+        if (language === "yaml") {
+          return /(#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|^[A-Za-z0-9_.-]+(?=\s*:)|\b(?:true|false|null)\b|-?\b\d+(?:\.\d+)?\b|[:\[\]{},-])/gm;
+        }
+        if (language === "shell") {
+          return /(#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|\b(?:case|do|done|elif|else|esac|fi|for|function|if|in|select|then|until|while)\b|\b\d+(?:\.\d+)?\b|\b[A-Za-z_][A-Za-z0-9_]*(?=\s*\()|&&|\|\||[|&;<>])/g;
+        }
+        if (language === "markdown") {
+          return /(^#{1,6}\s+[^\n]+|`[^`\n]+`|\*\*[^*\n]+\*\*|\[[^\]\n]+\]\([^)]+\)|^\s*(?:[-*+] |> )(?=\S))/gm;
+        }
+        return /(\/\/[^\n]*|#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b(?:class|def|else|false|for|function|if|import|in|new|null|return|true|while)\b|\b\d+(?:\.\d+)?\b|\b[A-Z][A-Za-z0-9_]*\b|\b[A-Za-z_][A-Za-z0-9_]*(?=\s*\()|[()[\]{},;:])/g;
+      }
+
+      function appendHighlightedCode(target, source, language) {
+        const sourceText = String(source);
+        const pattern = syntaxPattern(language);
+        let cursor = 0;
+        for (const match of sourceText.matchAll(pattern)) {
+          if (match.index > cursor) {
+            target.append(
+              document.createTextNode(sourceText.slice(cursor, match.index))
+            );
+          }
+          const token = document.createElement("span");
+          token.className = tokenClass(
+            match[0],
+            language,
+            match.index,
+            sourceText
+          );
+          token.textContent = match[0];
+          target.append(token);
+          cursor = match.index + match[0].length;
+        }
+        if (cursor < sourceText.length) {
+          target.append(document.createTextNode(sourceText.slice(cursor)));
+        }
+      }
+
+      function previewSource(node) {
+        return node.sources[node.code_preview.source_index] || null;
+      }
+
+      function previewHref(source) {
+        return source?.cursor_url || source?.github_url || source?.local_path || "";
+      }
+
+      function renderNodeTooltip(nodeId) {
+        const node = nodes.get(nodeId);
+        const preview = node?.code_preview;
+        if (!node || !preview) return false;
+        richTooltip.replaceChildren();
+
+        const copy = document.createElement("div");
+        copy.className = "prx-tooltip-copy";
+        renderCodeAware(
+          copy,
+          `${node.change_status} · ${node.purpose} Receives: ${node.receives}. Sends: ${node.sends}.`
+        );
+        richTooltip.append(copy);
+
+        const previewArea = document.createElement("div");
+        previewArea.className = "prx-tooltip-code";
+        const labelRow = document.createElement("div");
+        labelRow.className = "prx-tooltip-code-label";
+        const heading = document.createElement("strong");
+        heading.textContent = "Relevant code";
+
+        const source = previewSource(node);
+        const href = previewHref(source);
+        const sourceLabel = document.createElement(href ? "a" : "span");
+        if (href) {
+          sourceLabel.className = "prx-tooltip-source";
+          sourceLabel.href = href;
+          sourceLabel.target = "_blank";
+          sourceLabel.rel = "noopener";
+          sourceLabel.setAttribute(
+            "aria-label",
+            `Open source reference for ${preview.source_label}`
+          );
+        }
+        const sourceCode = document.createElement("code");
+        sourceCode.textContent = preview.source_label;
+        sourceLabel.append(sourceCode);
+        if (href) {
+          const openMarker = document.createElement("span");
+          openMarker.setAttribute("aria-hidden", "true");
+          openMarker.textContent = "↗";
+          sourceLabel.append(openMarker);
+        }
+        labelRow.append(heading, sourceLabel);
+
+        const pre = document.createElement("pre");
+        pre.className = "prx-code-preview";
+        const code = document.createElement("code");
+        code.className = `language-${preview.language}`;
+        appendHighlightedCode(code, preview.code, preview.language);
+        pre.append(code);
+        previewArea.append(labelRow, pre);
+        richTooltip.append(previewArea);
+        return true;
+      }
+
+      function systemStyle(element, systemId) {
+        const system = systems.get(systemId);
+        if (system?.color_token) {
+          element.style.setProperty("--prx-series", system.color_token);
+        }
+      }
+
+      function transferText(edge) {
+        const transfer = edge.transfer.map((name) => `\`${name}\``);
+        const optional = edge.optional.map((name) => `optional \`${name}\``);
+        const containers = edge.containers.map((name) => `in \`${name}\``);
+        const parts = [...transfer, ...optional, ...containers];
+        if (edge.transformation) parts.push(edge.transformation);
+        return parts.join(" · ") || "Control flow only; no runtime DTO";
+      }
+
+      function edgeElement(from, to, systemId) {
+        const edge = edges.get(`${from}::${to}`);
+        const element = document.createElement("div");
+        element.className = "prx-edge text-small";
+        element.dataset.prEdge = `${from}:${to}`;
+        element.dataset.changeStatus = edge?.change_status || "context";
+        element.dataset.transfer = edge ? transferText(edge) : "Missing edge record";
+        element.dataset.prxTooltip =
+          `${edge?.change_status || "context"} path · ${element.dataset.transfer}`;
+        element.textContent = edge?.verb || "continues";
+        systemStyle(element, systemId);
+        return element;
+      }
+
+      function nodeElement(nodeId) {
+        const node = nodes.get(nodeId);
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "btn btn-block prx-node";
+        button.dataset.prNode = node.id;
+        button.dataset.changeStatus = node.change_status;
+        button.dataset.prxTooltip =
+          `${node.purpose} Receives: ${node.receives}. Sends: ${node.sends}.`;
+        button.setAttribute("aria-pressed", String(node.id === activeNode));
+        systemStyle(button, node.system);
+
+        if (node.code_label) {
+          appendSemanticCode(button, node.label);
+        } else {
+          button.append(document.createTextNode(node.label));
+        }
+
+        const status = document.createElement("span");
+        status.className = "prx-change text-small";
+        status.textContent = node.change_status;
+        button.append(status);
+        button.addEventListener("click", () => selectNode(node.id));
+        return button;
+      }
+
+      function sequence(container, path, systemId) {
+        container.replaceChildren();
+        path.forEach((nodeId, index) => {
+          container.append(nodeElement(nodeId));
+          if (index < path.length - 1) {
+            container.append(edgeElement(nodeId, path[index + 1], systemId));
+          }
+        });
+      }
+
+      function activePath() {
+        const branch = model.branches.find((item) => item.id === activeBranch);
+        return [
+          ...model.shared_before,
+          ...(branch?.path || []),
+          model.convergence_node,
+          ...model.shared_after,
+        ];
+      }
+
+      function selectNode(nodeId) {
+        activeNode = nodeId;
+        const owningBranch = model.branches.find((branch) =>
+          branch.path.includes(nodeId)
+        );
+        if (owningBranch) activeBranch = owningBranch.id;
+        root.querySelectorAll("[data-pr-node]").forEach((button) => {
+          button.setAttribute("aria-pressed", String(button.dataset.prNode === nodeId));
+        });
+        const node = nodes.get(nodeId);
+        renderCodeAware(roles("detail-name"), node.code_label ? `\`${node.label}\`` : node.label);
+        renderCodeAware(roles("detail-purpose"), node.purpose);
+        renderCodeAware(roles("detail-receives"), node.receives);
+        renderCodeAware(roles("detail-sends"), node.sends);
+        renderCodeAware(roles("detail-role"), node.role);
+        renderCodeAware(roles("detail-connection"), node.connection);
+        renderCodeAware(roles("detail-tradeoff"), node.tradeoff);
+        roles("detail-status").textContent = node.change_status;
+        const sourceArea = roles("detail-sources");
+        sourceArea.replaceChildren();
+        node.sources.forEach((source) => {
+          [
+            ["GitHub", source.github_url],
+            ["Local editor", source.cursor_url],
+            ["Local", source.local_path],
+          ].forEach(([kind, href]) => {
+            if (!href) return;
+            const link = document.createElement("a");
+            link.className = "btn";
+            link.href = href;
+            link.textContent = `${kind} · ${source.label}`;
+            if (kind !== "Local") {
+              link.target = "_blank";
+              link.rel = "noopener";
+            }
+            sourceArea.append(link);
+          });
+        });
+        updateProgress();
+      }
+
+      function updateProgress() {
+        const path = activePath();
+        const index = path.indexOf(activeNode);
+        roles("progress").textContent =
+          index >= 0 ? `Step ${index + 1} of ${path.length}` : "Context node";
+      }
+
+      function selectBranch(branchId) {
+        activeBranch = branchId;
+        if (!activePath().includes(activeNode)) {
+          const branch = model.branches.find((item) => item.id === branchId);
+          selectNode(branch.path[0]);
+        } else {
+          updateProgress();
+        }
+      }
+
+      function setBranchHover(branchId) {
+        root.dataset.pathHover = String(Boolean(branchId));
+        root.querySelectorAll("[data-pr-branch]").forEach((lane) => {
+          lane.dataset.pathHighlighted = String(
+            Boolean(branchId) && lane.dataset.prBranch === branchId
+          );
+        });
+      }
+
+      function setView(nextView) {
+        view = nextView;
+        root.dataset.view = view;
+        root.querySelectorAll("[data-view-choice]").forEach((button) => {
+          const selected = button.dataset.viewChoice === view;
+          button.setAttribute("aria-pressed", String(selected));
+          button.classList.toggle("btn-primary", selected);
+        });
+        roles("view-note").textContent =
+          view === "delta"
+            ? "PR delta emphasizes changed nodes and path segments; context remains dimmed so the handoffs stay understandable."
+            : "Full request path shows PR changes together with unchanged or externally owned context.";
+      }
+
+      function buildSummary() {
+        roles("pr-label").textContent = `PR ${model.pr.number} · central goal`;
+        roles("pr-snapshot").textContent =
+          `Analyzed snapshot · ${model.pr.head_sha.slice(0, 7)}`;
+        roles("goal").textContent = model.summary.goal;
+        renderCodeAware(roles("old-to-new"), model.summary.old_to_new);
+        const ownership = roles("ownership");
+        model.summary.ownership_chain.forEach((item) => {
+          const span = document.createElement("span");
+          span.textContent = item;
+          ownership.append(span);
+        });
+        roles("payoff").textContent = `Architectural payoff: ${model.summary.payoff}`;
+        roles("residual-debt").textContent = `Residual debt: ${model.summary.residual_debt}`;
+        roles("accessible-summary").textContent = [
+          model.summary.goal,
+          model.summary.old_to_new,
+          model.summary.payoff,
+          model.summary.residual_debt,
+        ].join(" ");
+      }
+
+      function buildLegend() {
+        model.systems.forEach((system) => {
+          const item = document.createElement("span");
+          item.className = "prx-legend-item";
+          systemStyle(item, system.id);
+          const dot = document.createElement("span");
+          dot.className = "prx-dot";
+          item.append(dot, document.createTextNode(system.label));
+          roles("legend").append(item);
+        });
+      }
+
+      function buildBranches() {
+        const branchArea = roles("branches");
+        branchArea.style.setProperty("--prx-branch-count", String(model.branches.length));
+        const sharedOrigin = model.shared_before.at(-1);
+
+        model.branches.forEach((branch) => {
+          const lane = document.createElement("article");
+          lane.className = "prx-lane";
+          lane.dataset.prBranch = branch.id;
+          lane.dataset.pathHighlighted = "false";
+          systemStyle(lane, branch.system);
+          lane.addEventListener("pointerenter", () => setBranchHover(branch.id));
+          lane.addEventListener("pointerleave", () => setBranchHover(null));
+          lane.addEventListener("focusin", () => setBranchHover(branch.id));
+          lane.addEventListener("focusout", (event) => {
+            if (!lane.contains(event.relatedTarget)) setBranchHover(null);
+          });
+
+          const header = document.createElement("header");
+          header.className = "prx-lane-header";
+          const label = document.createElement("strong");
+          label.className = "prx-system-label";
+          const dot = document.createElement("span");
+          dot.className = "prx-dot";
+          label.append(dot, document.createTextNode(branch.label));
+          header.append(label);
+
+          const body = document.createElement("div");
+          if (sharedOrigin && branch.path[0]) {
+            body.append(edgeElement(sharedOrigin, branch.path[0], branch.system));
+          }
+          branch.path.forEach((nodeId, index) => {
+            body.append(nodeElement(nodeId));
+            if (index < branch.path.length - 1) {
+              body.append(edgeElement(nodeId, branch.path[index + 1], branch.system));
+            }
+          });
+          const branchEnd = branch.path.at(-1);
+          if (branchEnd) {
+            body.append(edgeElement(branchEnd, model.convergence_node, branch.system));
+          }
+          lane.append(header, body);
+          branchArea.append(lane);
+        });
+      }
+
+      function buildFlow() {
+        sequence(roles("shared-before"), model.shared_before, nodes.get(model.shared_before[0])?.system);
+        buildBranches();
+
+        const afterPath = [model.convergence_node, ...model.shared_after];
+        sequence(roles("shared-after"), afterPath, nodes.get(model.convergence_node)?.system);
+
+        const rail = roles("evidence-rail");
+        if (model.evidence_rail?.length) {
+          const label = document.createElement("span");
+          label.className = "viz-badge";
+          label.textContent = "Cross-cutting evidence · no runtime DTO";
+          rail.append(label);
+          const row = document.createElement("div");
+          row.className = "prx-controls";
+          model.evidence_rail.forEach((item) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "btn";
+            button.textContent = item.label;
+            button.dataset.prxTooltip = item.evidence;
+            row.append(button);
+          });
+          rail.append(row);
+        } else {
+          rail.hidden = true;
+        }
+      }
+
+      function hideRichTooltip() {
+        if (tooltipHideTimer !== null) {
+          window.clearTimeout(tooltipHideTimer);
+          tooltipHideTimer = null;
+        }
+        activeTooltipTrigger = null;
+        richTooltip.hidden = true;
+      }
+
+      function cancelRichTooltipHide() {
+        if (tooltipHideTimer !== null) {
+          window.clearTimeout(tooltipHideTimer);
+          tooltipHideTimer = null;
+        }
+      }
+
+      function scheduleRichTooltipHide() {
+        cancelRichTooltipHide();
+        tooltipHideTimer = window.setTimeout(hideRichTooltip, 180);
+      }
+
+      function showRichTooltip(trigger) {
+        const nodeId = trigger.dataset.prNode;
+        const tooltipText = trigger.dataset.prxTooltip;
+        if (!tooltipText && !nodeId) return;
+        cancelRichTooltipHide();
+        activeTooltipTrigger = trigger;
+        if (!nodeId || !renderNodeTooltip(nodeId)) {
+          renderCodeAware(richTooltip, tooltipText);
+        }
+        richTooltip.hidden = false;
+        richTooltip.style.visibility = "hidden";
+        richTooltip.style.left = "0px";
+        richTooltip.style.top = "0px";
+
+        const rootRect = root.getBoundingClientRect();
+        const triggerRect = trigger.getBoundingClientRect();
+        const tooltipRect = richTooltip.getBoundingClientRect();
+        const horizontalCenter =
+          triggerRect.left -
+          rootRect.left +
+          (triggerRect.width - tooltipRect.width) / 2;
+        const left = Math.max(
+          4,
+          Math.min(root.clientWidth - tooltipRect.width - 4, horizontalCenter)
+        );
+        const above = triggerRect.top - rootRect.top - tooltipRect.height - 8;
+        const top =
+          above >= 4
+            ? above
+            : triggerRect.bottom - rootRect.top + 8;
+
+        richTooltip.style.left = `${left}px`;
+        richTooltip.style.top = `${top}px`;
+        richTooltip.style.visibility = "visible";
+      }
+
+      root.addEventListener("pointerover", (event) => {
+        const trigger = event.target.closest?.("[data-prx-tooltip]");
+        if (trigger) {
+          showRichTooltip(trigger);
+        } else if (richTooltip.contains(event.target)) {
+          cancelRichTooltipHide();
+        }
+      });
+      root.addEventListener("pointerout", (event) => {
+        if (!activeTooltipTrigger) return;
+        const destination = event.relatedTarget;
+        if (
+          destination &&
+          (activeTooltipTrigger.contains(destination) ||
+            richTooltip.contains(destination))
+        ) return;
+        scheduleRichTooltipHide();
+      });
+      root.addEventListener("focusin", (event) => {
+        const trigger = event.target.closest?.("[data-prx-tooltip]");
+        if (trigger) showRichTooltip(trigger);
+      });
+      root.addEventListener("focusout", (event) => {
+        if (
+          activeTooltipTrigger &&
+          !activeTooltipTrigger.contains(event.relatedTarget) &&
+          !richTooltip.contains(event.relatedTarget)
+        ) {
+          scheduleRichTooltipHide();
+        }
+      });
+      richTooltip.addEventListener("pointerenter", cancelRichTooltipHide);
+      richTooltip.addEventListener("pointerleave", scheduleRichTooltipHide);
+      root.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") hideRichTooltip();
+      });
+      window.addEventListener("resize", hideRichTooltip);
+
+      root.querySelector('[data-action="previous"]').addEventListener("click", () => {
+        const path = activePath();
+        const current = path.indexOf(activeNode);
+        selectNode(path[Math.max(0, current - 1)]);
+      });
+
+      root.querySelector('[data-action="next"]').addEventListener("click", () => {
+        const path = activePath();
+        const current = path.indexOf(activeNode);
+        selectNode(path[Math.min(path.length - 1, Math.max(0, current) + 1)]);
+      });
+
+      root.querySelectorAll("[data-view-choice]").forEach((button) => {
+        button.addEventListener("click", () => setView(button.dataset.viewChoice));
+      });
+
+      buildSummary();
+      buildLegend();
+      buildFlow();
+      richTooltip.id = `${root.id}-rich-tooltip`;
+      root.querySelectorAll("[data-prx-tooltip]").forEach((trigger) => {
+        trigger.setAttribute("aria-describedby", richTooltip.id);
+      });
+      setView("full");
+      selectNode(activeNode);
+    })();
+  </script>
+</div>

@@ -12,6 +12,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = ROOT / "install.py"
 SKILL = "orchestrate-olympus"
+EXPLAINER_SKILL = "semantic-pr-review"
+BUNDLED = sorted(
+    path.name
+    for path in (ROOT / "skills").iterdir()
+    if path.is_dir() and (path / "SKILL.md").is_file()
+)
 
 
 class InstallerTests(unittest.TestCase):
@@ -118,7 +124,30 @@ class InstallerTests(unittest.TestCase):
 
     def test_list(self) -> None:
         result = self.run_installer("--list")
-        self.assertEqual(f"{SKILL}\n", result.stdout)
+        self.assertEqual("".join(f"{name}\n" for name in BUNDLED), result.stdout)
+        self.assertIn(SKILL, BUNDLED)
+        self.assertIn(EXPLAINER_SKILL, BUNDLED)
+
+    def test_default_installs_every_bundled_skill(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            self.run_installer("--home", str(home))
+            root = home / ".agents" / "skills"
+            for name in BUNDLED:
+                with self.subTest(skill=name):
+                    self.assertTrue((root / name / "SKILL.md").is_file())
+            receipt = json.loads((root / ".dm1681-skills.json").read_text())
+            self.assertEqual(BUNDLED, receipt["skills"])
+
+    def test_selecting_one_skill_leaves_the_others_uninstalled(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            self.run_installer("--home", str(home), "--skill", EXPLAINER_SKILL)
+            root = home / ".agents" / "skills"
+            self.assertTrue((root / EXPLAINER_SKILL / "SKILL.md").is_file())
+            self.assertFalse((root / SKILL).exists())
+            receipt = json.loads((root / ".dm1681-skills.json").read_text())
+            self.assertEqual([EXPLAINER_SKILL], receipt["skills"])
 
 
 if __name__ == "__main__":
