@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import json
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
+from urllib.parse import urlparse
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,6 +28,14 @@ def resolve(mode):
 CONSUMER = """def consume(result):
     return result.value
 """
+
+
+def _load_script(name: str):
+    """Import one bundled script so its helpers can be unit tested."""
+    spec = importlib.util.spec_from_file_location(name, SCRIPTS / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _git(repository: Path, *arguments: str) -> str:
@@ -200,6 +211,30 @@ class SemanticPrReviewPackagingTests(unittest.TestCase):
                     with self.subTest(script=script.name, module=module):
                         self.assertIn(root, standard_library)
 
+    def test_editor_links_survive_a_windows_path_on_any_host(self) -> None:
+        """Cover the drive-letter case a POSIX-only run can never reach."""
+        scaffold = _load_script("scaffold_pr_explorer")
+        verify = _load_script("verify_pr_explorer")
+        windows_file = PureWindowsPath(r"C:\repo\api.py")
+        posix_file = PurePosixPath("/repo/api.py")
+
+        self.assertEqual(
+            "cursor://file/C:/repo/api.py:12",
+            scaffold._cursor_url(windows_file, 12),
+        )
+        self.assertEqual(
+            "cursor://file/repo/api.py:12",
+            scaffold._cursor_url(posix_file, 12),
+        )
+        self.assertEqual(
+            "C:/repo/api.py",
+            verify._cursor_target("/C:/repo/api.py").as_posix(),
+        )
+        self.assertEqual(
+            "/repo/api.py",
+            verify._cursor_target("/repo/api.py").as_posix(),
+        )
+
     def test_template_keeps_the_placeholders_the_scaffold_replaces(self) -> None:
         template = (SKILL_ROOT / "assets" / "pr-explorer-template.html").read_text(
             encoding="utf-8"
@@ -320,6 +355,61 @@ class SemanticPrReviewPipelineTests(unittest.TestCase):
                 expected=1,
             )
             self.assertIn("head_sha does not match source ref", result.stdout)
+
+    def test_editor_links_address_absolute_paths_as_parseable_urls(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository, head_sha = self.fixture(directory)
+            data = Path(directory) / "pr-model.json"
+            data.write_text(json.dumps(_model(head_sha)), encoding="utf-8")
+            fragment = Path(directory) / "fragment.html"
+            page = Path(directory) / "page.html"
+            self.run_script(
+                "scaffold_pr_explorer.py",
+                "--data",
+                str(data),
+                "--output",
+                str(fragment),
+                "--repo-root",
+                str(repository),
+                "--source-ref",
+                head_sha,
+                "--cursor-root",
+                str(repository),
+            )
+            urls = set(
+                re.findall(r'"cursor_url":"([^"]+)"', fragment.read_text(encoding="utf-8"))
+            )
+            self.assertTrue(urls, "scaffold emitted no editor deep links")
+            for url in urls:
+                with self.subTest(url=url):
+                    # A Windows path starts at its drive letter, so only an
+                    # explicit separator keeps this parseable as a URL.
+                    self.assertRegex(url, r"^cursor://file/")
+                    self.assertNotIn("\\", url)
+                    parsed = urlparse(url)
+                    self.assertEqual("cursor", parsed.scheme)
+                    self.assertEqual("file", parsed.netloc)
+            self.run_script(
+                "render_standalone.py",
+                "--fragment",
+                str(fragment),
+                "--output",
+                str(page),
+                "--title",
+                "PR 1 Dispatch Explorer",
+            )
+            result = self.run_script(
+                "verify_pr_explorer.py",
+                str(fragment),
+                "--standalone",
+                str(page),
+                "--source-repo",
+                str(repository),
+                "--source-ref",
+                head_sha,
+                "--strict",
+            )
+            self.assertIn("OK", result.stdout)
 
     def test_editor_links_require_a_worktree_on_the_analyzed_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

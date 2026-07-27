@@ -128,7 +128,7 @@ python3 <skill-root>/scripts/scaffold_pr_explorer.py \
   --cursor-root /absolute/path/to/matching-snapshot-worktree
 ```
 
-Omit `--cursor-root` to fail closed to immutable GitHub links. Render a standalone page when the user asks for HTML or needs to open or share the page outside the agent's native artifact surface. Follow the sandbox, typography, editor-link, and repository-handoff rules in [references/interactive-flowchart.md](references/interactive-flowchart.md).
+Omit `--cursor-root` to fail closed to immutable GitHub links. Render a standalone page when the user asks for HTML or needs to open or share the page outside the agent's native artifact surface. Follow the self-contained styling, security-policy, editor-link, and repository-handoff rules in [references/interactive-flowchart.md](references/interactive-flowchart.md).
 
 Create the standalone page directly with the bundled renderer. This path does not depend on a host visualization tool:
 
@@ -160,8 +160,9 @@ python3 <skill-root>/scripts/verify_pr_explorer.py /absolute/path/to/fragment.ht
 Strict validation must compare every rendered preview byte-for-byte with its Git blob, verify labels and immutable URLs from the same range, and verify every Cursor target's worktree `HEAD` and full source bytes.
 
 4. Exercise branch switching, Previous/Next navigation, node selection, dynamic source links, editor deep links, pointer entry into node tooltips, code selection, and delayed tooltip dismissal.
-5. Render or screenshot the page at 736 px and 320 px. Check that `scrollWidth <= clientWidth` and inspect for clipped, overlapping, or arbitrarily broken identifiers.
-6. Check both light and dark modes: code previews must use Catppuccin Latte and Mocha, retain readable contrast, and distinguish syntax categories.
+5. In a real browser, assert that the orientation title is populated and a primary button has non-default font, background, and border-radius values. This catches blocked scripts and missing base styles.
+6. Render or screenshot the page at 736 px and 320 px. Check that `scrollWidth <= clientWidth` and inspect for clipped, overlapping, or arbitrarily broken identifiers.
+7. Check both light and dark modes: code previews must use Catppuccin Latte and Mocha, retain readable contrast, and distinguish syntax categories.
 
 Do not claim local tests passed when they did not run. Report current CI and review state separately from local verification.
 
