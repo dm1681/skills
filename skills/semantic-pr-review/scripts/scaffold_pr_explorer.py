@@ -117,6 +117,19 @@ def _source_label(source_path: str, start_line: int, end_line: int) -> str:
     return f"{Path(source_path).name} · {start_line}–{end_line}"
 
 
+def _cursor_url(cursor_file: Path, start_line: int) -> str:
+    """Return one editor deep link addressing an absolute path as a URL.
+
+    A POSIX path already opens with the separator the URL needs, but a
+    Windows path starts at its drive letter, so the same concatenation
+    yields `cursor://fileC:\\...`, which browsers refuse to parse.
+    """
+    url_path = cursor_file.as_posix()
+    if not url_path.startswith("/"):
+        url_path = f"/{url_path}"
+    return f"cursor://file{url_path}:{start_line}"
+
+
 def _materialize_sources(
     model: dict[str, Any],
     repo_root: Path,
@@ -206,9 +219,7 @@ def _materialize_sources(
                         "Cursor source bytes do not match analyzed snapshot: "
                         f"{cursor_file}"
                     )
-                source["cursor_url"] = (
-                    f"cursor://file{cursor_file}:{start_line}"
-                )
+                source["cursor_url"] = _cursor_url(cursor_file, start_line)
 
         preview = node.get("code_preview")
         if not isinstance(preview, dict):

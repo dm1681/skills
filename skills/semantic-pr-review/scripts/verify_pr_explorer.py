@@ -96,6 +96,17 @@ def _blob_text(repo_root: Path, source_sha: str, source_path: str) -> str:
     return result.stdout.decode("utf-8")
 
 
+def _cursor_target(url_path: str) -> Path:
+    """Return the on-disk file a Cursor URL path addresses.
+
+    A Windows drive path rides behind the URL's leading separator, so
+    `/C:/repo/api.py` names `C:/repo/api.py` on disk.
+    """
+    if re.fullmatch(r"/[A-Za-z]:/.*", url_path):
+        url_path = url_path[1:]
+    return Path(url_path)
+
+
 def _check_source_contract(
     model: dict[str, Any],
     repo_root: Path,
@@ -190,7 +201,7 @@ def _check_source_contract(
                         "Cursor URL"
                     )
                 else:
-                    cursor_file = Path(match.group("path"))
+                    cursor_file = _cursor_target(match.group("path"))
                     if int(match.group("line")) != start_line:
                         errors.append(
                             f"node {node_id} source {source_index} Cursor "
@@ -482,9 +493,51 @@ def _check_standalone(
     """Return validation errors for a rendered standalone page."""
     errors: list[str] = []
 
+    if strict and not re.search(r"<title>[^<]*PR\s+\d+", text, re.IGNORECASE):
+        errors.append("strict standalone title does not identify the PR")
+
+    csp_match = re.search(
+        r'<meta[^>]+http-equiv="Content-Security-Policy"'
+        r'[^>]+content="([^"]+)"',
+        text,
+        re.IGNORECASE,
+    )
+    csp = csp_match.group(1) if csp_match else ""
+    if "script-src 'unsafe-inline'" not in csp:
+        errors.append("standalone CSP blocks the explorer's inline script")
+    if "style-src 'unsafe-inline'" not in csp:
+        errors.append("standalone CSP blocks the explorer's inline styles")
+
+    has_base_styles = (
+        "data-pr-explorer-base" in text
+        or "--font-sans:" in text
+    )
+    if not has_base_styles:
+        errors.append("standalone page omits the explorer base stylesheet")
+
+    has_static_target = (
+        'target="_blank"' in text
+        or "target=&quot;_blank&quot;" in text
+    )
+    has_dynamic_target = (
+        'link.target = "_blank"' in text
+        or "link.target = &quot;_blank&quot;" in text
+    )
+    if fragment_has_cursor and not (has_static_target or has_dynamic_target):
+        errors.append("rendered Cursor links do not target a new context")
+
+    if re.search(
+        r"<main\b[^>]*\bdata-pr-explorer-standalone\b",
+        text,
+        re.IGNORECASE,
+    ):
+        return errors
+
     sandbox_match = re.search(r'<iframe[^>]+sandbox="([^"]*)"', text)
     if not sandbox_match:
-        errors.append("standalone page has no sandboxed iframe")
+        errors.append(
+            "standalone page is neither a direct explorer nor a sandboxed iframe"
+        )
         return errors
 
     permissions = set(sandbox_match.group(1).split())
@@ -494,12 +547,6 @@ def _check_standalone(
         errors.append("standalone iframe blocks Cursor popup links")
     if fragment_has_cursor and "allow-popups-to-escape-sandbox" not in permissions:
         errors.append("standalone iframe traps Cursor popup links in the sandbox")
-    has_static_target = "target=&quot;_blank&quot;" in text
-    has_dynamic_target = "link.target = &quot;_blank&quot;" in text
-    if fragment_has_cursor and not (has_static_target or has_dynamic_target):
-        errors.append("rendered Cursor links do not target a new context")
-    if strict and not re.search(r"<title>[^<]*PR\s+\d+", text, re.IGNORECASE):
-        errors.append("strict standalone title does not identify the PR")
 
     return errors
 

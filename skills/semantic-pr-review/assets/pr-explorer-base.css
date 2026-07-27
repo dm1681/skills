@@ -1,0 +1,226 @@
+:root {
+  color-scheme: light dark;
+  --background: #eff1f5;
+  --foreground: #4c4f69;
+  --card: #ffffff;
+  --card-foreground: #4c4f69;
+  --popover: #ffffff;
+  --popover-foreground: #4c4f69;
+  --primary: #1e66f5;
+  --primary-foreground: #ffffff;
+  --secondary: #e6e9ef;
+  --secondary-foreground: #4c4f69;
+  --muted: #e6e9ef;
+  --muted-foreground: #6c6f85;
+  --accent: #dce6f9;
+  --accent-foreground: #1e66f5;
+  --border: #bcc0cc;
+  --input: #9ca0b0;
+  --ring: #1e66f5;
+  --font-size-base: 15px;
+  --font-sans:
+    Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-mono:
+    "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  --radius: 14px;
+  --viz-series-1: #1e66f5;
+  --viz-series-2: #fe640b;
+  --viz-series-3: #40a02b;
+  --viz-series-4: #ea76cb;
+  --viz-series-5: #8839ef;
+  --viz-series-6: #179299;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #1e1e2e;
+    --foreground: #cdd6f4;
+    --card: #181825;
+    --card-foreground: #cdd6f4;
+    --popover: #313244;
+    --popover-foreground: #cdd6f4;
+    --primary: #89b4fa;
+    --primary-foreground: #11111b;
+    --secondary: #313244;
+    --secondary-foreground: #cdd6f4;
+    --muted: #313244;
+    --muted-foreground: #a6adc8;
+    --accent: #313244;
+    --accent-foreground: #89b4fa;
+    --border: #45475a;
+    --input: #6c7086;
+    --ring: #89b4fa;
+    --viz-series-1: #89b4fa;
+    --viz-series-2: #fab387;
+    --viz-series-3: #a6e3a1;
+    --viz-series-4: #f5c2e7;
+    --viz-series-5: #cba6f7;
+    --viz-series-6: #94e2d5;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  padding: 24px;
+  color: var(--foreground);
+  background: var(--background);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+}
+
+button,
+a {
+  font: inherit;
+}
+
+a {
+  color: var(--primary);
+}
+
+code,
+pre {
+  font-family: var(--font-mono);
+}
+
+code {
+  padding: 0.08em 0.32em;
+  border-radius: 5px;
+  background: var(--muted);
+}
+
+[data-pr-explorer] {
+  width: min(1440px, 100%);
+  margin: 0 auto;
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+[data-pr-explorer] h1,
+[data-pr-explorer] h2,
+[data-pr-explorer] h3 {
+  color: var(--foreground);
+  line-height: 1.2;
+}
+
+.card {
+  padding: 20px;
+  color: var(--card-foreground);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 32px rgb(0 0 0 / 8%);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 8px 12px;
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 0.65);
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
+}
+
+.btn:hover {
+  border-color: var(--ring);
+  transform: translateY(-1px);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.btn-primary {
+  color: var(--primary-foreground);
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.btn-ghost {
+  background: transparent;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+.viz-badge {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  color: var(--accent-foreground);
+  background: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.text-small {
+  font-size: 0.86rem;
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.tooltip {
+  padding: 12px;
+  color: var(--popover-foreground);
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 0.8);
+  box-shadow: 0 16px 42px rgb(0 0 0 / 22%);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 560px) {
+  body {
+    padding: 12px;
+  }
+
+  .card {
+    padding: 14px;
+  }
+}

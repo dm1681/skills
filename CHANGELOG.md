@@ -38,6 +38,19 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Fixed
 
+- `semantic-pr-review` editor deep links now form parseable URLs on Windows.
+  `scaffold_pr_explorer.py` concatenated `cursor://file` with a native
+  absolute path. A POSIX path opens with the separator the URL needs, but a
+  Windows path opens at its drive letter, so the result was
+  `cursor://fileC:\...`: Chromium parsed its protocol as `:` rather than
+  `cursor:`, `new URL()` rejected it, clicking the link opened
+  `about:blank#blocked`, and `verify_pr_explorer.py` failed every node with
+  `invalid Cursor URL`. Links are now built from `Path.as_posix()` with an
+  explicit leading separator (`cursor://file/C:/...`), and the verifier maps
+  that form back to the on-disk drive path when it checks worktree bytes.
+  Because the defect could not reproduce on a POSIX host, the regression
+  coverage includes a host-independent unit test that drives the URL builder
+  with a `PureWindowsPath`.
 - Guided-installer tests no longer read the developer's real home directory.
   Three wizard tests parsed an empty argument list, so `--home` fell back to
   `Path.home()` and the wizard inspected whatever was already installed there.

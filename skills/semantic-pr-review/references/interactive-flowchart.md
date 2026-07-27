@@ -118,7 +118,7 @@ python3 <skill-root>/scripts/render_standalone.py \
   --title "PR <number> <scope> Explorer"
 ```
 
-The renderer adds the sandbox permissions required by editor deep links. When adapting a page produced by another renderer, run `scripts/prepare_standalone.py`; it preserves existing permissions and adds the required popup permissions.
+The bundled renderer creates a self-contained sandboxed wrapper, embeds `assets/pr-explorer-base.css` inside the framed document, and applies restrictive outer and inner policies that still permit the explorer's local inline style and script. This keeps the page compatible with both ordinary browsers and embedded artifact viewers. Source links open a new browsing context. When adapting a sandboxed page produced by another renderer, run `scripts/prepare_standalone.py`; it preserves existing permissions and adds the popup permissions required by editor deep links.
 
 ## Visual requirements
 
@@ -135,6 +135,7 @@ The renderer adds the sandbox permissions required by editor deep links. When ad
 - For rich tooltips, parse backtick-delimited names into actual `<code>` elements, associate triggers with the tooltip through `aria-describedby`, and support hover, focus, and Escape dismissal.
 - Make node tooltips pointer-enterable and source-linked; do not let them disappear while the viewer moves in to select code or click the file-and-line location.
 - Render node excerpts in `<pre><code>` with Catppuccin Latte/Mocha syntax colors and keep the highlighting self-contained.
+- Embed the bundled base stylesheet in standalone output. Do not assume a host supplies `.card`, `.btn`, `.tooltip`, typography, theme variables, or accessibility utilities.
 - Inside constrained flow nodes, remove decorative code-pill padding while preserving monospace type. Never use `word-break: break-all` or `overflow-wrap: anywhere` for identifiers.
 - Add semantic `<wbr>` opportunities at CamelCase and snake_case boundaries for long identifiers. Put explanatory qualifiers on a separate stacked line instead of forcing arbitrary `<br>` breaks inside identifiers.
 
@@ -168,3 +169,4 @@ Assert that:
 14. node tooltips remain open while entered, code can be selected, and the linked file/range opens the configured target without replacing the chart
 15. light and dark code surfaces use Catppuccin Latte and Mocha with distinguishable syntax categories
 16. every displayed excerpt, label, immutable URL, and optional Cursor target verifies against the same `pr.head_sha`
+17. the standalone page populates its orientation title and applies non-default computed styles to its primary controls
