@@ -7,6 +7,10 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Added
 
+- `semantic-pr-review` marks every node the PR changed with a corner delta,
+  so the change footprint reads at a glance in the full request path and not
+  only in the PR delta view. The mark is a shape in the existing muted text
+  color rather than a second color channel, and context nodes stay unmarked.
 - Added `references/host-adaptation.md` to `orchestrate-olympus`, defining the
   required host capabilities, the stable-identifier rule for task and subagent
   IDs, and explicit fallbacks for missing host features such as pinning,
@@ -14,6 +18,15 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Changed
 
+- `semantic-pr-review` no longer fails a whole explorer over unusable editor
+  links. A `--cursor-root` that is a remote path, sits at a different `HEAD`,
+  or holds drifted bytes now omits the affected links with a warning naming
+  the reason, and the explorer still builds against its immutable GitHub
+  links. A link is still never emitted for a file the scaffold cannot match
+  byte for byte, so the guarantee is unchanged — only the failure mode is.
+  Each notice travels in the model and renders on the page itself, because
+  the person reading the explorer is rarely the operator who ran the
+  scaffold and would otherwise never learn that links were dropped.
 - `--agent` now defaults to `all`, so a plain `./install.sh` or a bare
   `--skill NAME` installs into every skill root instead of the shared
   `.agents/skills` directory alone. The previous default silently produced an
@@ -38,6 +51,13 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Fixed
 
+- The `semantic-pr-review` explorer now shows which node is selected.
+  Selecting a node, or stepping with Previous and Next, set `aria-pressed`
+  but matched no style rule, so the flowchart never moved: only the detail
+  card and the step counter changed, and a viewer stepping through the path
+  saw nothing happen. The selected node now takes the lane's color as an
+  outline and a lifted background. The outline avoids widening the border,
+  so selection cannot reflow the lane.
 - `semantic-pr-review` editor deep links now form parseable URLs on Windows.
   `scaffold_pr_explorer.py` concatenated `cursor://file` with a native
   absolute path. A POSIX path opens with the separator the URL needs, but a

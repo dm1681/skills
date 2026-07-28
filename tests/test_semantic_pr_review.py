@@ -411,28 +411,59 @@ class SemanticPrReviewPipelineTests(unittest.TestCase):
             )
             self.assertIn("OK", result.stdout)
 
-    def test_editor_links_require_a_worktree_on_the_analyzed_snapshot(self) -> None:
+    def test_a_drifted_worktree_warns_and_omits_editor_links(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             repository, head_sha = self.fixture(directory)
             _write(repository / "selection.py", SOURCE.replace("REGISTRY", "BACKENDS"))
             _commit(repository, "later work")
             data = Path(directory) / "pr-model.json"
             data.write_text(json.dumps(_model(head_sha)), encoding="utf-8")
+            fragment = Path(directory) / "fragment.html"
             result = self.run_script(
                 "scaffold_pr_explorer.py",
                 "--data",
                 str(data),
                 "--output",
-                str(Path(directory) / "fragment.html"),
+                str(fragment),
                 "--repo-root",
                 str(repository),
                 "--source-ref",
                 head_sha,
                 "--cursor-root",
                 str(repository),
-                expected=1,
             )
-            self.assertIn("does not match analyzed snapshot", result.stdout)
+            self.assertIn("editor links omitted", result.stderr)
+            self.assertIn("not the analyzed snapshot", result.stderr)
+            # The explorer still builds, just without links it cannot verify.
+            rendered = fragment.read_text(encoding="utf-8")
+            self.assertNotIn("cursor://", rendered)
+            # The reader never sees stderr, so the page carries the reason
+            # and still offers the immutable GitHub link.
+            self.assertIn('"notices":["editor links omitted', rendered)
+            self.assertIn('data-role="notices"', rendered)
+            self.assertIn("https://github.com/owner/repository/blob/", rendered)
+
+    def test_a_remote_worktree_warns_and_omits_editor_links(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository, head_sha = self.fixture(directory)
+            data = Path(directory) / "pr-model.json"
+            data.write_text(json.dumps(_model(head_sha)), encoding="utf-8")
+            fragment = Path(directory) / "fragment.html"
+            result = self.run_script(
+                "scaffold_pr_explorer.py",
+                "--data",
+                str(data),
+                "--output",
+                str(fragment),
+                "--repo-root",
+                str(repository),
+                "--source-ref",
+                head_sha,
+                "--cursor-root",
+                r"\\fileserver\share\checkout",
+            )
+            self.assertIn("is a remote path", result.stderr)
+            self.assertNotIn("cursor://", fragment.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

@@ -8,6 +8,8 @@ import copy
 import json
 import re
 import subprocess
+import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -130,14 +132,59 @@ def _cursor_url(cursor_file: Path, start_line: int) -> str:
     return f"cursor://file{url_path}:{start_line}"
 
 
+def _is_remote_path(candidate: Path) -> bool:
+    """Return whether a path is written as a share on another host.
+
+    An editor deep link names a path on the machine running the browser,
+    so a share served from elsewhere cannot be opened by clicking it.
+
+    Only UNC-style spellings are detectable this way. A mapped drive or a
+    mounted share reads as local, so this narrows the failure rather than
+    removing it. Inspect the path as given: resolving it first would
+    rewrite a UNC spelling into a local absolute path on POSIX and hide
+    exactly the case being tested.
+    """
+    text = str(candidate)
+    return text.startswith("\\\\") or text.startswith("//")
+
+
+def _editor_link_refusal(cursor_root: Path, source_sha: str) -> str | None:
+    """Return why editor links cannot be offered, or None when they can."""
+    if _is_remote_path(cursor_root):
+        return f"{cursor_root} is a remote path"
+    try:
+        cursor_sha = _git(cursor_root, "rev-parse", "HEAD^{commit}")
+    except (OSError, subprocess.CalledProcessError) as exc:
+        return f"{cursor_root} is not a readable Git worktree ({exc})"
+    if cursor_sha != source_sha:
+        return (
+            f"{cursor_root} is at {cursor_sha[:12]}, "
+            f"not the analyzed snapshot {source_sha[:12]}"
+        )
+    return None
+
+
 def _materialize_sources(
     model: dict[str, Any],
     repo_root: Path,
     source_ref: str,
     cursor_root: Path | None,
+    warn: Callable[[str], None] = lambda message: None,
 ) -> dict[str, Any]:
     """Derive source links and preview bytes from one immutable Git snapshot."""
     materialized = copy.deepcopy(model)
+    # Notices travel with the model so the page can explain a degraded
+    # build to its reader, not only the operator who ran the scaffold.
+    notices: list[str] = []
+    materialized["notices"] = notices
+    report = warn
+
+    def note(message: str) -> None:
+        """Record one notice for both the operator and the rendered page."""
+        notices.append(message)
+        report(message)
+
+    warn = note
     source_sha = _git(repo_root, "rev-parse", f"{source_ref}^{{commit}}")
     expected_sha = materialized.get("pr", {}).get("head_sha")
     if expected_sha != source_sha:
@@ -147,14 +194,13 @@ def _materialize_sources(
         )
 
     repository = materialized["pr"]["repository"]
-    cursor_sha = None
+    # Editor links are a convenience, so an unusable worktree drops them
+    # and warns rather than failing the whole explorer.
     if cursor_root is not None:
-        cursor_sha = _git(cursor_root, "rev-parse", "HEAD^{commit}")
-        if cursor_sha != source_sha:
-            raise ValueError(
-                "Cursor worktree HEAD does not match analyzed snapshot: "
-                f"{cursor_sha} != {source_sha}"
-            )
+        refusal = _editor_link_refusal(cursor_root, source_sha)
+        if refusal is not None:
+            warn(f"editor links omitted: {refusal}")
+            cursor_root = None
 
     for node in materialized.get("nodes", []):
         node_id = node.get("id", "<unknown>")
@@ -208,18 +254,20 @@ def _materialize_sources(
             source.pop("cursor_url", None)
             source.pop("local_path", None)
 
-            if cursor_root is not None and cursor_sha == source_sha:
+            if cursor_root is not None:
                 cursor_file = (cursor_root / source_path).resolve()
                 if not cursor_file.is_file():
-                    raise ValueError(
-                        f"Cursor source does not exist: {cursor_file}"
+                    warn(
+                        f"editor link omitted for {source_path}: "
+                        f"{cursor_file} does not exist"
                     )
-                if cursor_file.read_text(encoding="utf-8") != blob:
-                    raise ValueError(
-                        "Cursor source bytes do not match analyzed snapshot: "
-                        f"{cursor_file}"
+                elif cursor_file.read_text(encoding="utf-8") != blob:
+                    warn(
+                        f"editor link omitted for {source_path}: "
+                        "working copy differs from the analyzed snapshot"
                     )
-                source["cursor_url"] = _cursor_url(cursor_file, start_line)
+                else:
+                    source["cursor_url"] = _cursor_url(cursor_file, start_line)
 
         preview = node.get("code_preview")
         if not isinstance(preview, dict):
@@ -513,12 +561,19 @@ def main() -> int:
     if not source_ref:
         print("ERROR: source ref is missing")
         return 1
+    def warn(message: str) -> None:
+        """Report a degraded but non-fatal condition without failing."""
+        print(f"WARNING: {message}", file=sys.stderr)
+
     try:
         model = _materialize_sources(
             raw_model,
             args.repo_root.resolve(),
             source_ref,
-            args.cursor_root.resolve() if args.cursor_root else None,
+            # Passed as given: each editor link resolves its own file, and
+            # resolving here would erase a UNC spelling on POSIX.
+            args.cursor_root,
+            warn,
         )
     except (OSError, UnicodeDecodeError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"ERROR: source materialization failed: {exc}")

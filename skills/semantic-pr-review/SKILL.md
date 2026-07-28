@@ -113,11 +113,11 @@ Give every node a compact, source-backed code preview. On hover or keyboard focu
 
 Use Catppuccin Latte syntax colors in light mode and Mocha in dark mode. Highlight common token categories locally without a network dependency. Prefer 4–10 exact lines and cap previews at 12.
 
-Define each preview only as a source record with repository-relative `path`, inclusive `start_line`, inclusive `end_line`, `language`, and `source_index`. Never hand-copy preview text or author its displayed label independently. Let `scripts/scaffold_pr_explorer.py` read the Git blob at `pr.head_sha`, derive the excerpt and label, and build immutable GitHub links. Supply `--cursor-root` only for a worktree on the same SHA; generation must fail if its `HEAD` or source bytes differ.
+Define each preview only as a source record with repository-relative `path`, inclusive `start_line`, inclusive `end_line`, `language`, and `source_index`. Never hand-copy preview text or author its displayed label independently. Let `scripts/scaffold_pr_explorer.py` read the Git blob at `pr.head_sha`, derive the excerpt and label, and build immutable GitHub links. Supply `--cursor-root` only for a worktree on the same SHA. A remote path, a different `HEAD`, or drifted source bytes omit the editor links with a warning and still build the explorer; a link is never emitted for a file the scaffold cannot match byte for byte.
 
 The selected detail area must show purpose, receives, sends, architectural role, connection, tradeoff, and source links. Update all fields and links when the selected node changes.
 
-Build from [assets/pr-explorer-template.html](assets/pr-explorer-template.html) through `scripts/scaffold_pr_explorer.py` when the standard explorer shape fits. In the commands below, replace `<skill-root>` with the directory containing this `SKILL.md`:
+Build from [assets/pr-explorer-template.html](assets/pr-explorer-template.html) through `scripts/scaffold_pr_explorer.py` when the standard explorer shape fits. In the commands below, replace `<skill-root>` with the directory containing this `SKILL.md`, and invoke whichever interpreter name this machine has: `python3` on most Unix-like systems, `python` on Windows, where a bare `python3` usually resolves to a Microsoft Store stub that exits without running anything. Every bundled script targets Python 3.9+ and imports only the standard library.
 
 ```bash
 python3 <skill-root>/scripts/scaffold_pr_explorer.py \
@@ -161,8 +161,11 @@ Strict validation must compare every rendered preview byte-for-byte with its Git
 
 4. Exercise branch switching, Previous/Next navigation, node selection, dynamic source links, editor deep links, pointer entry into node tooltips, code selection, and delayed tooltip dismissal.
 5. In a real browser, assert that the orientation title is populated and a primary button has non-default font, background, and border-radius values. This catches blocked scripts and missing base styles.
-6. Render or screenshot the page at 736 px and 320 px. Check that `scrollWidth <= clientWidth` and inspect for clipped, overlapping, or arbitrarily broken identifiers.
-7. Check both light and dark modes: code previews must use Catppuccin Latte and Mocha, retain readable contrast, and distinguish syntax categories.
+6. In the same browser, compare computed styles before and after clicking Next. A node's appearance must change; an `aria-pressed` move with identical styling means selection is invisible to sighted readers. Compare a changed node against a context node in the default view too — identical styling there means the legend describes a view the reader is not in.
+7. If the build omitted any source link, confirm the page states so and that the affected nodes still offer their GitHub links.
+8. Render or screenshot the page at 736 px and 320 px. Check that `scrollWidth <= clientWidth` and inspect for clipped, overlapping, or arbitrarily broken identifiers.
+9. Check both light and dark modes: code previews must use Catppuccin Latte and Mocha, retain readable contrast, and distinguish syntax categories.
+10. Verify in a Chromium-based and a Gecko-based browser. Engine differences in generated content, dashed borders, and URL parsing are invisible to single-engine checks.
 
 Do not claim local tests passed when they did not run. Report current CI and review state separately from local verification.
 
