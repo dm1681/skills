@@ -88,17 +88,24 @@ https://github.com/OWNER/REPO/blob/HEAD_SHA/path/to/file.py#L40-L77
 
 Use descriptive labels instead of bare filenames.
 
-For optional local Cursor links on macOS:
+For optional local Cursor links, the path always rides behind the URL's leading separator:
 
 ```text
 cursor://file/absolute/path/to/file.py:40
+cursor://file/C:/absolute/path/to/file.py:40
 ```
+
+A POSIX path already opens with that separator; a Windows path opens at its drive letter, so it needs the separator added and its backslashes turned into forward slashes. Concatenating a native path directly onto `cursor://file` produces `cursor://fileC:\...`, which browsers refuse to parse: the protocol reads as `:` rather than `cursor:` and a click opens a blank blocked tab. `scripts/scaffold_pr_explorer.py` handles this; hand-authored links must do the same.
 
 Cursor links are optional. Verify the application registers the `cursor` URL scheme before presenting them as working.
 
 Always include an immutable GitHub URL derived from the analyzed SHA. In the hover preview, make the visible `file · start–end` location itself a link.
 
-Include a Cursor URL only when the target is a worktree whose `HEAD` equals the analyzed SHA and whose full file bytes equal the Git blob. If the active checkout differs, either create a detached snapshot worktree or omit Cursor and use GitHub. Never silently open similar code from another commit.
+Include a Cursor URL only when the target is a worktree whose `HEAD` equals the analyzed SHA and whose full file bytes equal the Git blob. Never silently open similar code from another commit.
+
+The scaffold enforces this without failing the build. A `--cursor-root` that is a remote path, sits at another `HEAD`, or is not a readable worktree drops every editor link; an individual file that is missing or has drifted drops only its own link. Each refusal is recorded as a notice that reaches both the operator's console and the rendered page, and the affected nodes fall back to their immutable GitHub links. To get editor links against a moved checkout, add a detached worktree at the analyzed SHA and point `--cursor-root` at that.
+
+An editor deep link names a path on the machine running the browser. A page served to another host offers links its reader cannot open, so generate them for the machine where the page will actually be viewed, or omit them.
 
 If the standalone renderer places the fragment in a sandboxed iframe:
 
@@ -109,7 +116,7 @@ If the standalone renderer places the fragment in a sandboxed iframe:
 
 Without those conditions, Chromium can replace the embedded flowchart with a broken document view.
 
-Create a self-contained standalone page without relying on a host renderer:
+Create a self-contained standalone page without relying on a host renderer. Use whichever interpreter name the machine has — `python3` on most Unix-like systems, `python` on Windows:
 
 ```bash
 python3 <skill-root>/scripts/render_standalone.py \
@@ -129,6 +136,9 @@ The bundled renderer creates a self-contained sandboxed wrapper, embeds `assets/
 - Avoid internal scrolling and fixed viewport heights.
 - Use theme variables instead of hard-coded light or dark colors.
 - Make inactive branches visibly secondary without relying on color alone.
+- Render the selected node as visibly selected. Setting `aria-pressed` alone leaves stepping with Previous and Next invisible to everyone looking at the chart. Prefer an outline over a wider border so selecting a node cannot reflow its lane.
+- Mark the nodes the PR changed in every view, not only in the delta view. A legend that describes an encoding the current view does not apply is worse than no legend. Use a shape, such as a corner delta, so the mark does not depend on a second color channel.
+- Surface a degraded build on the page. The person reading an explorer is rarely the operator who generated it and never sees the console, so omitted source links, skipped previews, or any other silent downgrade must be stated in the page itself along with what the reader gets instead.
 - Do not load runtime data or make network requests from the fragment.
 - Assign stable colors to owners, systems, or execution branches and reuse them on lane headers, edges, trace state, and the legend. Keep shared boundaries neutral.
 - Format functions, classes, methods, fields, DTOs, and file names with `<code>` in HTML. Use backticks only as source notation that the rich-tooltip renderer converts into `<code>`.
@@ -170,3 +180,6 @@ Assert that:
 15. light and dark code surfaces use Catppuccin Latte and Mocha with distinguishable syntax categories
 16. every displayed excerpt, label, immutable URL, and optional Cursor target verifies against the same `pr.head_sha`
 17. the standalone page populates its orientation title and applies non-default computed styles to its primary controls
+18. Previous, Next, and node selection visibly change which node is highlighted, compared as computed style rather than as an ARIA attribute alone
+19. nodes the PR changed are distinguishable from context nodes in the default full-path view, not only after switching to the delta view
+20. a build that omitted editor links states so on the page, and every affected node still offers its immutable GitHub link

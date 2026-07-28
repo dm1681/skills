@@ -370,6 +370,18 @@ def _check_quality_contract(text: str) -> list[str]:
         "tooltip source target": re.compile(
             r"sourceLabel\.target\s*=\s*[\"']_blank[\"']"
         ),
+        # aria-pressed alone leaves stepping invisible to sighted readers.
+        "selected node styling": re.compile(
+            r"\.[\w-]*node\[aria-pressed=\"true\"\]"
+        ),
+        # A changed node must read as changed before the delta view is on.
+        "change marker outside the delta view": re.compile(
+            r":not\(\[data-change-status=\"context\"\]\)::(?:after|before)"
+        ),
+        # A degraded build has to explain itself to whoever reads the page.
+        "degraded build notice region": re.compile(
+            r"data-role=\"notices\""
+        ),
     }
     for label, pattern in required_visual_guards.items():
         if not pattern.search(text):

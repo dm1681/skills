@@ -51,6 +51,23 @@
       justify-content: space-between;
     }
 
+    /* Explains a degraded build to the reader, who did not see the
+       scaffold's console output. */
+    #__PR_EXPLORER_ROOT_ID__ .prx-notices {
+      display: grid;
+      gap: 4px;
+      margin: 12px 0 0;
+      padding: 8px 12px;
+      color: var(--muted-foreground);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--ctp-yellow);
+      border-radius: var(--radius);
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-notices[hidden] {
+      display: none;
+    }
+
     #__PR_EXPLORER_ROOT_ID__ .prx-payoff {
       padding-top: 10px;
       border-top: 1px solid var(--border);
@@ -154,12 +171,41 @@
     }
 
     #__PR_EXPLORER_ROOT_ID__ .prx-node {
+      position: relative;
       width: 100%;
       max-width: 100%;
       min-height: 48px;
       flex-direction: column;
       gap: 2px;
       white-space: normal;
+    }
+
+    /* Marks the PR's footprint in every view. Shape rather than color, so
+       a node reads as changed without a second color channel. */
+    #__PR_EXPLORER_ROOT_ID__
+      .prx-node[data-change-status]:not([data-change-status="context"])::after {
+      content: "Δ";
+      position: absolute;
+      top: 4px;
+      right: 7px;
+      font-size: 1.05em;
+      font-weight: 400;
+      line-height: 1;
+      /* Carries the lane's own color, lifted off the node fill by a glow
+         rather than by extra weight. */
+      color: var(--prx-series, var(--primary));
+      text-shadow:
+        0 0 4px var(--prx-series, var(--primary)),
+        0 0 9px var(--prx-series, var(--primary));
+    }
+
+    /* The step Previous and Next walk to. Outlined rather than given a
+       wider border, so selecting a node cannot reflow its lane. */
+    #__PR_EXPLORER_ROOT_ID__ .prx-node[aria-pressed="true"] {
+      background: var(--accent);
+      border-color: var(--prx-series, var(--primary));
+      outline: 2px solid var(--prx-series, var(--primary));
+      outline-offset: 2px;
     }
 
     #__PR_EXPLORER_ROOT_ID__ .prx-node code {
@@ -423,6 +469,8 @@
     <p class="prx-payoff" data-role="payoff"></p>
     <p data-role="residual-debt"></p>
   </section>
+
+  <div class="prx-notices text-small" data-role="notices" role="status" hidden></div>
 
   <div class="prx-scope-row">
     <div class="prx-controls viz-controls" role="group" aria-label="Choose change scope">
@@ -919,6 +967,26 @@
             : "Full request path shows PR changes together with unchanged or externally owned context.";
       }
 
+      function buildNotices() {
+        const notices = model.notices || [];
+        if (!notices.length) return;
+        const area = roles("notices");
+        const heading = document.createElement("strong");
+        heading.textContent =
+          "Some source links are unavailable in this build:";
+        area.append(heading);
+        notices.forEach((notice) => {
+          const line = document.createElement("span");
+          line.textContent = notice;
+          area.append(line);
+        });
+        const fallback = document.createElement("span");
+        fallback.textContent =
+          "Affected nodes fall back to their immutable GitHub links.";
+        area.append(fallback);
+        area.hidden = false;
+      }
+
       function buildSummary() {
         roles("pr-label").textContent = `PR ${model.pr.number} · central goal`;
         roles("pr-snapshot").textContent =
@@ -1139,6 +1207,7 @@
         button.addEventListener("click", () => setView(button.dataset.viewChoice));
       });
 
+      buildNotices();
       buildSummary();
       buildLegend();
       buildFlow();
