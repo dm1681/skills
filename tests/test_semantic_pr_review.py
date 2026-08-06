@@ -354,7 +354,7 @@ class SemanticPrReviewPipelineTests(unittest.TestCase):
                 head_sha,
                 expected=1,
             )
-            self.assertIn("head_sha does not match source ref", result.stdout)
+            self.assertIn("model analysis sha does not match source ref", result.stdout)
 
     def test_editor_links_address_absolute_paths_as_parseable_urls(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

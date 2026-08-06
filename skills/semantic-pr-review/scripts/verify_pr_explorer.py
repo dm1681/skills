@@ -114,9 +114,15 @@ def _check_source_contract(
 ) -> list[str]:
     """Verify every preview and editor link against one Git snapshot."""
     errors: list[str] = []
-    expected_sha = model.get("pr", {}).get("head_sha")
+    pr = model.get("pr", {})
+    # Deletion-only PRs anchor evidence at the pre-image; everything still
+    # has to agree on that one commit, whichever field named it.
+    expected_sha = pr.get("evidence_sha") or pr.get("head_sha")
     if not expected_sha:
-        return ["source validation cannot resolve missing pr.head_sha"]
+        return [
+            "source validation cannot resolve missing pr.head_sha "
+            "or pr.evidence_sha"
+        ]
 
     try:
         resolved_sha = _git(
@@ -128,7 +134,7 @@ def _check_source_contract(
         return [f"source ref cannot be resolved: {exc}"]
     if resolved_sha != expected_sha:
         errors.append(
-            "source ref does not match embedded pr.head_sha: "
+            "source ref does not match the embedded analysis sha: "
             f"{resolved_sha} != {expected_sha}"
         )
         return errors
@@ -356,8 +362,8 @@ def _check_quality_contract(text: str) -> list[str]:
             r"\.[\w-]*rich-tooltip[^{]*code\s*\{"
         ),
         "code preview block": re.compile(r"\.[\w-]*code-preview\s*\{"),
-        "Catppuccin light and dark flavors": re.compile(
-            r"--ctp-base:\s*light-dark\("
+        "Catppuccin Mocha code surface": re.compile(
+            r"--ctp-base:\s*#1e1e2e\b"
         ),
         "local syntax tokenizer": re.compile(r"function\s+syntaxPattern\("),
         "pointer-enterable rich tooltip": re.compile(
@@ -396,6 +402,19 @@ def _check_quality_contract(text: str) -> list[str]:
             errors.append(
                 f"strict explorer contains unsafe identifier wrapping: {forbidden}"
             )
+
+    # The explorer is dark-only: one palette means an excerpt reads the same
+    # for every reader, whatever their OS is set to. Scoped to stylesheets so
+    # a PR that legitimately discusses theming in prose still validates.
+    stylesheets = "\n".join(
+        re.findall(r"<style[^>]*>(.*?)</style>", text, re.DOTALL | re.IGNORECASE)
+    )
+    for label, pattern in (
+        ("a light-dark() palette", r"light-dark\s*\("),
+        ("a prefers-color-scheme block", r"@media[^{]*prefers-color-scheme"),
+    ):
+        if re.search(pattern, stylesheets):
+            errors.append(f"strict explorer reintroduces {label}")
 
     model = _embedded_model(text)
     if model is None:

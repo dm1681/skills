@@ -42,9 +42,9 @@ Use each node's `code_preview` record to render:
 - a linked `file · start–end` location
 - a semantic `<pre><code>` block with syntax highlighting
 
-Keep excerpts exact, contiguous, and small enough to comprehend without scrolling. Prefer 4–10 lines and cap at 12. Keep lines concise; select a narrower source region instead of introducing horizontal scrolling or arbitrary identifier breaks. Define the range in the raw model and derive the displayed label and code directly from the Git blob; never maintain those values separately.
+Keep excerpts exact, contiguous, and small enough to comprehend without scrolling. Prefer 4–10 lines; the scaffold rejects more than 12, and rejects any line over 110 characters. Keep lines concise; select a narrower source region instead of introducing horizontal scrolling or arbitrary identifier breaks. Define the range in the raw model and derive the displayed label and code directly from the Git blob; never maintain those values separately.
 
-Use Catppuccin Latte for the code surface in light mode and Catppuccin Mocha in dark mode. Tokenize at least comments, strings, keywords, built-ins, types, functions, variables, properties, numbers, operators, punctuation, and decorators when the language supports them. Support common PR languages (`python`, `javascript`, `typescript`, `json`, `toml`, `yaml`, `markdown`, `shell`) and use a conservative generic tokenizer for other languages.
+Use Catppuccin Mocha for the code surface. The explorer is dark-only: ship one palette so an excerpt reads the same for every reader, and do not add `light-dark()` or a `prefers-color-scheme` block. Tokenize at least comments, strings, keywords, built-ins, types, functions, variables, properties, numbers, operators, punctuation, and decorators when the language supports them. Support common PR languages (`python`, `javascript`, `typescript`, `json`, `toml`, `yaml`, `markdown`, `shell`) and use a conservative generic tokenizer for other languages.
 
 Implement highlighting locally in the fragment. Do not depend on a network-loaded highlighter for core readability.
 
@@ -134,7 +134,7 @@ The bundled renderer creates a self-contained sandboxed wrapper, embeds `assets/
 - Support 736 px and widths down to 320 px.
 - Reflow branches vertically on narrow screens.
 - Avoid internal scrolling and fixed viewport heights.
-- Use theme variables instead of hard-coded light or dark colors.
+- Use theme variables instead of hard-coded colors. The palette is dark-only; never branch on the reader's color scheme.
 - Make inactive branches visibly secondary without relying on color alone.
 - Render the selected node as visibly selected. Setting `aria-pressed` alone leaves stepping with Previous and Next invisible to everyone looking at the chart. Prefer an outline over a wider border so selecting a node cannot reflow its lane.
 - Mark the nodes the PR changed in every view, not only in the delta view. A legend that describes an encoding the current view does not apply is worse than no legend. Use a shape, such as a corner delta, so the mark does not depend on a second color channel.
@@ -144,7 +144,7 @@ The bundled renderer creates a self-contained sandboxed wrapper, embeds `assets/
 - Format functions, classes, methods, fields, DTOs, and file names with `<code>` in HTML. Use backticks only as source notation that the rich-tooltip renderer converts into `<code>`.
 - For rich tooltips, parse backtick-delimited names into actual `<code>` elements, associate triggers with the tooltip through `aria-describedby`, and support hover, focus, and Escape dismissal.
 - Make node tooltips pointer-enterable and source-linked; do not let them disappear while the viewer moves in to select code or click the file-and-line location.
-- Render node excerpts in `<pre><code>` with Catppuccin Latte/Mocha syntax colors and keep the highlighting self-contained.
+- Render node excerpts in `<pre><code>` with Catppuccin Mocha syntax colors and keep the highlighting self-contained.
 - Embed the bundled base stylesheet in standalone output. Do not assume a host supplies `.card`, `.btn`, `.tooltip`, typography, theme variables, or accessibility utilities.
 - Inside constrained flow nodes, remove decorative code-pill padding while preserving monospace type. Never use `word-break: break-all` or `overflow-wrap: anywhere` for identifiers.
 - Add semantic `<wbr>` opportunities at CamelCase and snake_case boundaries for long identifiers. Put explanatory qualifiers on a separate stacked line instead of forcing arbitrary `<br>` breaks inside identifiers.
@@ -177,8 +177,8 @@ Assert that:
 12. long code identifiers do not clip, overflow, or break at arbitrary characters
 13. every node has a source-backed `code_preview` whose source index resolves
 14. node tooltips remain open while entered, code can be selected, and the linked file/range opens the configured target without replacing the chart
-15. light and dark code surfaces use Catppuccin Latte and Mocha with distinguishable syntax categories
-16. every displayed excerpt, label, immutable URL, and optional Cursor target verifies against the same `pr.head_sha`
+15. the code surface uses Catppuccin Mocha with distinguishable syntax categories, and the page never renders light
+16. every displayed excerpt, label, immutable URL, and optional Cursor target verifies against the same analyzed snapshot (`pr.evidence_sha` when set, otherwise `pr.head_sha`)
 17. the standalone page populates its orientation title and applies non-default computed styles to its primary controls
 18. Previous, Next, and node selection visibly change which node is highlighted, compared as computed style rather than as an ARIA attribute alone
 19. nodes the PR changed are distinguishable from context nodes in the default full-path view, not only after switching to the delta view

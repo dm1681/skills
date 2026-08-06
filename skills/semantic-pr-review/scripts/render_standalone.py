@@ -61,7 +61,7 @@ def _standalone_html(fragment: str, base_css: str, title: str) -> str:
 <meta http-equiv="Content-Security-Policy" content="{OUTER_CSP}">
 <title>{escaped_title}</title>
 <style>
-:root {{ color-scheme: light dark; background: light-dark(#eff1f5, #1e1e2e); }}
+:root {{ color-scheme: dark; background: #1e1e2e; }}
 html, body {{ min-height: 100%; margin: 0; }}
 body {{ box-sizing: border-box; padding: 1rem; background: inherit; }}
 iframe {{ display: block; width: 100%; height: calc(100vh - 2rem); border: 0; }}
