@@ -3,6 +3,54 @@
 All notable changes to this repository are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- A `skills` command that works from any directory. `skills setup-path` writes
+  launcher shims into a directory on `PATH` — a POSIX shim for Git Bash, WSL,
+  and Unix shells, plus a `.cmd` shim for PowerShell and cmd.exe — each
+  remembering where this checkout lives. `skills install NAME` then installs
+  into the current project's `./.agents/skills` and `./.claude/skills` without
+  naming a path. `--add-path` adds the directory to `PATH` for you: on Windows
+  by editing the current user's registry environment, never `setx`, which
+  silently truncates a `PATH` longer than 1024 characters.
+- A Textual interface replaces the prompt-driven wizard, in one shell with two
+  modes. The dashboard lists every skill with its live state — not installed,
+  up to date, or differing from this checkout — beside a sidebar carrying the
+  view filter, destination, and copy/link mode. A first install into a
+  destination with no receipt instead opens a four-step guided flow (where,
+  which, how, review) that explains what a repo-level install means and spells
+  out every write and backup before touching disk. `G` switches modes;
+  `skills install --guided` / `--no-guided` forces either.
+- Colour now carries meaning rather than decoration, and the contract holds
+  across both modes: mauve is your selection, blue an additive install, peach a
+  replacement whose old copy is backed up, green means already identical, teal
+  is a location, yellow an advisory, and red is reserved for failure — so a
+  healthy run is provably red-free. A skill's state is painted in the colour of
+  the consequence of selecting it, so the hue carries from the state pill to
+  the action verb to the review screen.
+
+### Changed
+
+- **Breaking.** `textual` is now a dependency. `uv` provisions it from the
+  lockfile automatically; a bare-Python run without it can still install
+  anything by naming it (`--skill NAME`), and says so rather than failing with
+  a traceback.
+- **Breaking.** `--no-color` is gone. It configured the hand-rolled terminal UI,
+  which no longer exists; the dashboard follows Textual's own theming.
+- The two-phase global/project selection is gone with the wizard. The dashboard
+  installs one scope at a time and switches between them with a keypress, which
+  is the same reach in fewer concepts.
+- `--interactive` and `--non-interactive` now open and suppress the dashboard.
+  `--graphify`, `--matt-skills`, and `--target` stay scripted-only and say so
+  instead of being silently ignored.
+
+### Removed
+
+- The numbered-prompt and arrow-key interface, its Windows virtual-terminal and
+  raw-key plumbing, and the two-phase wizard: 666 lines out of `install.py`.
+
 ## [8.1.0] - 2026-08-05
 
 ### Added

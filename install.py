@@ -4,21 +4,17 @@
 from __future__ import annotations
 
 import argparse
-import atexit
 import filecmp
 import json
 import os
-import re
 import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
-import textwrap
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Iterable, Iterator, Mapping, Optional, TextIO
+from typing import Callable, Iterable, Mapping, Optional, TextIO
 
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -50,583 +46,32 @@ class InstallError(RuntimeError):
     """A user-actionable installation error."""
 
 
-class Console:
-    """Small dependency-free terminal UI with accessible fallbacks."""
-
-    RESET = "\033[0m"
-    BOLD = "\033[1m"
-    DIM = "\033[2m"
-    CYAN = "\033[36m"
-    GREEN = "\033[32m"
-    YELLOW = "\033[33m"
-    RED = "\033[31m"
-
-    def __init__(
-        self,
-        stdin: TextIO = sys.stdin,
-        stdout: TextIO = sys.stdout,
-        *,
-        color: Optional[bool] = None,
-        unicode: Optional[bool] = None,
-        width: Optional[int] = None,
-        key_reader: Optional[Callable[[], str]] = None,
-        terminal_restore: Optional[Callable[[], None]] = None,
-    ) -> None:
-        self.stdin = stdin
-        self.stdout = stdout
-        self._width = width
-        self._written_lines = 0
-        tty = _isatty(stdout)
-        self.color = (
-            color
-            if color is not None
-            else tty
-            and "NO_COLOR" not in os.environ
-            and os.environ.get("TERM", "") != "dumb"
-        )
-        encoding = getattr(stdout, "encoding", None) or "utf-8"
-        unicode_capable = _can_encode(encoding, "◆✓›")
-        self.unicode = unicode if unicode is not None else tty and unicode_capable
-        self._key_reader = key_reader
-        self._terminal_restore = terminal_restore
-        if key_reader is not None:
-            self.supports_navigation = True
-        elif _isatty(stdin) and tty:
-            supported, restore = _prepare_terminal_navigation(stdin, stdout)
-            self.supports_navigation = supported
-            self._terminal_restore = restore
-        else:
-            self.supports_navigation = False
-        if self._terminal_restore is not None:
-            atexit.register(self._terminal_restore)
-
-    @property
-    def width(self) -> int:
-        if self._width is not None:
-            return max(20, self._width)
-        columns = shutil.get_terminal_size((88, 24)).columns
-        return max(20, min(columns, 100))
-
-    def styled(self, text: str, *styles: str) -> str:
-        if not self.color or not styles:
-            return text
-        return "".join(styles) + text + self.RESET
-
-    def write(self, text: str = "") -> None:
-        self._written_lines += text.count("\n") + 1
-        self.stdout.write(text + "\n")
-        self.stdout.flush()
-
-    def wrap(
-        self,
-        text: str,
-        *,
-        indent: int = 0,
-        subsequent: Optional[int] = None,
-        break_long_words: bool = False,
-        right_margin: int = 0,
-    ) -> None:
-        later = indent if subsequent is None else subsequent
-        rendered = textwrap.fill(
-            text,
-            width=max(10, self.width - right_margin),
-            initial_indent=" " * indent,
-            subsequent_indent=" " * later,
-            break_long_words=break_long_words,
-            break_on_hyphens=break_long_words,
-        )
-        self.write(rendered)
-
-    def header(self) -> None:
-        mark = "◆" if self.unicode else "*"
-        self.write()
-        self.write(self.styled(f"{mark} Skills setup", self.BOLD, self.CYAN))
-        self.wrap(
-            f"Version {VERSION} · Install portable skills across machines and coding agents.",
-            indent=2,
-        )
-
-    def section(self, title: str) -> None:
-        mark = "◆" if self.unicode else ">"
-        self.write()
-        self.write(self.styled(f"{mark} {title}", self.BOLD))
-
-    def option(
-        self,
-        number: int,
-        label: str,
-        description: str,
-        recommended: bool = False,
-    ) -> None:
-        suffix = " · recommended" if recommended else ""
-        self.wrap(f"{number}. {label}{suffix}", indent=2, subsequent=5)
-        self.wrap(description, indent=5)
-
-    def ask(self, question: str, default: Optional[str] = None) -> str:
-        self.wrap(question, indent=2)
-        hint = f" [{default}]" if default is not None else ""
-        marker = "›" if self.unicode else ">"
-        self.stdout.write(self.styled(f"  {marker}{hint} ", self.CYAN))
-        self.stdout.flush()
-        value = self.stdin.readline()
-        if value == "":
-            raise InstallError("input ended before setup was complete")
-        self.write()
-        value = value.strip()
-        return value if value else (default or "")
-
-    def note(self, text: str) -> None:
-        mark = "•" if self.unicode else "-"
-        self.wrap(
-            f"{mark} {text}",
-            indent=2,
-            subsequent=4,
-            break_long_words=True,
-        )
-
-    def warning(self, text: str) -> None:
-        self.wrap(
-            self.styled(f"! {text}", self.YELLOW),
-            indent=2,
-            subsequent=4,
-            break_long_words=True,
-        )
-
-    def error(self, text: str) -> None:
-        mark = "×" if self.unicode else "x"
-        self.wrap(
-            self.styled(f"{mark} {text}", self.RED),
-            indent=2,
-            subsequent=4,
-            break_long_words=True,
-        )
-
-    def success(self, text: str) -> None:
-        mark = "✓" if self.unicode else "ok"
-        self.wrap(
-            self.styled(f"{mark} {text}", self.GREEN, self.BOLD),
-            indent=2,
-            subsequent=5,
-            break_long_words=True,
-        )
-
-    def summary(self, rows: list[tuple[str, str]]) -> None:
-        label_width = max(len(label) for label, _ in rows)
-        if self.width >= 68:
-            for label, value in rows:
-                # An empty label is a continuation row (an extra destination for
-                # the row above). textwrap strips leading spaces, so the padding
-                # has to travel as an indent rather than inside the text.
-                if not label:
-                    self.wrap(
-                        value, indent=4 + label_width, break_long_words=True
-                    )
-                    continue
-                prefix = f"{label:<{label_width}}  "
-                self.wrap(
-                    prefix + value,
-                    indent=2,
-                    subsequent=4 + label_width,
-                    break_long_words=True,
-                )
-        else:
-            for label, value in rows:
-                if label:
-                    self.write(self.styled(f"  {label}", self.DIM))
-                self.wrap(value, indent=4, break_long_words=True)
-
-    @contextmanager
-    def navigation_keys(self) -> Iterator[Callable[[], str]]:
-        if self._key_reader is not None:
-            yield self._key_reader
-            return
-        with _terminal_key_reader(self.stdin) as reader:
-            yield reader
-
-    def close(self) -> None:
-        if self._terminal_restore is None:
-            return
-        restore = self._terminal_restore
-        self._terminal_restore = None
-        try:
-            restore()
-        finally:
-            atexit.unregister(restore)
-
-
-def _isatty(stream: TextIO) -> bool:
+def is_terminal(stream: TextIO) -> bool:
     try:
         return bool(stream.isatty())
     except (AttributeError, OSError):
         return False
 
 
-def _can_encode(encoding: str, value: str) -> bool:
-    try:
-        value.encode(encoding)
-        return True
-    except (LookupError, UnicodeEncodeError):
-        return False
-
-
-def _prepare_terminal_navigation(
-    stdin: TextIO, stdout: TextIO
-) -> tuple[bool, Optional[Callable[[], None]]]:
-    try:
-        input_fd = stdin.fileno()
-        output_fd = stdout.fileno()
-        if not os.isatty(input_fd) or not os.isatty(output_fd):
-            return False, None
-    except (AttributeError, OSError):
-        return False, None
-    if os.name != "nt":
-        return os.environ.get("TERM", "") != "dumb", None
-    restore = _enable_windows_virtual_terminal(stdout)
-    return restore is not None, restore
-
-
-def _enable_windows_virtual_terminal(
-    stdout: TextIO,
-) -> Optional[Callable[[], None]]:
-    if os.name != "nt":
-        return None
-    try:
-        import ctypes
-        import msvcrt
-        from ctypes import wintypes
-
-        handle = wintypes.HANDLE(msvcrt.get_osfhandle(stdout.fileno()))
-        mode = wintypes.DWORD()
-        kernel32 = ctypes.windll.kernel32
-        get_console_mode = kernel32.GetConsoleMode
-        get_console_mode.argtypes = [
-            wintypes.HANDLE,
-            ctypes.POINTER(wintypes.DWORD),
-        ]
-        get_console_mode.restype = wintypes.BOOL
-        set_console_mode = kernel32.SetConsoleMode
-        set_console_mode.argtypes = [wintypes.HANDLE, wintypes.DWORD]
-        set_console_mode.restype = wintypes.BOOL
-        if not get_console_mode(handle, ctypes.byref(mode)):
-            return None
-        previous = mode.value
-        enabled = mode.value | 0x0004  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
-        if not set_console_mode(handle, enabled):
-            return None
-
-        def restore() -> None:
-            set_console_mode(handle, previous)
-
-        return restore
-    except (AttributeError, OSError, ValueError):
-        return None
-
-
-def _normalize_posix_key(sequence: bytes) -> str:
-    if sequence in {b"\r", b"\n"}:
-        return "enter"
-    if sequence == b" ":
-        return "space"
-    if sequence == b"\x03":
-        raise KeyboardInterrupt
-    if sequence.startswith(b"\x1b") and sequence.endswith(b"A"):
-        return "up"
-    if sequence.startswith(b"\x1b") and sequence.endswith(b"B"):
-        return "down"
-    return ""
-
-
-def _normalize_windows_key(character: str, extended: str = "") -> str:
-    if character in {"\x00", "\xe0"}:
-        return {"H": "up", "P": "down"}.get(extended, "")
-    if character in {"\r", "\n"}:
-        return "enter"
-    if character == " ":
-        return "space"
-    if character == "\x03":
-        raise KeyboardInterrupt
-    return ""
-
-
-@contextmanager
-def _terminal_key_reader(stdin: TextIO) -> Iterator[Callable[[], str]]:
-    if os.name == "nt":
-        import msvcrt
-
-        def read_windows_key() -> str:
-            character = msvcrt.getwch()
-            if character in {"\x00", "\xe0"}:
-                extended = msvcrt.getwch()
-                return _normalize_windows_key(character, extended)
-            return _normalize_windows_key(character)
-
-        yield read_windows_key
-        return
-
-    import select
-    import termios
-    import tty
-
-    file_descriptor = stdin.fileno()
-    previous = termios.tcgetattr(file_descriptor)
-    tty.setcbreak(file_descriptor)
-
-    def read_posix_key() -> str:
-        sequence = os.read(file_descriptor, 1)
-        if sequence == b"\x1b":
-            for _ in range(2):
-                readable, _, _ = select.select([file_descriptor], [], [], 0.05)
-                if not readable:
-                    break
-                sequence += os.read(file_descriptor, 1)
-        return _normalize_posix_key(sequence)
-
-    try:
-        yield read_posix_key
-    finally:
-        termios.tcsetattr(file_descriptor, termios.TCSADRAIN, previous)
-
-
-def _render_navigation(
-    console: Console,
-    options: list[tuple[str, str, str]],
-    current: int,
-    selected: set[int],
-    multiple: bool,
-    warning: Optional[str] = None,
-) -> int:
-    starting_line = console._written_lines
-    for index, (_, label, _) in enumerate(options):
-        focused = index == current
-        pointer = "›" if console.unicode and focused else ">" if focused else " "
-        if console.unicode:
-            mark = ("■" if index in selected else "□") if multiple else (
-                "●" if index in selected else "○"
-            )
-        else:
-            mark = "[x]" if index in selected else "[ ]"
-        style = (console.CYAN, console.BOLD) if focused else ()
-        console.wrap(
-            console.styled(f"{pointer} {mark} {label}", *style),
-            indent=2,
-            subsequent=6,
-            right_margin=1,
-        )
-    description = options[current][2]
-    if description:
-        console.wrap(description, indent=5, right_margin=1)
-    action = "toggle" if multiple else "select"
-    hint = f"↑/↓ move · Space {action} · Enter confirm" if console.unicode else (
-        f"Up/Down move · Space {action} · Enter confirm"
-    )
-    console.wrap(console.styled(hint, console.DIM), indent=5, right_margin=1)
-    if warning:
-        console.wrap(
-            console.styled(f"! {warning}", console.YELLOW),
-            indent=2,
-            subsequent=4,
-            break_long_words=True,
-            right_margin=1,
-        )
-    return console._written_lines - starting_line
-
-
-def _erase_navigation(console: Console, rendered_lines: int) -> None:
-    if rendered_lines <= 0:
-        return
-    console.stdout.write(f"\033[{rendered_lines}F\033[J")
-    console.stdout.flush()
-
-
-def _navigate_options(
-    console: Console,
-    options: list[tuple[str, str, str]],
-    defaults: set[int],
-    multiple: bool,
-    allow_empty: bool = False,
-) -> set[int]:
-    selected = set(defaults)
-    current = min(selected) if selected else 0
-    warning: Optional[str] = None
-    rendered_lines = 0
-    console.stdout.write("\033[?25l")
-    console.stdout.flush()
-    try:
-        with console.navigation_keys() as read_key:
-            while True:
-                _erase_navigation(console, rendered_lines)
-                rendered_lines = _render_navigation(
-                    console,
-                    options,
-                    current,
-                    selected,
-                    multiple,
-                    warning,
-                )
-                warning = None
-                key = read_key()
-                if key == "up":
-                    current = (current - 1) % len(options)
-                elif key == "down":
-                    current = (current + 1) % len(options)
-                elif key == "space":
-                    if multiple:
-                        if current in selected:
-                            selected.remove(current)
-                        else:
-                            selected.add(current)
-                    else:
-                        selected = {current}
-                elif key == "enter":
-                    if not multiple:
-                        selected = {current}
-                    if selected or allow_empty:
-                        break
-                    warning = "Select at least one option before continuing."
-    finally:
-        _erase_navigation(console, rendered_lines)
-        _render_navigation(console, options, current, selected, multiple)
-        console.stdout.write("\033[?25h")
-        console.stdout.flush()
-        console.write()
-    return selected
-
-
-def _select_one(
-    console: Console,
-    title: str,
-    options: list[tuple[str, str, str]],
-    default_value: str,
-) -> str:
-    console.section(title)
-    if console.supports_navigation:
-        default_index = next(
-            (
-                index
-                for index, (value, _, _) in enumerate(options)
-                if value == default_value
-            ),
-            0,
-        )
-        selected = _navigate_options(console, options, {default_index}, False)
-        return options[next(iter(selected))][0]
-
-    default_index = 1
-    for index, (value, label, description) in enumerate(options, start=1):
-        recommended = value == default_value
-        if recommended:
-            default_index = index
-        console.option(index, label, description, recommended)
-    while True:
-        answer = console.ask("Choose one", str(default_index))
-        if answer.isdigit() and 1 <= int(answer) <= len(options):
-            return options[int(answer) - 1][0]
-        by_name = {value: value for value, _, _ in options}
-        if answer.lower() in by_name:
-            return by_name[answer.lower()]
-        console.warning(f"Enter a number from 1 to {len(options)}.")
-
-
-def _select_many(
-    console: Console,
-    title: str,
-    options: list[tuple[str, str, str]],
-    defaults: list[str],
-    allow_empty: bool = False,
-) -> list[str]:
-    if title:
-        console.section(title)
-    if console.supports_navigation:
-        default_indexes = {
-            index
-            for index, (value, _, _) in enumerate(options)
-            if value in defaults
-        }
-        selected = _navigate_options(
-            console, options, default_indexes, True, allow_empty
-        )
-        return [
-            value
-            for index, (value, _, _) in enumerate(options)
-            if index in selected
-        ]
-
-    indexes: list[str] = []
-    for index, (value, label, description) in enumerate(options, start=1):
-        recommended = value in defaults
-        if recommended:
-            indexes.append(str(index))
-        console.option(index, label, description, recommended)
-    default = ",".join(indexes) or ("none" if allow_empty else "1")
-    prompt = "Choose one or more numbers, separated by commas"
-    if allow_empty:
-        prompt += ", 'all', or 'none'"
-    while True:
-        answer = console.ask(prompt, default)
-        if allow_empty and answer.lower() in {"none", "skip"}:
-            return []
-        if answer.lower() == "all":
-            return [value for value, _, _ in options]
-        tokens = [
-            token.strip()
-            for token in answer.replace(" ", ",").split(",")
-            if token.strip()
-        ]
-        if tokens and all(
-            token.isdigit() and 1 <= int(token) <= len(options)
-            for token in tokens
-        ):
-            selected: list[str] = []
-            for token in tokens:
-                value = options[int(token) - 1][0]
-                if value not in selected:
-                    selected.append(value)
-            return selected
-        console.warning(
-            f"Enter comma-separated numbers from 1 to {len(options)}, or all."
-        )
-
-
-def _confirm(console: Console, question: str, default: bool) -> bool:
-    if console.supports_navigation:
-        console.section("Confirm")
-        console.wrap(question, indent=2)
-        options = [
-            ("yes", "Yes", "Continue with this action."),
-            ("no", "No", "Leave the current state unchanged."),
-        ]
-        default_index = 0 if default else 1
-        selected = _navigate_options(console, options, {default_index}, False)
-        return next(iter(selected)) == 0
-
-    hint = "Y/n" if default else "y/N"
-    while True:
-        answer = console.ask(
-            f"{question} ({hint})",
-            "y" if default else "n",
-        ).lower()
-        if answer in {"y", "yes"}:
-            return True
-        if answer in {"n", "no"}:
-            return False
-        console.warning("Enter y or n.")
-
-
-def should_use_wizard(
-    raw_args: list[str],
+def should_open_dashboard(
+    raw_args: list,
     args: argparse.Namespace,
     stdin: TextIO,
     stdout: TextIO,
     env: Mapping[str, str],
 ) -> bool:
-    """Use the wizard by default only when it is safe to prompt."""
+    """Open the dashboard by default only when it is safe to take the screen.
+
+    Passing any option means the caller has already decided what to install, so
+    a scripted run stays on the plain-output path and never clears the screen.
+    """
     if args.non_interactive:
         return False
     if args.interactive:
         return True
     if raw_args or env.get("CI"):
         return False
-    return _isatty(stdin) and _isatty(stdout)
+    return is_terminal(stdin) and is_terminal(stdout)
 
 
 def available_skills() -> list[str]:
@@ -946,226 +391,6 @@ def stage_roots(args: argparse.Namespace, scope: str) -> list[Path]:
     return resolve_roots(args.agent, scope, args.home, args.project_dir, args.target)
 
 
-def install_stages(
-    args: argparse.Namespace, selected: list[str]
-) -> list[tuple[str, str, list[str]]]:
-    """The `(label, scope, skills)` installs this run performs, in order.
-
-    A run can populate both scopes. The wizard sets `project_skill` to express
-    its second selection phase; a scripted install leaves it unset and keeps the
-    single-scope behavior that `--scope` has always had.
-    """
-    project_selected = getattr(args, "project_skill", None)
-    if args.target is not None or project_selected is None:
-        return [("Skills", args.scope, selected)]
-    stages: list[tuple[str, str, list[str]]] = []
-    if selected:
-        stages.append(("Global", "user", selected))
-    if project_selected:
-        stages.append(("Project", "project", project_selected))
-    return stages
-
-
-def _replacement_paths(
-    args: argparse.Namespace, stages: list[tuple[str, str, list[str]]]
-) -> list[Path]:
-    paths: list[Path] = []
-    for _, scope, skills in stages:
-        for root in stage_roots(args, scope):
-            for skill_name in skills:
-                destination = root / skill_name
-                exists = destination.exists() or destination.is_symlink()
-                if exists and not trees_equal(destination, SOURCE_ROOT / skill_name):
-                    paths.append(destination)
-    return paths
-
-
-def _select_project_skills(
-    console: Console,
-    args: argparse.Namespace,
-    bundled: list[str],
-) -> list[str]:
-    """Second selection phase: skills installed inside one project directory.
-
-    Skills already chosen for the machine-wide install are marked and left
-    unchecked, because a project copy of an already-global skill is redundant.
-    Selecting one anyway is allowed: pinning a project to this checkout's
-    version is a legitimate reason to duplicate it.
-    """
-    console.section("Repo-level skills")
-    if not _confirm(console, "Also install into one project directory?", False):
-        return []
-    while True:
-        entered = console.ask(
-            "Project directory",
-            str(args.project_dir.expanduser().resolve()),
-        )
-        project_dir = Path(entered).expanduser().resolve()
-        if project_dir.is_dir():
-            args.project_dir = project_dir
-            break
-        console.warning(f"Directory does not exist: {project_dir}")
-    already_global = set(args.skill or [])
-    options = [
-        (
-            name,
-            f"{name} - already global" if name in already_global else name,
-            skill_summary(name),
-        )
-        for name in bundled
-    ]
-    defaults = [name for name in bundled if name not in already_global]
-    # Title omitted: the "Repo-level skills" section header above already frames
-    # this list, and a second header would read as a separate step.
-    return _select_many(console, "", options, defaults, allow_empty=True)
-
-
-def run_wizard(
-    args: argparse.Namespace,
-    bundled: list[str],
-    console: Console,
-) -> bool:
-    """Collect installer choices and return whether installation should proceed."""
-    console.header()
-    if not console.supports_navigation:
-        # Selection normally uses arrow keys with Space to toggle checkboxes.
-        # A pty-based shell (Git Bash / mintty on Windows) hides the console
-        # from Python, so say why the prompts look different rather than
-        # silently serving the lesser interface.
-        console.note(
-            "This terminal does not expose arrow keys, so selection uses "
-            "numbered prompts. For checkbox selection, run the installer from "
-            "a native console: install.ps1 in PowerShell or Windows Terminal."
-        )
-
-    if args.target is not None:
-        console.section("Installation target")
-        console.note(str(args.target.expanduser().resolve()))
-
-    agent_defaults = args.agent or list(DEFAULT_AGENTS)
-    if "all" in agent_defaults:
-        agent_defaults = ["universal", "claude"]
-    args.agent = _select_many(
-        console,
-        "Coding agents",
-        [
-            (
-                "universal",
-                "Shared .agents directory",
-                "Preferred portable location for Codex, Cursor, Copilot, and other agents.",
-            ),
-            ("codex", "Codex", "Shared skill plus Codex-specific Graphify setup."),
-            ("cursor", "Cursor", "Shared skill plus Cursor-specific Graphify setup."),
-            (
-                "copilot",
-                "GitHub Copilot",
-                "Shared skill plus Copilot-specific Graphify setup.",
-            ),
-            ("claude", "Claude Code", "Installs into Claude's dedicated directory."),
-        ],
-        agent_defaults,
-    )
-
-    if args.target is not None:
-        # A custom target is one explicit directory, so there is no global or
-        # project distinction left to draw.
-        args.skill = _select_many(
-            console,
-            "Skills",
-            [(name, name, skill_summary(name)) for name in bundled],
-            args.skill or bundled,
-        )
-    else:
-        global_defaults = args.skill or [
-            name for name in bundled if skill_global_default(name)
-        ]
-        # Section titles are written unwrapped, so the framing sentence travels
-        # as a note that a narrow terminal can still fold.
-        console.section("Global skills")
-        console.note("Available from every project on this machine.")
-        args.skill = _select_many(
-            console,
-            "",
-            [(name, name, skill_summary(name)) for name in bundled],
-            global_defaults,
-            allow_empty=True,
-        )
-        args.project_skill = _select_project_skills(console, args, bundled)
-        if not args.skill and not args.project_skill:
-            # Stop before the remaining questions: with nothing to install, mode
-            # and Graphify have nothing to apply to.
-            console.write()
-            console.note("No skills selected. No changes made.")
-            return False
-
-    args.mode = _select_one(
-        console,
-        "Install mode",
-        [
-            (
-                "copy",
-                "Copy files",
-                "Stable across repo moves and best for syncing between machines.",
-            ),
-            (
-                "link",
-                "Create links",
-                "Changes in this checkout appear immediately in installed skills.",
-            ),
-        ],
-        args.mode,
-    )
-    # No bundled skill requires mattpocock/skills, so the wizard does not offer
-    # to fetch third-party skills. `--matt-skills` still installs them on request.
-    args.matt_skills = bool(args.matt_skills)
-    args.graphify = _confirm(
-        console,
-        "Install Graphify and configure it for the selected agents?",
-        args.graphify,
-    )
-
-    stages = install_stages(args, args.skill)
-    differing = _replacement_paths(args, stages)
-    if differing and not args.force:
-        console.section("Existing installations")
-        many = len(differing) != 1
-        console.warning(
-            f"{len(differing)} installed skill path{'s' if many else ''} "
-            f"{'differ' if many else 'differs'} from this release. "
-            "Each will be backed up before replacement."
-        )
-        for path in differing:
-            console.note(str(path))
-        if not _confirm(console, "Back up and replace these installations?", False):
-            console.write()
-            console.note("No changes made.")
-            return False
-        args.force = True
-
-    console.section("Review")
-    rows: list[tuple[str, str]] = [("Agents", ", ".join(args.agent))]
-    for label, scope, skills in stages:
-        rows.append((label, ", ".join(skills)))
-        for root in stage_roots(args, scope):
-            rows.append(("", str(root)))
-    rows.extend(
-        [
-            ("Mode", args.mode),
-            (
-                "Matt skills",
-                "install all" if args.matt_skills else "skip",
-            ),
-            ("Graphify", "install and configure" if args.graphify else "skip"),
-        ]
-    )
-    console.summary(rows)
-    if not _confirm(console, "Apply this setup?", True):
-        console.write()
-        console.note("No changes made.")
-        return False
-    return True
-
-
 def backup_path(root: Path, skill_name: str) -> Path:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     backup_root = root.parent / ".skills-backups" / root.name
@@ -1284,27 +509,19 @@ def parser() -> argparse.ArgumentParser:
         "--no-matt-skills",
         dest="matt_skills",
         action="store_false",
-        help="skip Matt Pocock skills in the interactive wizard",
+        help=argparse.SUPPRESS,
     )
     result.set_defaults(matt_skills=None)
-    # Set only by the wizard's second selection phase. `None` means "this run has
-    # no project phase", which keeps scripted installs single-scope.
-    result.set_defaults(project_skill=None)
     interaction = result.add_mutually_exclusive_group()
     interaction.add_argument(
         "--interactive",
         action="store_true",
-        help="open the guided setup wizard, even when input is not a terminal",
+        help="open the dashboard, even when input is not a terminal",
     )
     interaction.add_argument(
         "--non-interactive",
         action="store_true",
-        help="use command-line options without opening the setup wizard",
-    )
-    result.add_argument(
-        "--no-color",
-        action="store_true",
-        help="disable color in the interactive interface",
+        help="use command-line options without opening the dashboard",
     )
     result.add_argument("--force", action="store_true")
     result.add_argument("--dry-run", action="store_true")
@@ -1313,106 +530,92 @@ def parser() -> argparse.ArgumentParser:
     return result
 
 
-def execute_install(
-    args: argparse.Namespace,
-    selected: list[str],
-    console: Optional[Console],
-) -> None:
-    stages = install_stages(args, selected)
-    if console:
-        console.section("Installing" if not args.dry_run else "Preview")
-    for label, scope, skills in stages:
-        if console and len(stages) > 1:
-            console.note(f"{label}:")
-        for root in stage_roots(args, scope):
-            for skill_name in skills:
-                result = install_one(
+def open_dashboard(args: argparse.Namespace) -> int:
+    """Hand the screen to the Textual dashboard.
+
+    Textual is a declared dependency, so `uv run` always has it. A bare-Python
+    fallback might not, and that is worth an explanation rather than a
+    traceback: naming skills on the command line still needs nothing installed.
+    """
+    for option, flag in (
+        (args.graphify, "--graphify"),
+        (args.matt_skills, "--matt-skills"),
+        (args.target is not None, "--target"),
+    ):
+        if option:
+            raise InstallError(
+                f"{flag} is a scripted option and the dashboard does not carry it; "
+                "add --non-interactive to run it without opening the dashboard"
+            )
+    try:
+        import skills_tui
+    except ImportError as exc:
+        raise InstallError(
+            f"the dashboard needs Textual ({exc}). Run the installer through uv, "
+            "which provisions the locked environment automatically, or install "
+            "Textual with pip. A scripted install needs no dependencies at all: "
+            "--skill NAME --non-interactive"
+        )
+    return skills_tui.run(
+        args.project_dir.expanduser().resolve(), args.scope, args.agent, args.mode
+    )
+
+
+def execute_install(args: argparse.Namespace, selected: list[str]) -> None:
+    roots = stage_roots(args, args.scope)
+    for root in roots:
+        for skill_name in selected:
+            print(
+                install_one(
                     SOURCE_ROOT / skill_name,
                     root,
                     args.mode,
                     args.force,
                     args.dry_run,
                 )
-                if console:
-                    if result.startswith("installed"):
-                        console.success(result)
-                    else:
-                        console.note(result)
-                else:
-                    print(result)
-            write_receipt(root, skills, args.mode, args.dry_run)
-    # Third-party installs follow `--scope`, which the two-phase wizard leaves at
-    # its `user` default: these are machine-level tools, not per-project copies.
-    roots = stage_roots(args, args.scope)
-    if args.matt_skills:
-        if console:
-            console.section("Matt Pocock skills")
-            console.note(
-                "Installing the complete engineering skill set, including "
-                "setup-matt-pocock-skills."
             )
+        write_receipt(root, selected, args.mode, args.dry_run)
+    if args.matt_skills:
         install_matt_skills(
             args.agent,
             roots,
             args.force,
             args.dry_run,
-            console.note if console else print,
+            print,
             getattr(args, "matt_npx", None),
         )
     if args.graphify:
-        if console:
-            console.section("Graphify")
-            console.note("Installing graphifyy with uv and registering agent skills.")
         install_graphify(
-            args.agent,
-            args.scope,
-            args.project_dir,
-            args.dry_run,
-            console.note if console else print,
+            args.agent, args.scope, args.project_dir, args.dry_run, print
         )
-    if console:
-        console.write()
-        console.success("Preview complete." if args.dry_run else "Setup complete.")
-        if args.matt_skills and not args.dry_run:
-            console.note(
-                "Next: run /setup-matt-pocock-skills once inside the target "
-                "repository to finish configuring the workflows."
-            )
+    if args.matt_skills and not args.dry_run:
+        print(
+            "Next: run /setup-matt-pocock-skills once inside the target "
+            "repository to finish configuring the workflows."
+        )
 
 
 def main(argv: Optional[list[str]] = None) -> int:
     raw_args = list(sys.argv[1:] if argv is None else argv)
     args = parser().parse_args(raw_args)
-    console: Optional[Console] = None
     try:
         bundled = available_skills()
         if args.list:
             print("\n".join(bundled))
             return 0
-        interactive = should_use_wizard(
-            raw_args,
-            args,
-            sys.stdin,
-            sys.stdout,
-            os.environ,
-        )
-        if interactive:
-            console = Console(sys.stdin, sys.stdout, color=False if args.no_color else None)
-            if not run_wizard(args, bundled, console):
-                return 0
-        elif not raw_args:
-            # A bare invocation means "ask me". If the guided setup cannot run,
-            # there is nothing to fall back on: installing every skill into every
-            # root by default would silently make choices the user came here to
-            # make, including machine-wide installs of narrow skills that the
-            # wizard deliberately leaves unchecked.
+        if should_open_dashboard(raw_args, args, sys.stdin, sys.stdout, os.environ):
+            return open_dashboard(args)
+        if not raw_args:
+            # A bare invocation means "ask me". With no terminal to ask in there
+            # is nothing to fall back on: installing every skill into every root
+            # would silently make the choices the user came here to make.
             raise InstallError(
-                "the guided setup needs an interactive terminal, and no options "
+                "the dashboard needs an interactive terminal, and no options "
                 "were given, so nothing was installed. Choose explicitly, for "
                 "example `--skill NAME`, or pass --non-interactive to accept "
                 "every default. On Windows, a pty shell such as Git Bash hides "
                 "the terminal from Python: run install.ps1 in PowerShell or "
-                "Windows Terminal for the guided setup."
+                "Windows Terminal for the dashboard."
             )
         selected = args.skill or bundled
         unknown = sorted(set(selected) - set(bundled))
@@ -1437,32 +640,17 @@ def main(argv: Optional[list[str]] = None) -> int:
                     "--graphify requires uv; install it from "
                     "https://docs.astral.sh/uv/ and rerun"
                 )
-        execute_install(args, selected, console)
+        execute_install(args, selected)
         return 0
     except KeyboardInterrupt:
-        if console:
-            console.write()
-            console.warning("Setup interrupted.")
-        else:
-            print("error: interrupted", file=sys.stderr)
+        print("error: interrupted", file=sys.stderr)
         return 130
     except InstallError as exc:
-        if console:
-            console.write()
-            console.error(str(exc))
-        else:
-            print(f"error: {exc}", file=sys.stderr)
+        print(f"error: {exc}", file=sys.stderr)
         return 2
     except OSError as exc:
-        if console:
-            console.write()
-            console.error(str(exc))
-        else:
-            print(f"error: {exc}", file=sys.stderr)
+        print(f"error: {exc}", file=sys.stderr)
         return 1
-    finally:
-        if console:
-            console.close()
 
 
 if __name__ == "__main__":
