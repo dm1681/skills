@@ -6,7 +6,7 @@ Use this model to separate source-backed analysis from presentation. Populate it
 
 | Field | Required content |
 | --- | --- |
-| `pr` | `number`, `repository`, `head_sha`, optional `evidence_sha`, optional `url` |
+| `pr` | `number`, `repository`, `head_sha`, optional `base_sha`, optional `evidence_sha`, optional `url` |
 | `summary` | `goal`, `old_to_new`, `ownership_chain`, `payoff`, and `residual_debt` |
 | `systems` | Stable owner or branch identities with `id`, `label`, and theme `color_token` |
 | `nodes` | Semantic components keyed by unique `id` |
@@ -21,6 +21,15 @@ Use this model to separate source-backed analysis from presentation. Populate it
 Everything resolves against one commit. Normally that is `pr.head_sha`.
 
 A deletion-only PR has no evidence at its head: the files worth explaining exist only in the pre-image. Set `pr.evidence_sha` to the commit the excerpts come from and leave `pr.head_sha` as the real head. The scaffold materializes from `evidence_sha`, records a notice naming both commits, and renders that notice on the page, so a pre-image anchor is always visible to the reader. Never overload `head_sha` to mean a commit that is not the head.
+
+## PR diff context
+
+Set optional `pr.base_sha` to the PR's merge base to show what the PR itself changed, not only the resulting code. With a resolvable base the scaffold derives, for every source in a file the PR touched:
+
+- `diff_url`: a link to GitHub's files-changed page anchored at the exact file and head-side line (`…/pull/N/files#diff-<sha256-of-path>R<line>`), rendered next to the GitHub and editor links
+- `diff_preview` on the node: the unified diff hunks overlapping the code preview's line range, shown in the hover card under "What the PR changed"
+
+The base must not equal `head_sha` — that diffs a commit against itself and the scaffold rejects it. A base that is missing from the repository degrades like an unusable `--cursor-root`: diff links and previews are omitted, and the reason is recorded as a notice on the page. Diff previews are also omitted when `evidence_sha` anchors the analysis at a pre-image, because head-side diff lines cannot address pre-image excerpts.
 
 ## Backtick handling per field
 
@@ -70,7 +79,7 @@ Each raw source record contains:
 - `start_line`: inclusive one-based start
 - `end_line`: inclusive one-based end
 
-Do not hand-author `github_url`, `cursor_url`, `snapshot_sha`, or `local_path`. The scaffold script derives immutable GitHub links and `snapshot_sha` from `pr.head_sha`. It adds a Cursor URL only when an explicitly supplied snapshot worktree has the same `HEAD` and identical source bytes.
+Do not hand-author `github_url`, `cursor_url`, `diff_url`, `snapshot_sha`, `local_path`, or the node-level `diff_preview`. The scaffold script derives immutable GitHub links and `snapshot_sha` from `pr.head_sha`, and diff links and previews from `pr.base_sha`. It adds a Cursor URL only when an explicitly supplied snapshot worktree has the same `HEAD` and identical source bytes.
 
 Each raw `code_preview` contains only:
 

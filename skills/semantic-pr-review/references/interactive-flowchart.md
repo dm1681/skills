@@ -42,6 +42,8 @@ Use each node's `code_preview` record to render:
 - a linked `file · start–end` location
 - a semantic `<pre><code>` block with syntax highlighting
 
+When the node carries a scaffold-derived `diff_preview`, follow the excerpt with a `What the PR changed` section: the unified diff hunks in a second `<pre><code>` block with added, removed, and hunk-header lines visually distinguished, and the label linked to the source's `diff_url` when one exists. The diff is supplementary — never replace the head-state excerpt with it.
+
 Keep excerpts exact, contiguous, and small enough to comprehend without scrolling. Prefer 4–10 lines; the scaffold rejects more than 12, and rejects any line over 110 characters. Keep lines concise; select a narrower source region instead of introducing horizontal scrolling or arbitrary identifier breaks. Define the range in the raw model and derive the displayed label and code directly from the Git blob; never maintain those values separately.
 
 Use Catppuccin Mocha for the code surface. The explorer is dark-only: ship one palette so an excerpt reads the same for every reader, and do not add `light-dark()` or a `prefers-color-scheme` block. Tokenize at least comments, strings, keywords, built-ins, types, functions, variables, properties, numbers, operators, punctuation, and decorators when the language supports them. Support common PR languages (`python`, `javascript`, `typescript`, `json`, `toml`, `yaml`, `markdown`, `shell`) and use a conservative generic tokenizer for other languages.
@@ -100,6 +102,14 @@ A POSIX path already opens with that separator; a Windows path opens at its driv
 Cursor links are optional. Verify the application registers the `cursor` URL scheme before presenting them as working.
 
 Always include an immutable GitHub URL derived from the analyzed SHA. In the hover preview, make the visible `file · start–end` location itself a link.
+
+Neither `cursor://` nor `vscode://` can open a diff view — the URL scheme only addresses a file and line. To show what the PR changed at a location, use GitHub's files-changed anchor, which the scaffold derives as `diff_url` when `pr.base_sha` is set:
+
+```text
+https://github.com/OWNER/REPO/pull/NUMBER/files#diff-SHA256_OF_PATH R LINE
+```
+
+(no spaces — the anchor is `diff-`, the lowercase hex SHA-256 of the repository-relative path, then `R` and the head-side line number). Render it as a `PR diff` link beside the GitHub and editor links for every source in a file the PR touched.
 
 Include a Cursor URL only when the target is a worktree whose `HEAD` equals the analyzed SHA and whose full file bytes equal the Git blob. Never silently open similar code from another commit.
 
@@ -183,3 +193,4 @@ Assert that:
 18. Previous, Next, and node selection visibly change which node is highlighted, compared as computed style rather than as an ARIA attribute alone
 19. nodes the PR changed are distinguishable from context nodes in the default full-path view, not only after switching to the delta view
 20. a build that omitted editor links states so on the page, and every affected node still offers its immutable GitHub link
+21. when the model was built with `pr.base_sha`, changed nodes show a `What the PR changed` diff section in their hover card with added and removed lines distinguishable, and sources in changed files offer a `PR diff` link that opens the files-changed page at the right file and line

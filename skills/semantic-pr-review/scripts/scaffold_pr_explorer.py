@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import re
 import subprocess
@@ -75,6 +76,10 @@ REQUIRED_CODE_PREVIEW = {
     "source_sha",
     "code",
 }
+REQUIRED_DIFF_PREVIEW = {"base_sha", "source_sha", "source_label", "code"}
+# A diff hunk carries old and new lines plus context, so it is naturally
+# longer than the 12-line code excerpt; past this it stops being a preview.
+DIFF_PREVIEW_MAX_LINES = 30
 PREVIEW_LANGUAGES = {
     "javascript",
     "json",
@@ -130,6 +135,53 @@ def _cursor_url(cursor_file: Path, start_line: int) -> str:
     if not url_path.startswith("/"):
         url_path = f"/{url_path}"
     return f"cursor://file{url_path}:{start_line}"
+
+
+def _github_diff_url(
+    repository: str, pr_number: Any, source_path: str, start_line: int
+) -> str:
+    """Return the PR files-changed link anchored at one file and line.
+
+    GitHub addresses each file on the files-changed page by the SHA-256 of
+    its repository-relative path; `R` targets the head-side line.
+    """
+    anchor = hashlib.sha256(source_path.encode("utf-8")).hexdigest()
+    return (
+        f"https://github.com/{repository}/pull/{pr_number}/files"
+        f"#diff-{anchor}R{start_line}"
+    )
+
+
+def _diff_hunks(diff_text: str) -> list[tuple[int, int, list[str]]]:
+    """Return (new_start, new_count, lines) for each hunk in a unified diff."""
+    hunks: list[tuple[int, int, list[str]]] = []
+    lines: list[str] | None = None
+    for line in diff_text.splitlines():
+        match = re.match(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", line)
+        if match:
+            lines = [line]
+            hunks.append((int(match.group(1)), int(match.group(2) or 1), lines))
+        elif lines is not None and line[:1] in (" ", "+", "-", "\\"):
+            lines.append(line)
+    return hunks
+
+
+def _diff_excerpt(diff_text: str, start_line: int, end_line: int) -> str | None:
+    """Return the diff hunks overlapping one head-side line range."""
+    selected: list[str] = []
+    for new_start, new_count, lines in _diff_hunks(diff_text):
+        if new_start + max(new_count, 1) - 1 < start_line or new_start > end_line:
+            continue
+        selected.extend(lines)
+    if not selected:
+        return None
+    if len(selected) > DIFF_PREVIEW_MAX_LINES:
+        omitted = len(selected) - DIFF_PREVIEW_MAX_LINES
+        selected = selected[:DIFF_PREVIEW_MAX_LINES]
+        # Truncation must be visible: a preview that ends mid-hunk without
+        # saying so reads as the whole change.
+        selected.append(f"… {omitted} more diff lines; open the PR diff")
+    return "\n".join(selected)
 
 
 def _is_remote_path(candidate: Path) -> bool:
@@ -220,6 +272,32 @@ def _materialize_sources(
             warn(f"editor links omitted: {refusal}")
             cursor_root = None
 
+    # Diff context is optional and fails open like editor links: an
+    # unusable base drops the diff links and previews, never the build.
+    diff_base = None
+    changed_paths: set[str] = set()
+    base_sha = materialized["pr"].get("base_sha")
+    if base_sha:
+        if materialized["pr"].get("evidence_sha"):
+            warn(
+                "diff previews omitted: evidence is anchored at the "
+                "pre-image, so head-side diff lines cannot address it"
+            )
+        else:
+            try:
+                diff_base = _git(repo_root, "rev-parse", f"{base_sha}^{{commit}}")
+            except (OSError, subprocess.CalledProcessError):
+                warn(
+                    f"diff previews omitted: base {base_sha[:12]} is not "
+                    "in the repository"
+                )
+            else:
+                changed_paths = set(
+                    _git(
+                        repo_root, "diff", "--name-only", diff_base, source_sha
+                    ).splitlines()
+                )
+
     for node in materialized.get("nodes", []):
         node_id = node.get("id", "<unknown>")
         sources = node.get("sources")
@@ -271,6 +349,15 @@ def _materialize_sources(
             )
             source.pop("cursor_url", None)
             source.pop("local_path", None)
+            source.pop("diff_url", None)
+
+            if diff_base is not None and source_path in changed_paths:
+                source["diff_url"] = _github_diff_url(
+                    repository,
+                    materialized["pr"]["number"],
+                    source_path,
+                    start_line,
+                )
 
             if cursor_root is not None:
                 cursor_file = (cursor_root / source_path).resolve()
@@ -312,6 +399,23 @@ def _materialize_sources(
             lines[source["start_line"] - 1 : source["end_line"]]
         )
 
+        node.pop("diff_preview", None)
+        if diff_base is not None and source["path"] in changed_paths:
+            excerpt = _diff_excerpt(
+                _git(
+                    repo_root, "diff", diff_base, source_sha, "--", source["path"]
+                ),
+                source["start_line"],
+                source["end_line"],
+            )
+            if excerpt is not None:
+                node["diff_preview"] = {
+                    "base_sha": diff_base,
+                    "source_sha": source_sha,
+                    "source_label": preview["source_label"],
+                    "code": excerpt,
+                }
+
     return materialized
 
 
@@ -340,6 +444,15 @@ def _validate_model(model: dict[str, Any]) -> list[str]:
         errors.append(
             "pr.evidence_sha equals pr.head_sha; omit it unless the analyzed "
             "snapshot differs from the head"
+        )
+
+    # A base equal to the head diffs a commit against itself: every diff
+    # link and preview would be silently empty, so reject the model.
+    base_sha = model["pr"].get("base_sha")
+    if base_sha and base_sha == model["pr"].get("head_sha"):
+        errors.append(
+            "pr.base_sha equals pr.head_sha; omit it or name the PR's "
+            "merge base"
         )
 
     system_ids = {system.get("id") for system in model["systems"]}
@@ -419,6 +532,28 @@ def _validate_model(model: dict[str, Any]) -> list[str]:
             errors.append(
                 f"node {node_id} code_preview source_index does not resolve"
             )
+        diff_preview = node.get("diff_preview")
+        if diff_preview is not None:
+            if not isinstance(diff_preview, dict):
+                errors.append(f"node {node_id} diff_preview must be an object")
+            else:
+                missing_diff = _missing(diff_preview, REQUIRED_DIFF_PREVIEW)
+                if missing_diff:
+                    errors.append(
+                        f"node {node_id} diff_preview is missing fields: "
+                        f"{', '.join(missing_diff)}"
+                    )
+                elif diff_preview["source_sha"] != _analysis_sha(model):
+                    errors.append(
+                        f"node {node_id} diff_preview source_sha does not "
+                        "match the analyzed snapshot"
+                    )
+                elif not str(diff_preview["code"]).startswith("@@ "):
+                    errors.append(
+                        f"node {node_id} diff_preview does not start with "
+                        "a hunk header"
+                    )
+
         code = preview["code"]
         if not isinstance(code, str) or not code.strip():
             errors.append(f"node {node_id} code_preview has no code")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import importlib.util
 import json
 import re
@@ -29,6 +30,9 @@ SOURCE = """def dispatch(request):
 
 def resolve(mode):
     return REGISTRY[mode]
+"""
+SOURCE_BASE = """def dispatch(request):
+    return REGISTRY[request.mode].run(request)
 """
 CONSUMER = """def consume(result):
     return result.value
@@ -125,10 +129,17 @@ def _edge(source: str, destination: str, change_status: str) -> dict[str, object
     }
 
 
-def _model(head_sha: str) -> dict[str, object]:
+def _model(head_sha: str, base_sha: str | None = None) -> dict[str, object]:
     """Return a minimal but complete explorer model for the fixture PR."""
+    pr: dict[str, object] = {
+        "number": 1,
+        "repository": "owner/repository",
+        "head_sha": head_sha,
+    }
+    if base_sha:
+        pr["base_sha"] = base_sha
     return {
-        "pr": {"number": 1, "repository": "owner/repository", "head_sha": head_sha},
+        "pr": pr,
         "summary": {
             "goal": "One stable boundary for every strategy",
             "old_to_new": "Caller-selected implementation to subsystem dispatch",
@@ -240,6 +251,49 @@ class SemanticPrReviewPackagingTests(unittest.TestCase):
             verify._cursor_target("/repo/api.py").as_posix(),
         )
 
+    def test_diff_links_anchor_the_pr_files_page_by_path_hash(self) -> None:
+        """GitHub addresses files-changed entries by the SHA-256 of the path."""
+        scaffold = _load_script("scaffold_pr_explorer")
+        anchor = hashlib.sha256(b"src/api.py").hexdigest()
+        self.assertEqual(
+            f"https://github.com/owner/repository/pull/1/files#diff-{anchor}R12",
+            scaffold._github_diff_url("owner/repository", 1, "src/api.py", 12),
+        )
+
+    def test_diff_excerpts_keep_only_hunks_overlapping_the_preview(self) -> None:
+        scaffold = _load_script("scaffold_pr_explorer")
+        diff = "\n".join(
+            [
+                "diff --git a/api.py b/api.py",
+                "--- a/api.py",
+                "+++ b/api.py",
+                "@@ -1,2 +1,3 @@",
+                " def dispatch(request):",
+                "-    return run(request)",
+                "+    backend = resolve(request.mode)",
+                "+    return backend.run(request)",
+                "@@ -30,1 +31,2 @@",
+                " def unrelated():",
+                "+    pass",
+            ]
+        )
+        excerpt = scaffold._diff_excerpt(diff, 1, 3)
+        self.assertIsNotNone(excerpt)
+        self.assertIn("@@ -1,2 +1,3 @@", excerpt)
+        self.assertIn("+    backend = resolve(request.mode)", excerpt)
+        self.assertNotIn("unrelated", excerpt)
+        self.assertIsNone(scaffold._diff_excerpt(diff, 10, 20))
+        # Truncation is stated rather than silent.
+        long_diff = "@@ -1,1 +1,60 @@\n" + "\n".join(
+            f"+line {index}" for index in range(60)
+        )
+        truncated = scaffold._diff_excerpt(long_diff, 1, 60)
+        self.assertLessEqual(
+            len(truncated.splitlines()),
+            scaffold.DIFF_PREVIEW_MAX_LINES + 1,
+        )
+        self.assertIn("more diff lines", truncated)
+
     def test_template_keeps_the_placeholders_the_scaffold_replaces(self) -> None:
         template = (SKILL_ROOT / "assets" / "pr-explorer-template.html").read_text(
             encoding="utf-8"
@@ -257,6 +311,16 @@ class SemanticPrReviewPipelineTests(unittest.TestCase):
         _write(repository / "consumer.py", CONSUMER)
         _git(repository, "init", "-q", ".")
         return repository, _commit(repository, "fixture snapshot")
+
+    def fixture_with_base(self, directory: str) -> tuple[Path, str, str]:
+        """Create a base-then-head history and return both immutable SHAs."""
+        repository = Path(directory) / "repository"
+        _write(repository / "selection.py", SOURCE_BASE)
+        _write(repository / "consumer.py", CONSUMER)
+        _git(repository, "init", "-q", ".")
+        base_sha = _commit(repository, "merge base")
+        _write(repository / "selection.py", SOURCE)
+        return repository, base_sha, _commit(repository, "fixture snapshot")
 
     def run_script(
         self, name: str, *arguments: str, expected: int = 0
@@ -447,6 +511,125 @@ class SemanticPrReviewPipelineTests(unittest.TestCase):
             self.assertIn('"notices":["editor links omitted', rendered)
             self.assertIn('data-role="notices"', rendered)
             self.assertIn("https://github.com/owner/repository/blob/", rendered)
+
+    def test_a_merge_base_adds_diff_links_and_hover_diff_previews(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository, base_sha, head_sha = self.fixture_with_base(directory)
+            data = Path(directory) / "pr-model.json"
+            data.write_text(
+                json.dumps(_model(head_sha, base_sha)), encoding="utf-8"
+            )
+            fragment = Path(directory) / "fragment.html"
+            page = Path(directory) / "page.html"
+            self.run_script(
+                "scaffold_pr_explorer.py",
+                "--data",
+                str(data),
+                "--output",
+                str(fragment),
+                "--repo-root",
+                str(repository),
+                "--source-ref",
+                head_sha,
+            )
+            rendered = fragment.read_text(encoding="utf-8")
+            changed_anchor = hashlib.sha256(b"selection.py").hexdigest()
+            unchanged_anchor = hashlib.sha256(b"consumer.py").hexdigest()
+            self.assertIn(
+                "https://github.com/owner/repository/pull/1/files"
+                f"#diff-{changed_anchor}R",
+                rendered,
+            )
+            # Only files the PR touched get a files-changed anchor.
+            self.assertNotIn(unchanged_anchor, rendered)
+            self.assertIn('"diff_preview":{', rendered)
+            self.assertIn("@@ ", rendered)
+            self.run_script(
+                "render_standalone.py",
+                "--fragment",
+                str(fragment),
+                "--output",
+                str(page),
+                "--title",
+                "PR 1 Dispatch Explorer",
+            )
+            result = self.run_script(
+                "verify_pr_explorer.py",
+                str(fragment),
+                "--standalone",
+                str(page),
+                "--source-repo",
+                str(repository),
+                "--source-ref",
+                head_sha,
+                "--strict",
+            )
+            self.assertIn("OK", result.stdout)
+
+    def test_strict_verification_rejects_a_hand_edited_diff_preview(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository, base_sha, head_sha = self.fixture_with_base(directory)
+            data = Path(directory) / "pr-model.json"
+            data.write_text(
+                json.dumps(_model(head_sha, base_sha)), encoding="utf-8"
+            )
+            fragment = Path(directory) / "fragment.html"
+            self.run_script(
+                "scaffold_pr_explorer.py",
+                "--data",
+                str(data),
+                "--output",
+                str(fragment),
+                "--repo-root",
+                str(repository),
+                "--source-ref",
+                head_sha,
+            )
+            tampered = fragment.read_text(encoding="utf-8").replace(
+                "+    backend = resolve(request.mode)",
+                "+    backend = resolve(request.kind)",
+            )
+            self.assertNotEqual(tampered, fragment.read_text(encoding="utf-8"))
+            fragment.write_text(tampered, encoding="utf-8")
+            result = self.run_script(
+                "verify_pr_explorer.py",
+                str(fragment),
+                "--source-repo",
+                str(repository),
+                "--source-ref",
+                head_sha,
+                "--strict",
+                expected=1,
+            )
+            self.assertIn("diff_preview bytes mismatch", result.stdout)
+
+    def test_an_unknown_merge_base_warns_and_omits_diff_context(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository, head_sha = self.fixture(directory)
+            data = Path(directory) / "pr-model.json"
+            data.write_text(
+                json.dumps(_model(head_sha, "1" * 40)), encoding="utf-8"
+            )
+            fragment = Path(directory) / "fragment.html"
+            result = self.run_script(
+                "scaffold_pr_explorer.py",
+                "--data",
+                str(data),
+                "--output",
+                str(fragment),
+                "--repo-root",
+                str(repository),
+                "--source-ref",
+                head_sha,
+            )
+            self.assertIn("diff previews omitted", result.stderr)
+            rendered = fragment.read_text(encoding="utf-8")
+            # The template always mentions the fields; the embedded model
+            # must not populate them.
+            self.assertNotIn('"diff_url":', rendered)
+            self.assertNotIn('"diff_preview":', rendered)
+            # The reader learns about the degraded build from the page.
+            self.assertIn('"notices":["diff previews omitted', rendered)
 
     def test_a_remote_worktree_warns_and_omits_editor_links(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
