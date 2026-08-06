@@ -1,0 +1,8 @@
+## Interface: 120007
+## Title: My Addon
+## Notes: Skeleton addon - rename folder and this file together.
+## Version: 1.0.0
+## Author: YourName
+## SavedVariables: MyAddonDB
+
+Core.lua
