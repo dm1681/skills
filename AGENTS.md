@@ -41,6 +41,21 @@ or the per-repo `SessionStart` hook. Scaffold another repo with
 - Update `docs/agent-support.md` and the installer mapping together when agent
   skill-directory conventions change.
 
+## Review agents
+
+An agent performing a review — pull request, code, or document — announces
+itself before it starts.
+
+- Post a "review started" comment first, before reading the diff or forming any
+  findings. Put it on the review target: the PR thread for a pull request, the
+  issue or document thread otherwise. If the target has no comment surface, say
+  it in the session output instead.
+- State who is reviewing, the exact revision under review (full head SHA for a
+  PR), and that findings will follow in a later comment.
+- One start comment per review round. When re-reviewing after new commits, post
+  a fresh start comment naming the new head SHA instead of editing the old one,
+  so the thread records every round.
+
 ---
 
 # Personal global instructions
