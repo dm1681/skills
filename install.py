@@ -7,6 +7,7 @@ import argparse
 import filecmp
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -267,14 +268,18 @@ def install_graphify(
     project_dir: Path,
     dry_run: bool,
     emit: Callable[[str], None] = print,
+    home: Optional[Path] = None,
 ) -> None:
     cwd = project_dir.expanduser().resolve() if scope == "project" else REPO_ROOT
+    instruction_home = Path.home() if home is None else home
     uv_command = ["uv", "tool", "install", "--upgrade", "graphifyy"]
     if dry_run:
         emit(f"would run  {shlex.join(uv_command)}")
         for command in graphify_install_commands(agents, scope):
             location = f" (in {cwd})" if scope == "project" else ""
             emit(f"would run  {shlex.join(command)}{location}")
+        for message in strip_appended_graphify(instruction_home, dry_run=True):
+            emit(message)
         return
 
     if scope == "project" and not cwd.is_dir():
@@ -298,6 +303,8 @@ def install_graphify(
         )
     for command in graphify_install_commands(agents, scope, graphify):
         _run(command, cwd)
+    for message in strip_appended_graphify(instruction_home, dry_run=False):
+        emit(message)
 
 
 def matt_skills_agents(agent_names: Iterable[str]) -> list[str]:
@@ -648,6 +655,45 @@ def launcher_hint(bin_dir: Optional[Path] = None) -> Optional[str]:
     )
 
 
+GRAPHIFY_HEADING = re.compile(r"^#{1,6} graphify\b", re.IGNORECASE | re.MULTILINE)
+TRAILING_GRAPHIFY = re.compile(
+    r"\n#{1,6} graphify\b(?:(?!\n#).)*\s*\Z", re.IGNORECASE | re.DOTALL
+)
+
+
+def strip_appended_graphify(home: Path, dry_run: bool) -> list[str]:
+    """Remove graphify's appended block from pointer files this repo manages.
+
+    graphify's own CLI appends its instructions to ~/.claude/CLAUDE.md and
+    ~/.agents/AGENTS.md when it registers. When those are this installer's
+    managed pointer files, the chain back to global/AGENTS.md already carries
+    the same section, so the appended copy loads twice into every session.
+    Only a trailing block is removed, and only while the instructions stay
+    reachable; the section ``copy`` mode inlines mid-file is left alone.
+    """
+    messages: list[str] = []
+    root = home.expanduser()
+    for path in (root / ".agents" / "AGENTS.md", root / ".claude" / "CLAUDE.md"):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if not text.startswith(MANAGED_MARKER):
+            continue
+        match = TRAILING_GRAPHIFY.search(text)
+        if match is None:
+            continue
+        remaining = text[: match.start()].rstrip("\n") + "\n"
+        source_carries = GLOBAL_SOURCE.is_file() and bool(
+            GRAPHIFY_HEADING.search(GLOBAL_SOURCE.read_text(encoding="utf-8"))
+        )
+        imports_chain = re.search(r"^@", remaining, re.MULTILINE) is not None
+        if not (GRAPHIFY_HEADING.search(remaining) or (imports_chain and source_carries)):
+            continue
+        messages.append(_write_managed_file(path, remaining, dry_run))
+    return messages
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         description="Install this collection into shared or agent-specific skill directories."
@@ -790,7 +836,12 @@ def execute_install(args: argparse.Namespace, selected: list[str]) -> None:
             print(result)
     if args.graphify:
         install_graphify(
-            args.agent, args.scope, args.project_dir, args.dry_run, print
+            args.agent,
+            args.scope,
+            args.project_dir,
+            args.dry_run,
+            print,
+            home=args.home,
         )
     if args.matt_skills and not args.dry_run:
         print(
