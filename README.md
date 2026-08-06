@@ -70,13 +70,41 @@ Interface number is current — only the in-game build check can.
 ## Install
 
 Run the installer without options to open the guided setup. It walks through
-scope, coding agents, skills, copy or link mode, optional Graphify setup, and a
-final review before changing anything. It never offers to download third-party
-skills:
+coding agents, two skill-selection phases, copy or link mode, optional Graphify
+setup, and a final review before changing anything. It never offers to download
+third-party skills:
 
 ```sh
 ./install.sh
 ```
+
+Selection is keyboard-driven: `↑`/`↓` to move, `Space` to toggle a checkbox,
+`Enter` to confirm. This needs a native console. A pty-based shell — Git Bash or
+mintty on Windows — hides the terminal from Python, so the wizard falls back to
+numbered prompts there and says so; run `install.ps1` from PowerShell or Windows
+Terminal for the checkbox interface. A bare run with no usable terminal installs
+nothing and explains what to pass instead, rather than defaulting to every skill
+in every root.
+
+### Two selection phases
+
+Scope is not an either/or in the wizard: one run can populate both.
+
+1. **Global skills** — installed for every project on this machine. A skill that
+   declares `global_default: false` in its `agents/openai.yaml` is listed but not
+   pre-selected, so a narrow, domain-specific skill never lands machine-wide by
+   accepting defaults. `wow-addon-dev` is one.
+2. **Repo-level skills** — opt-in, defaulting to No. Choosing it asks for a
+   project directory, then lists the skills again. Anything already selected in
+   phase 1 is marked `already global` and left unchecked, because a project copy
+   of an already-global skill is redundant. Selecting it anyway is allowed: that
+   is how you pin one project to this checkout's version.
+
+Either phase accepts `none`, so a global-only or project-only install is a
+normal outcome. Selecting nothing in both ends the run without changes.
+
+Scripted installs are unaffected — `--scope user|project` still installs one
+scope, exactly as before.
 
 On Windows PowerShell:
 
@@ -126,7 +154,7 @@ Useful options:
 --agent universal|codex|cursor|copilot|claude|all
                              defaults to all: every skill root, so the
                              install is visible to whichever agent you use
---scope user|project
+--scope user|project         scripted installs only; the wizard asks for both
 --project-dir PATH
 --skill NAME                 repeatable; defaults to all skills
 --mode copy|link             copy is the cross-platform default
