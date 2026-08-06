@@ -3,6 +3,30 @@
 All notable changes to this repository are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `global/AGENTS.md` holds user-level instructions that apply to every project,
+  installable with `install.sh --global-instructions` or by setting
+  `AGENT_GLOBAL_INSTRUCTIONS` for the sync script. Both are opt-in. The default
+  `link` mode writes pointer files chaining `~/.claude/CLAUDE.md` ->
+  `~/.agents/AGENTS.md` -> this checkout, so the repository stays the single
+  source of truth; `copy` writes the text into `~/.agents/AGENTS.md` for agents
+  that do not resolve `@path` imports. Existing files are backed up first.
+
+### Changed
+
+- `semantic-pr-review` explorers are dark-only, using Catppuccin Mocha for
+  every excerpt so a preview reads identically for every viewer instead of
+  shifting with the reader's system theme.
+- `scaffold_pr_explorer.py` gained `--check`, which reports every model
+  violation at once and writes no artifact, and now rejects previews over 12
+  lines or 110 characters wide rather than treating those limits as advice.
+  `--source-ref` defaults to `pr.evidence_sha` when present, falling back to
+  `pr.head_sha`, so a model analyzed against a snapshot other than the PR head
+  still validates.
+
 ## [9.0.0] - 2026-08-05
 
 ### Added
@@ -118,15 +142,6 @@ All notable changes to this repository are documented here. Versions follow
   Each notice travels in the model and renders on the page itself, because
   the person reading the explorer is rarely the operator who ran the
   scaffold and would otherwise never learn that links were dropped.
-- `semantic-pr-review` explorers are dark-only, using Catppuccin Mocha for
-  every excerpt so a preview reads identically for every viewer instead of
-  shifting with the reader's system theme.
-- `scaffold_pr_explorer.py` gained `--check`, which reports every model
-  violation at once and writes no artifact, and now rejects previews over 12
-  lines or 110 characters wide rather than treating those limits as advice.
-  `--source-ref` defaults to `pr.evidence_sha` when present, falling back to
-  `pr.head_sha`, so a model analyzed against a snapshot other than the PR head
-  still validates.
 - `--agent` now defaults to `all`, so a plain `./install.sh` or a bare
   `--skill NAME` installs into every skill root instead of the shared
   `.agents/skills` directory alone. The previous default silently produced an

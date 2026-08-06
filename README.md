@@ -208,6 +208,9 @@ Useful options:
 --matt-skills                install all Matt Pocock skills for chosen agents
 --no-matt-skills             skip Matt Pocock skills (the default)
 --graphify                   install/upgrade Graphify and register its skill
+--global-instructions [link|copy]
+                             install global/AGENTS.md as user-level guidance
+                             in ~/.agents/AGENTS.md and ~/.claude/CLAUDE.md
 --interactive                force the dashboard open
 --non-interactive            never open it; useful for scripts and CI
 --target PATH                override the resolved skills directory
@@ -243,6 +246,26 @@ Examples:
 # Install both into one project's Codex skill directory.
 ./install.sh --agent codex --scope project --project-dir /path/to/repo --graphify
 ```
+
+### Global (user-level) instructions
+
+Skills are per-task; `global/AGENTS.md` holds guidance that applies to every
+project. Installing it is opt-in and writes two small pointer files, so this
+checkout stays the single source of truth:
+
+    ~/.claude/CLAUDE.md  ->  ~/.agents/AGENTS.md  ->  <repo>/global/AGENTS.md
+
+```sh
+# Point both home files at this checkout; later edits apply without reinstalling.
+./install.sh --global-instructions
+
+# Write the text into ~/.agents/AGENTS.md instead, for agents that do not
+# resolve @path imports or machines without this checkout.
+./install.sh --global-instructions copy
+```
+
+Whatever is already at those paths is moved into `~/.skills-backups/` first,
+and reruns that would not change anything report `unchanged`.
 
 `uv` is recommended; Python 3.9 or newer can be used as a fallback. Existing
 differing installations are never overwritten silently. With `--force`, the
