@@ -16,7 +16,12 @@ from urllib.parse import urlparse
 ROOT = Path(__file__).resolve().parents[1]
 SKILL_ROOT = ROOT / "skills" / "semantic-pr-review"
 SCRIPTS = SKILL_ROOT / "scripts"
-REFERENCES = ("semantic-layers", "explorer-data-model", "interactive-flowchart")
+REFERENCES = (
+    "semantic-layers",
+    "explorer-data-model",
+    "interactive-flowchart",
+    "build-and-verify",
+)
 SOURCE = """def dispatch(request):
     backend = resolve(request.mode)
     return backend.run(request)

@@ -29,6 +29,42 @@ def frontmatter(text: str) -> dict[str, str]:
     return values
 
 
+SKILL_LINE_BUDGET = 150
+
+
+def skill_warnings(skill_name: str, text: str) -> list[str]:
+    """Non-fatal convention nudges: the entrypoint stays a lightweight guide."""
+    warnings: list[str] = []
+    lines = len(text.splitlines())
+    if lines > SKILL_LINE_BUDGET:
+        warnings.append(
+            f"skills/{skill_name}/SKILL.md is {lines} lines"
+            f" (budget {SKILL_LINE_BUDGET}); move detail into references/ files"
+            " the workflow loads on demand"
+        )
+    description = frontmatter(text).get("description", "")
+    if description and "use when" not in description.lower():
+        warnings.append(
+            f'skills/{skill_name}/SKILL.md description has no "Use when ..." trigger'
+            " phrasing; agents judge relevance from the description alone"
+        )
+    return warnings
+
+
+def collect_warnings() -> list[str]:
+    skills_root = ROOT / "skills"
+    if not skills_root.is_dir():
+        return []
+    warnings: list[str] = []
+    for skill in sorted(path for path in skills_root.iterdir() if path.is_dir()):
+        entrypoint = skill / "SKILL.md"
+        if entrypoint.is_file():
+            warnings.extend(
+                skill_warnings(skill.name, entrypoint.read_text(encoding="utf-8"))
+            )
+    return warnings
+
+
 def validate() -> list[str]:
     errors: list[str] = []
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
@@ -95,6 +131,8 @@ def validate() -> list[str]:
 
 def main() -> int:
     errors = validate()
+    for warning in collect_warnings():
+        print(f"WARNING: {warning}", file=sys.stderr)
     if errors:
         for error in errors:
             print(f"ERROR: {error}", file=sys.stderr)

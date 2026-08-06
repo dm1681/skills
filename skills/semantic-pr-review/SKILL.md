@@ -13,9 +13,9 @@ Use any available read-only GitHub integration, API client, CLI, or local Git re
 
 Build the interactive explainer with the bundled template and scripts. A host-provided visualization surface may display or preview the result, but the workflow must still work when the agent has only filesystem access, Python 3, Git, and a browser. Produce a guided narrative directly when requested.
 
-Resolve paths relative to this `SKILL.md`; never assume the skill was installed under a particular agent, user, or home-directory convention. If a preferred capability is unavailable, use the documented fallback and state the resulting limitation.
+Resolve paths relative to this `SKILL.md` — command examples write its directory as `<skill-root>` — and never assume the skill was installed under a particular agent, user, or home-directory convention. If a preferred capability is unavailable, use the documented fallback and state the resulting limitation.
 
-Read [references/semantic-layers.md](references/semantic-layers.md) before classifying the PR. Read [references/explorer-data-model.md](references/explorer-data-model.md) and [references/interactive-flowchart.md](references/interactive-flowchart.md) before building the visual.
+Read [references/semantic-layers.md](references/semantic-layers.md) before classifying the PR. Read [references/explorer-data-model.md](references/explorer-data-model.md), [references/interactive-flowchart.md](references/interactive-flowchart.md), and [references/build-and-verify.md](references/build-and-verify.md) before building the visual.
 
 ## Workflow
 
@@ -59,22 +59,11 @@ Compare the graph snapshot metadata with the PR head SHA before relying on it. I
 
 ### 4. Build the semantic hierarchy
 
-Derive layers from responsibilities, not directories. Use as many layers as the PR needs; do not force every PR into seven.
-
-For every layer, capture:
-
-- **Purpose:** why the layer exists
-- **Owner:** subsystem or module responsible for it
-- **Receives:** incoming state, request, event, or configuration
-- **Sends:** outgoing state, result, event, or side effect
-- **Connection:** upstream and downstream handoffs
-- **Change:** what the PR changes at this layer
-- **Tradeoff:** deliberate coupling, migration debt, or risk
-- **Evidence:** exact source, test, and documentation references
+Derive layers from responsibilities, not directories. Use as many layers as the PR needs; do not force every PR into seven. For every layer, capture the full layer record — purpose, owner, receives, sends, connection, change, tradeoff, and evidence — as defined in [references/semantic-layers.md](references/semantic-layers.md).
 
 Identify branches, convergence points, loops back into orchestration, and cross-cutting guardrails. State the single most important replacement or ownership seam.
 
-Also create explicit edge records for runtime handoffs. Capture the source node, destination node, action verb, transferred DTOs or events, optionality, wrapping container, transformation, and evidence.
+Also create explicit edge records for runtime handoffs — source node, destination node, action verb, transferred DTOs or events, optionality, containers, transformation, and evidence — in the shape [references/explorer-data-model.md](references/explorer-data-model.md) defines.
 
 ### 5. Explain the architecture
 
@@ -90,100 +79,17 @@ Separate confirmed runtime behavior from inference. Call out incomplete neutrali
 
 ### 6. Build the interactive flowchart
 
-Start with a prominent orientation block containing the central goal, old-to-new model, ownership chain, architectural payoff, and primary residual debt.
+Start with a prominent orientation block: central goal, old-to-new model, ownership chain, architectural payoff, and primary residual debt. Show the complete runtime path of every real execution alternative — caller and boundary contract, dispatch, adapters, translated requests, engines, mode-specific results, convergence, downstream handoff, and cross-cutting guardrails — without collapsing a multi-step branch into one summary node.
 
-Create a top-down directional flowchart that shows:
+Render every runtime handoff as an arrow with a concise visible verb and exact transferred DTOs on hover or keyboard focus. Distinguish what the PR changed from unchanged context in every view, show the analyzed head SHA, and give every node a compact, source-backed code preview. The explorer is dark-only (Catppuccin Mocha) by design.
 
-- caller and boundary contract
-- dispatch or decision point
-- parallel implementation branches
-- branch convergence
-- downstream handoff
-- cross-cutting guardrails
+The full presentation contract — controls, tooltips, previews, change-status encoding, link strategy, accessibility, and responsive behavior — is in [references/interactive-flowchart.md](references/interactive-flowchart.md). Define code previews only as source records; the scaffold derives excerpts, labels, and immutable links from the Git blob per [references/explorer-data-model.md](references/explorer-data-model.md).
 
-For every real execution alternative, show the complete path from dispatch through adapter, request or configuration translation, execution engine, mode-specific result, and shared convergence. Do not collapse a multi-step branch into one summary node.
-
-Render every runtime handoff as an arrow with a concise visible verb. On hover or keyboard focus, name the exact transferred DTOs, events, configuration objects, optionality, and containers using code notation.
-
-Visually distinguish code and transfers changed by the PR from unchanged context needed to understand the path. Give nodes and runtime edges explicit change status, show the analyzed head SHA, and provide separate `PR delta` and `Full request path` controls with a visible status legend.
-
-When all execution branches are already visible, emphasize a complete branch on hover or keyboard focus and omit redundant `Trace ...` buttons. Add persistent branch controls only when they materially change, reveal, or filter the rendered information. Make every component a native button. Add a concise hover or focus preview and a persistent click-selected detail area.
-
-Give every node a compact, source-backed code preview. On hover or keyboard focus, show the status, purpose, receives, sends, linked file-and-line location, and a syntax-highlighted `<pre><code>` excerpt. Keep the tooltip open while the pointer moves into it so the viewer can select the excerpt or activate its source link.
-
-Use Catppuccin Mocha syntax colors. The explorer is dark-only by design so an excerpt reads the same for every reader; do not add a light palette or a `prefers-color-scheme` block. Highlight common token categories locally without a network dependency.
-
-Prefer 4–10 exact lines. The scaffold **rejects** a preview over 12 lines or containing any line over 110 characters, so pick a narrower source range rather than a wider one — indented YAML and long shell strings hit the width cap easily.
-
-Define each preview only as a source record with repository-relative `path`, inclusive `start_line`, inclusive `end_line`, `language`, and `source_index`. Never hand-copy preview text or author its displayed label independently. Let `scripts/scaffold_pr_explorer.py` read the Git blob at the analyzed snapshot, derive the excerpt and label, and build immutable GitHub links. Supply `--cursor-root` only for a worktree on the same SHA. A remote path, a different `HEAD`, or drifted source bytes omit the editor links with a warning and still build the explorer; a link is never emitted for a file the scaffold cannot match byte for byte.
-
-The selected detail area must show purpose, receives, sends, architectural role, connection, tradeoff, and source links. Update all fields and links when the selected node changes.
-
-Build from [assets/pr-explorer-template.html](assets/pr-explorer-template.html) through `scripts/scaffold_pr_explorer.py` when the standard explorer shape fits. In the commands below, replace `<skill-root>` with the directory containing this `SKILL.md`, and invoke whichever interpreter name this machine has: `python3` on most Unix-like systems, `python` on Windows, where a bare `python3` usually resolves to a Microsoft Store stub that exits without running anything. Every bundled script targets Python 3.9+ and imports only the standard library.
-
-Check the model before rendering anything. This reports every violation at once — missing fields, unknown systems, unresolved path nodes, missing edges, preview length, line width — and writes no artifact:
-
-```bash
-python3 <skill-root>/scripts/scaffold_pr_explorer.py \
-  --data /absolute/path/to/pr-model.json \
-  --repo-root /absolute/path/to/repository \
-  --check
-```
-
-Then render:
-
-```bash
-python3 <skill-root>/scripts/scaffold_pr_explorer.py \
-  --data /absolute/path/to/pr-model.json \
-  --output /absolute/path/to/pr-fragment.html \
-  --repo-root /absolute/path/to/repository \
-  --source-ref <exact-analyzed-sha> \
-  --cursor-root /absolute/path/to/matching-snapshot-worktree
-```
-
-`--source-ref` defaults to `pr.evidence_sha` when set, otherwise `pr.head_sha`. Omit `--cursor-root` to fail closed to immutable GitHub links. Render a standalone page when the user asks for HTML or needs to open or share the page outside the agent's native artifact surface. Follow the self-contained styling, security-policy, editor-link, and repository-handoff rules in [references/interactive-flowchart.md](references/interactive-flowchart.md).
-
-Create the standalone page directly with the bundled renderer. This path does not depend on a host visualization tool:
-
-```bash
-python3 <skill-root>/scripts/render_standalone.py \
-  --fragment /absolute/path/to/pr-fragment.html \
-  --output /absolute/path/to/page.html \
-  --title "PR <number> <scope> Explorer"
-```
-
-Use `scripts/prepare_standalone.py` only when adapting a standalone iframe page produced by another renderer.
+Author the model, then validate it with the scaffold's `--check` mode before rendering anything — it reports every violation at once. Build from [assets/pr-explorer-template.html](assets/pr-explorer-template.html) through `scripts/scaffold_pr_explorer.py` when the standard explorer shape fits, and create a standalone page with `scripts/render_standalone.py` when the user needs to open or share the page outside the agent's native artifact surface; `scripts/prepare_standalone.py` only adapts a sandboxed page produced by another renderer. Commands and flag semantics are in [references/build-and-verify.md](references/build-and-verify.md).
 
 ### 7. Verify
 
-Verify in proportion to risk:
-
-1. Run repository tests relevant to the changed contracts, adapters, and handoffs when the environment supports them.
-2. Distinguish assertion failures from dependency or environment failures.
-3. Run the artifact validator:
-
-```bash
-python3 <skill-root>/scripts/verify_pr_explorer.py /absolute/path/to/fragment.html \
-  --standalone /absolute/path/to/page.html \
-  --source-repo /absolute/path/to/repository \
-  --source-ref <exact-head-sha> \
-  --strict
-```
-
-Strict validation must compare every rendered preview byte-for-byte with its Git blob, verify labels and immutable URLs from the same range, and verify every Cursor target's worktree `HEAD` and full source bytes.
-
-4. Exercise branch switching, Previous/Next navigation, node selection, dynamic source links, editor deep links, pointer entry into node tooltips, code selection, and delayed tooltip dismissal.
-5. In a real browser, assert that the orientation title is populated and a primary button has non-default font, background, and border-radius values. This catches blocked scripts and missing base styles.
-6. In the same browser, compare computed styles before and after clicking Next. A node's appearance must change; an `aria-pressed` move with identical styling means selection is invisible to sighted readers. Compare a changed node against a context node in the default view too — identical styling there means the legend describes a view the reader is not in.
-7. If the build omitted any source link, confirm the page states so and that the affected nodes still offer their GitHub links.
-8. Render or screenshot the page at 736 px and 320 px. Check that `scrollWidth <= clientWidth` and inspect for clipped, overlapping, or arbitrarily broken identifiers.
-9. Check that code previews use Catppuccin Mocha, retain readable contrast, and distinguish syntax categories. There is no light mode; a page that renders light is a defect.
-10. Verify in a Chromium-based and a Gecko-based browser. Engine differences in generated content, dashed borders, and URL parsing are invisible to single-engine checks.
-
-Two setup facts make steps 4 through 9 possible at all:
-
-- **Serve the page over HTTP.** Browser-automation extensions routinely refuse `file://` URLs. Run `python3 -m http.server 8765 --bind 127.0.0.1` from the output directory and open `http://127.0.0.1:8765/<page>.html`.
-- **Computed-style checks need an unsandboxed harness.** `render_standalone.py` puts the fragment in a sandboxed iframe, so `iframe.contentDocument` is `null` from the parent and no script can query it. Build a throwaway harness — `assets/pr-explorer-base.css` in a `<style>` tag followed by the fragment — and run the style, overflow, and tooltip assertions there. Use the standalone page itself for screenshots and visual checks.
+Verify in proportion to risk: run the repository tests the changed contracts deserve, run `scripts/verify_pr_explorer.py --strict` against the artifacts, and exercise the rendered page in a real browser following the procedure in [references/build-and-verify.md](references/build-and-verify.md).
 
 Do not claim local tests passed when they did not run. Report current CI and review state separately from local verification.
 
