@@ -111,24 +111,37 @@ When all execution branches are already visible, emphasize a complete branch on 
 
 Give every node a compact, source-backed code preview. On hover or keyboard focus, show the status, purpose, receives, sends, linked file-and-line location, and a syntax-highlighted `<pre><code>` excerpt. Keep the tooltip open while the pointer moves into it so the viewer can select the excerpt or activate its source link.
 
-Use Catppuccin Latte syntax colors in light mode and Mocha in dark mode. Highlight common token categories locally without a network dependency. Prefer 4–10 exact lines and cap previews at 12.
+Use Catppuccin Mocha syntax colors. The explorer is dark-only by design so an excerpt reads the same for every reader; do not add a light palette or a `prefers-color-scheme` block. Highlight common token categories locally without a network dependency.
 
-Define each preview only as a source record with repository-relative `path`, inclusive `start_line`, inclusive `end_line`, `language`, and `source_index`. Never hand-copy preview text or author its displayed label independently. Let `scripts/scaffold_pr_explorer.py` read the Git blob at `pr.head_sha`, derive the excerpt and label, and build immutable GitHub links. Supply `--cursor-root` only for a worktree on the same SHA. A remote path, a different `HEAD`, or drifted source bytes omit the editor links with a warning and still build the explorer; a link is never emitted for a file the scaffold cannot match byte for byte.
+Prefer 4–10 exact lines. The scaffold **rejects** a preview over 12 lines or containing any line over 110 characters, so pick a narrower source range rather than a wider one — indented YAML and long shell strings hit the width cap easily.
+
+Define each preview only as a source record with repository-relative `path`, inclusive `start_line`, inclusive `end_line`, `language`, and `source_index`. Never hand-copy preview text or author its displayed label independently. Let `scripts/scaffold_pr_explorer.py` read the Git blob at the analyzed snapshot, derive the excerpt and label, and build immutable GitHub links. Supply `--cursor-root` only for a worktree on the same SHA. A remote path, a different `HEAD`, or drifted source bytes omit the editor links with a warning and still build the explorer; a link is never emitted for a file the scaffold cannot match byte for byte.
 
 The selected detail area must show purpose, receives, sends, architectural role, connection, tradeoff, and source links. Update all fields and links when the selected node changes.
 
 Build from [assets/pr-explorer-template.html](assets/pr-explorer-template.html) through `scripts/scaffold_pr_explorer.py` when the standard explorer shape fits. In the commands below, replace `<skill-root>` with the directory containing this `SKILL.md`, and invoke whichever interpreter name this machine has: `python3` on most Unix-like systems, `python` on Windows, where a bare `python3` usually resolves to a Microsoft Store stub that exits without running anything. Every bundled script targets Python 3.9+ and imports only the standard library.
+
+Check the model before rendering anything. This reports every violation at once — missing fields, unknown systems, unresolved path nodes, missing edges, preview length, line width — and writes no artifact:
+
+```bash
+python3 <skill-root>/scripts/scaffold_pr_explorer.py \
+  --data /absolute/path/to/pr-model.json \
+  --repo-root /absolute/path/to/repository \
+  --check
+```
+
+Then render:
 
 ```bash
 python3 <skill-root>/scripts/scaffold_pr_explorer.py \
   --data /absolute/path/to/pr-model.json \
   --output /absolute/path/to/pr-fragment.html \
   --repo-root /absolute/path/to/repository \
-  --source-ref <exact-head-sha> \
+  --source-ref <exact-analyzed-sha> \
   --cursor-root /absolute/path/to/matching-snapshot-worktree
 ```
 
-Omit `--cursor-root` to fail closed to immutable GitHub links. Render a standalone page when the user asks for HTML or needs to open or share the page outside the agent's native artifact surface. Follow the self-contained styling, security-policy, editor-link, and repository-handoff rules in [references/interactive-flowchart.md](references/interactive-flowchart.md).
+`--source-ref` defaults to `pr.evidence_sha` when set, otherwise `pr.head_sha`. Omit `--cursor-root` to fail closed to immutable GitHub links. Render a standalone page when the user asks for HTML or needs to open or share the page outside the agent's native artifact surface. Follow the self-contained styling, security-policy, editor-link, and repository-handoff rules in [references/interactive-flowchart.md](references/interactive-flowchart.md).
 
 Create the standalone page directly with the bundled renderer. This path does not depend on a host visualization tool:
 
@@ -164,8 +177,13 @@ Strict validation must compare every rendered preview byte-for-byte with its Git
 6. In the same browser, compare computed styles before and after clicking Next. A node's appearance must change; an `aria-pressed` move with identical styling means selection is invisible to sighted readers. Compare a changed node against a context node in the default view too — identical styling there means the legend describes a view the reader is not in.
 7. If the build omitted any source link, confirm the page states so and that the affected nodes still offer their GitHub links.
 8. Render or screenshot the page at 736 px and 320 px. Check that `scrollWidth <= clientWidth` and inspect for clipped, overlapping, or arbitrarily broken identifiers.
-9. Check both light and dark modes: code previews must use Catppuccin Latte and Mocha, retain readable contrast, and distinguish syntax categories.
+9. Check that code previews use Catppuccin Mocha, retain readable contrast, and distinguish syntax categories. There is no light mode; a page that renders light is a defect.
 10. Verify in a Chromium-based and a Gecko-based browser. Engine differences in generated content, dashed borders, and URL parsing are invisible to single-engine checks.
+
+Two setup facts make steps 4 through 9 possible at all:
+
+- **Serve the page over HTTP.** Browser-automation extensions routinely refuse `file://` URLs. Run `python3 -m http.server 8765 --bind 127.0.0.1` from the output directory and open `http://127.0.0.1:8765/<page>.html`.
+- **Computed-style checks need an unsandboxed harness.** `render_standalone.py` puts the fragment in a sandboxed iframe, so `iframe.contentDocument` is `null` from the parent and no script can query it. Build a throwaway harness — `assets/pr-explorer-base.css` in a `<style>` tag followed by the fragment — and run the style, overflow, and tooltip assertions there. Use the standalone page itself for screenshots and visual checks.
 
 Do not claim local tests passed when they did not run. Report current CI and review state separately from local verification.
 

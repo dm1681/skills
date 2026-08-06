@@ -164,6 +164,17 @@ def _editor_link_refusal(cursor_root: Path, source_sha: str) -> str | None:
     return None
 
 
+def _analysis_sha(model: dict[str, Any]) -> str | None:
+    """Return the commit every excerpt and link must resolve against.
+
+    This is normally the PR head. A deletion-only PR has no evidence at its
+    head, so ``pr.evidence_sha`` may name the pre-image instead; the page
+    still reports both, so the anchor is never silently swapped.
+    """
+    pr = model.get("pr", {})
+    return pr.get("evidence_sha") or pr.get("head_sha")
+
+
 def _materialize_sources(
     model: dict[str, Any],
     repo_root: Path,
@@ -186,11 +197,18 @@ def _materialize_sources(
 
     warn = note
     source_sha = _git(repo_root, "rev-parse", f"{source_ref}^{{commit}}")
-    expected_sha = materialized.get("pr", {}).get("head_sha")
+    expected_sha = _analysis_sha(materialized)
     if expected_sha != source_sha:
         raise ValueError(
-            "model head_sha does not match source ref: "
+            "model analysis sha does not match source ref: "
             f"{expected_sha!r} != {source_sha!r}"
+        )
+    # A pre-image anchor is a deliberate, visible choice, never a silent one.
+    if materialized["pr"].get("evidence_sha"):
+        note(
+            "evidence anchored at "
+            f"{materialized['pr']['evidence_sha'][:12]}, not PR head "
+            f"{materialized['pr']['head_sha'][:12]}"
         )
 
     repository = materialized["pr"]["repository"]
@@ -315,6 +333,15 @@ def _validate_model(model: dict[str, Any]) -> list[str]:
         if not model["pr"].get(field):
             errors.append(f"pr is missing field: {field}")
 
+    # evidence_sha exists only to name a snapshot that is NOT the head. Set to
+    # the head it adds a bogus pre-image badge and notice, so reject it.
+    evidence_sha = model["pr"].get("evidence_sha")
+    if evidence_sha and evidence_sha == model["pr"].get("head_sha"):
+        errors.append(
+            "pr.evidence_sha equals pr.head_sha; omit it unless the analyzed "
+            "snapshot differs from the head"
+        )
+
     system_ids = {system.get("id") for system in model["systems"]}
     if None in system_ids:
         errors.append("every system must have an id")
@@ -356,10 +383,10 @@ def _validate_model(model: dict[str, Any]) -> list[str]:
                     f"node {node_id} source {source_index} is missing fields: "
                     f"{', '.join(missing_source)}"
                 )
-            if source.get("snapshot_sha") != model["pr"]["head_sha"]:
+            if source.get("snapshot_sha") != _analysis_sha(model):
                 errors.append(
                     f"node {node_id} source {source_index} snapshot_sha "
-                    "does not match pr.head_sha"
+                    "does not match the analyzed snapshot"
                 )
 
         preview = node["code_preview"]
@@ -378,10 +405,10 @@ def _validate_model(model: dict[str, Any]) -> list[str]:
                 f"node {node_id} code_preview has unsupported language: "
                 f"{preview['language']}"
             )
-        if preview["source_sha"] != model["pr"]["head_sha"]:
+        if preview["source_sha"] != _analysis_sha(model):
             errors.append(
                 f"node {node_id} code_preview source_sha does not match "
-                "pr.head_sha"
+                "the analyzed snapshot"
             )
         source_index = preview["source_index"]
         if (
@@ -529,7 +556,20 @@ def main() -> int:
     skill_root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", required=True, type=Path)
-    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Fragment to write; not required with --check",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help=(
+            "Validate the model and report every violation without rendering. "
+            "Use this before authoring is finished to collect preview-length, "
+            "line-width, path, and edge errors in one pass"
+        ),
+    )
     parser.add_argument(
         "--repo-root",
         required=True,
@@ -538,7 +578,10 @@ def main() -> int:
     )
     parser.add_argument(
         "--source-ref",
-        help="Git ref to materialize; defaults to pr.head_sha",
+        help=(
+            "Git ref to materialize; defaults to pr.evidence_sha when set, "
+            "otherwise pr.head_sha"
+        ),
     )
     parser.add_argument(
         "--cursor-root",
@@ -556,8 +599,16 @@ def main() -> int:
     parser.add_argument("--root-id")
     args = parser.parse_args()
 
+    if args.output is None and not args.check:
+        print("ERROR: --output is required unless --check is given")
+        return 1
+
     raw_model = json.loads(args.data.read_text(encoding="utf-8"))
-    source_ref = args.source_ref or raw_model.get("pr", {}).get("head_sha")
+    pr = raw_model.get("pr", {})
+    # A deletion-only PR has no evidence at its head, so the analyzed snapshot
+    # may legitimately be the pre-image. evidence_sha states that explicitly
+    # instead of overloading head_sha to mean something it does not.
+    source_ref = args.source_ref or pr.get("evidence_sha") or pr.get("head_sha")
     if not source_ref:
         print("ERROR: source ref is missing")
         return 1
@@ -583,6 +634,14 @@ def main() -> int:
         for error in errors:
             print(f"ERROR: {error}")
         return 1
+
+    if args.check:
+        print(
+            f"model OK: {len(model['nodes'])} nodes, {len(model['edges'])} "
+            f"edges, {len(model['branches'])} branches @ "
+            f"{model['pr'].get('evidence_sha') or model['pr']['head_sha']}"
+        )
+        return 0
 
     _render(model, args.template, args.output, args.root_id)
     print(args.output)

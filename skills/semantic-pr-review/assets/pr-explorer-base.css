@@ -1,22 +1,25 @@
+/* Dark-only by design. The explorer ships one palette (Catppuccin Mocha) so
+   a reader's OS setting cannot change how evidence reads. Do not reintroduce
+   a prefers-color-scheme block. */
 :root {
-  color-scheme: light dark;
-  --background: #eff1f5;
-  --foreground: #4c4f69;
-  --card: #ffffff;
-  --card-foreground: #4c4f69;
-  --popover: #ffffff;
-  --popover-foreground: #4c4f69;
-  --primary: #1e66f5;
-  --primary-foreground: #ffffff;
-  --secondary: #e6e9ef;
-  --secondary-foreground: #4c4f69;
-  --muted: #e6e9ef;
-  --muted-foreground: #6c6f85;
-  --accent: #dce6f9;
-  --accent-foreground: #1e66f5;
-  --border: #bcc0cc;
-  --input: #9ca0b0;
-  --ring: #1e66f5;
+  color-scheme: dark;
+  --background: #1e1e2e;
+  --foreground: #cdd6f4;
+  --card: #181825;
+  --card-foreground: #cdd6f4;
+  --popover: #313244;
+  --popover-foreground: #cdd6f4;
+  --primary: #89b4fa;
+  --primary-foreground: #11111b;
+  --secondary: #313244;
+  --secondary-foreground: #cdd6f4;
+  --muted: #313244;
+  --muted-foreground: #a6adc8;
+  --accent: #313244;
+  --accent-foreground: #89b4fa;
+  --border: #45475a;
+  --input: #6c7086;
+  --ring: #89b4fa;
   --font-size-base: 15px;
   --font-sans:
     Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
@@ -24,40 +27,12 @@
   --font-mono:
     "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   --radius: 14px;
-  --viz-series-1: #1e66f5;
-  --viz-series-2: #fe640b;
-  --viz-series-3: #40a02b;
-  --viz-series-4: #ea76cb;
-  --viz-series-5: #8839ef;
-  --viz-series-6: #179299;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #1e1e2e;
-    --foreground: #cdd6f4;
-    --card: #181825;
-    --card-foreground: #cdd6f4;
-    --popover: #313244;
-    --popover-foreground: #cdd6f4;
-    --primary: #89b4fa;
-    --primary-foreground: #11111b;
-    --secondary: #313244;
-    --secondary-foreground: #cdd6f4;
-    --muted: #313244;
-    --muted-foreground: #a6adc8;
-    --accent: #313244;
-    --accent-foreground: #89b4fa;
-    --border: #45475a;
-    --input: #6c7086;
-    --ring: #89b4fa;
-    --viz-series-1: #89b4fa;
-    --viz-series-2: #fab387;
-    --viz-series-3: #a6e3a1;
-    --viz-series-4: #f5c2e7;
-    --viz-series-5: #cba6f7;
-    --viz-series-6: #94e2d5;
-  }
+  --viz-series-1: #89b4fa;
+  --viz-series-2: #fab387;
+  --viz-series-3: #a6e3a1;
+  --viz-series-4: #f5c2e7;
+  --viz-series-5: #cba6f7;
+  --viz-series-6: #94e2d5;
 }
 
 * {

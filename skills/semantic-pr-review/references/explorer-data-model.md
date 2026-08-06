@@ -6,7 +6,7 @@ Use this model to separate source-backed analysis from presentation. Populate it
 
 | Field | Required content |
 | --- | --- |
-| `pr` | `number`, `repository`, `head_sha`, and optional `url` |
+| `pr` | `number`, `repository`, `head_sha`, optional `evidence_sha`, optional `url` |
 | `summary` | `goal`, `old_to_new`, `ownership_chain`, `payoff`, and `residual_debt` |
 | `systems` | Stable owner or branch identities with `id`, `label`, and theme `color_token` |
 | `nodes` | Semantic components keyed by unique `id` |
@@ -15,6 +15,35 @@ Use this model to separate source-backed analysis from presentation. Populate it
 | `shared_before` | Ordered nodes before branch dispatch |
 | `convergence_node` | Shared normalized output node |
 | `shared_after` | Ordered nodes after convergence |
+
+## Choosing the analyzed snapshot
+
+Everything resolves against one commit. Normally that is `pr.head_sha`.
+
+A deletion-only PR has no evidence at its head: the files worth explaining exist only in the pre-image. Set `pr.evidence_sha` to the commit the excerpts come from and leave `pr.head_sha` as the real head. The scaffold materializes from `evidence_sha`, records a notice naming both commits, and renders that notice on the page, so a pre-image anchor is always visible to the reader. Never overload `head_sha` to mean a commit that is not the head.
+
+## Backtick handling per field
+
+The template applies code formatting differently depending on the field. Getting this wrong produces literal backticks or mispaired `<code>` runs in the rendered page, and neither shows up in validation — only in a browser.
+
+| Field | Rule |
+| --- | --- |
+| `summary.*` (including `ownership_chain` entries), `node.label` | **No backticks.** They are rendered literally. `code_label: true` already styles the label as code. |
+| `node.purpose`, `receives`, `sends`, `role`, `connection`, `tradeoff`, `edge.transformation`, `edge.evidence`, `evidence_rail[].evidence` | **Backticks encouraged.** The rich-tooltip renderer converts them into real `<code>` elements. |
+| `edge.transfer`, `edge.optional`, `edge.containers` | **No backticks.** The template already code-wraps each list item; adding your own leaves an unpaired delimiter at each end of the joined run. |
+
+## Validate before you render
+
+Run the scaffold in check mode while authoring. It reports every violation in one pass — missing fields, unknown systems, unresolved path nodes, missing edges, preview length, and line width — without writing an artifact:
+
+```bash
+python3 <skill-root>/scripts/scaffold_pr_explorer.py \
+  --data /absolute/path/to/pr-model.json \
+  --repo-root /absolute/path/to/repository \
+  --check
+```
+
+`--output` is not required with `--check`. Authoring twenty nodes and discovering the preview caps one render at a time is the single most expensive way to use this skill.
 
 ## Node record
 
@@ -51,10 +80,10 @@ Each raw `code_preview` contains only:
 The scaffold derives:
 
 - `source_label`: compact `file · start–end` text shown above the excerpt
-- `source_sha`: the resolved immutable PR head
+- `source_sha`: the resolved analyzed snapshot (`pr.evidence_sha` when set, otherwise `pr.head_sha`)
 - `code`: exact contiguous bytes from the selected source range
 
-Keep previews to 4–10 useful lines where possible and no more than 12. Prefer the smallest contiguous excerpt that shows the boundary, dispatch, translation, engine invocation, normalization, or assertion being explained. Do not fabricate omitted code; use a literal ellipsis only when the excerpt is explicitly presented as abridged.
+Keep previews to 4–10 useful lines where possible. The scaffold rejects more than 12 lines, and rejects any line over 110 characters — deeply indented YAML and long shell strings hit the width cap first. Prefer the smallest contiguous excerpt that shows the boundary, dispatch, translation, engine invocation, normalization, or assertion being explained. Do not fabricate omitted code; use a literal ellipsis only when the excerpt is explicitly presented as abridged.
 
 The referenced source must point to the same snapshot and first line as the excerpt. Generate the explorer and validate it against the same Git repository and ref. Never use a mutable local workspace as the Cursor target unless it exactly matches the analyzed SHA.
 

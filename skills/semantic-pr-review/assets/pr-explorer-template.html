@@ -1,20 +1,23 @@
 <div id="__PR_EXPLORER_ROOT_ID__" data-pr-explorer data-view="full">
   <style>
     #__PR_EXPLORER_ROOT_ID__ {
-      --ctp-base: light-dark(#eff1f5, #1e1e2e);
-      --ctp-surface-0: light-dark(#ccd0da, #313244);
-      --ctp-surface-1: light-dark(#bcc0cc, #45475a);
-      --ctp-overlay-0: light-dark(#9ca0b0, #6c7086);
-      --ctp-text: light-dark(#4c4f69, #cdd6f4);
-      --ctp-mauve: light-dark(#8839ef, #cba6f7);
-      --ctp-pink: light-dark(#ea76cb, #f5c2e7);
-      --ctp-blue: light-dark(#1e66f5, #89b4fa);
-      --ctp-sapphire: light-dark(#209fb5, #74c7ec);
-      --ctp-sky: light-dark(#04a5e5, #89dceb);
-      --ctp-teal: light-dark(#179299, #94e2d5);
-      --ctp-green: light-dark(#40a02b, #a6e3a1);
-      --ctp-yellow: light-dark(#df8e1d, #f9e2af);
-      --ctp-peach: light-dark(#fe640b, #fab387);
+      /* Catppuccin Mocha only. The explorer is dark-only so an excerpt reads
+         the same for every reader; keep these values as literal hex and do
+         not reintroduce a scheme-switching palette. */
+      --ctp-base: #1e1e2e;
+      --ctp-surface-0: #313244;
+      --ctp-surface-1: #45475a;
+      --ctp-overlay-0: #6c7086;
+      --ctp-text: #cdd6f4;
+      --ctp-mauve: #cba6f7;
+      --ctp-pink: #f5c2e7;
+      --ctp-blue: #89b4fa;
+      --ctp-sapphire: #74c7ec;
+      --ctp-sky: #89dceb;
+      --ctp-teal: #94e2d5;
+      --ctp-green: #a6e3a1;
+      --ctp-yellow: #f9e2af;
+      --ctp-peach: #fab387;
       color: var(--foreground);
       width: 100%;
       font-size: var(--font-size-base);
@@ -971,26 +974,39 @@
         const notices = model.notices || [];
         if (!notices.length) return;
         const area = roles("notices");
+        // Not every notice is a missing link. Announcing an evidence anchor
+        // as a broken build would misdescribe a deliberate choice.
+        const linkNotices = notices.filter((notice) =>
+          notice.startsWith("editor links omitted"),
+        );
         const heading = document.createElement("strong");
-        heading.textContent =
-          "Some source links are unavailable in this build:";
+        heading.textContent = linkNotices.length
+          ? "Some source links are unavailable in this build:"
+          : "Build notes:";
         area.append(heading);
         notices.forEach((notice) => {
           const line = document.createElement("span");
           line.textContent = notice;
           area.append(line);
         });
-        const fallback = document.createElement("span");
-        fallback.textContent =
-          "Affected nodes fall back to their immutable GitHub links.";
-        area.append(fallback);
+        if (linkNotices.length) {
+          const fallback = document.createElement("span");
+          fallback.textContent =
+            "Affected nodes fall back to their immutable GitHub links.";
+          area.append(fallback);
+        }
         area.hidden = false;
       }
 
       function buildSummary() {
         roles("pr-label").textContent = `PR ${model.pr.number} · central goal`;
-        roles("pr-snapshot").textContent =
-          `Analyzed snapshot · ${model.pr.head_sha.slice(0, 7)}`;
+        // The badge names the commit the excerpts actually came from. For a
+        // deletion-only PR that is the pre-image, so both are shown rather
+        // than quietly labelling pre-image bytes with the head SHA.
+        roles("pr-snapshot").textContent = model.pr.evidence_sha
+          ? `Analyzed snapshot · ${model.pr.evidence_sha.slice(0, 7)}`
+            + ` (pre-image) · PR head ${model.pr.head_sha.slice(0, 7)}`
+          : `Analyzed snapshot · ${model.pr.head_sha.slice(0, 7)}`;
         roles("goal").textContent = model.summary.goal;
         renderCodeAware(roles("old-to-new"), model.summary.old_to_new);
         const ownership = roles("ownership");
