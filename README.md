@@ -10,6 +10,7 @@ self-contained under [`skills/`](skills/).
 | --- | --- |
 | `orchestrate-olympus` | Operate the visible, recoverable delivery control plane for `dm1681/Olympus`. |
 | `semantic-pr-review` | Explain a pull request as a source-verified semantic hierarchy and interactive flowchart. |
+| `wow-addon-dev` | Build, debug, package, and publish retail World of Warcraft addons under the taint and secret-value fences. |
 
 ## Orchestrate Olympus
 
@@ -80,6 +81,31 @@ Strict verification compares every preview byte-for-byte with its Git blob and
 fails closed when a link, label, or editor target drifts from the analyzed
 snapshot. Editor deep links are emitted only for a worktree whose `HEAD` and
 source bytes match that snapshot exactly.
+
+## WoW addon development
+
+`wow-addon-dev` covers retail World of Warcraft addons: Lua 5.1 in a sandbox,
+the event and widget model, TOC manifests and SavedVariables, and the two
+independent security fences — long-standing taint and combat lockdown, plus the
+Midnight-era secret values that make combat state displayable but not readable.
+
+The skill leads with verification rather than recall. It requires confirming the
+live client build (`/dump select(4, GetBuildInfo())`) before writing a TOC and
+checking the current patch's API changes on `warcraft.wiki.gg`, because this
+domain rewrites itself every patch. Feasibility triage comes before design, so
+an idea that modern retail no longer permits is rejected early instead of
+half-built.
+
+`assets/skeleton/` scaffolds a loadable addon, and the bundled checker validates
+the manifest before the client ever launches:
+
+```sh
+python3 <skill-root>/scripts/check_toc.py path/to/AddOns/MyAddon
+```
+
+It catches folder/TOC name mismatches, malformed Interface versions, missing
+listed files, and invalid SavedVariables names. It cannot tell you whether the
+Interface number is current — only the in-game build check can.
 
 ## Install
 
