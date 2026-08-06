@@ -150,6 +150,33 @@ def skill_state(name: str, roots: Sequence[Path]) -> str:
     return INSTALLED
 
 
+def external_state(name: str, roots: Sequence[Path]) -> str:
+    """Present or absent, and nothing finer.
+
+    An external tool is installed by somebody else's CLI, so there is no source
+    tree here to diff it against. Claiming OUTDATED would be a guess, and the
+    dashboard's colour contract promises that peach means a replacement it can
+    actually describe.
+    """
+    if not roots:
+        return AVAILABLE
+    present = [(root / name).exists() or (root / name).is_symlink() for root in roots]
+    return INSTALLED if all(present) else AVAILABLE
+
+
+def external_meaning(state: str) -> tuple:
+    """(colour, pill label, verb) for an external row.
+
+    Same shape as MEANING, deliberately different words. `UP TO DATE` would
+    overclaim — this collection cannot diff somebody else's package — and
+    re-running an external installer upgrades rather than no-ops, so a tool
+    already present offers `update` in the replacement colour, not `skip`.
+    """
+    if state == AVAILABLE:
+        return (ADD, "NOT INSTALLED", "install")
+    return (REPLACE, "PRESENT", "update")
+
+
 def _without_frontmatter(text: str) -> str:
     if not text.startswith("---"):
         return text
@@ -162,25 +189,39 @@ class SkillRow(Static):
 
     can_focus = True
 
-    def __init__(self, name: str, state: str, repo_level: bool, selected: bool):
+    def __init__(
+        self,
+        name: str,
+        state: str,
+        repo_level: bool,
+        selected: bool,
+        external: bool = False,
+    ):
         super().__init__()
         self.skill = name
         self.state = state
         self.repo_level = repo_level
         self.selected = selected
+        self.external = external
 
     def on_mount(self) -> None:
         self.redraw()
 
     def redraw(self) -> None:
-        colour, label, verb = MEANING[self.state]
+        colour, label, verb = (
+            external_meaning(self.state) if self.external else MEANING[self.state]
+        )
         # Left edge answers "what happens to this one", mauve only when it is
         # yours - i.e. selected.
         self.styles.border_left = ("thick", YOU if self.selected else colour)
         mark = "[%s]◆[/]" % YOU if self.selected else "[%s]◇[/]" % MUTE
         action = "[%s]→ %s[/]" % (colour, verb) if self.selected else ""
         advisory = "  [%s]repo-level only[/]" % ADVISE if self.repo_level else ""
-        summary = install.skill_summary(self.skill)
+        summary = (
+            install.external_tool(self.skill).summary
+            if self.external
+            else install.skill_summary(self.skill)
+        )
         self.update(
             "%s [b]%-22s[/] %s%s  %s\n    [%s]%s[/]"
             % (mark, self.skill, pill(label, BG, colour), advisory, action, MUTE, summary)
@@ -273,8 +314,25 @@ class PreviewScreen(ModalScreen):
         self.skill = skill
 
     def compose(self) -> ComposeResult:
-        body = (install.SOURCE_ROOT / self.skill / "SKILL.md").read_text(encoding="utf-8")
-        yield VerticalScroll(Markdown(_without_frontmatter(body)), id="preview")
+        yield VerticalScroll(Markdown(self.body()), id="preview")
+
+    def body(self) -> str:
+        """The skill's own text, or what can honestly be said about a tool.
+
+        An external tool has no SKILL.md in this checkout — its text ships with
+        the package and only exists once installed — so the preview describes
+        where it comes from instead of reading a file that is not there.
+        """
+        entrypoint = install.SOURCE_ROOT / self.skill / "SKILL.md"
+        if entrypoint.is_file():
+            return _without_frontmatter(entrypoint.read_text(encoding="utf-8"))
+        tool = install.external_tool(self.skill)
+        return (
+            "# %s\n\n%s\n\n**External tool.** This collection does not carry "
+            "its files.\n\n- Source: %s\n- Requires: `%s` on PATH\n\nIts own "
+            "documentation ships with the package once installed."
+            % (tool.name, tool.summary, tool.origin, tool.requires)
+        )
 
     def action_close(self) -> None:
         self.dismiss(None)
@@ -316,6 +374,7 @@ class SkillsApp(App):
         self.agents = list(agents or [])
         self.mode = mode
         self.bundled = install.available_skills()
+        self.external = list(install.EXTERNAL_NAMES)
         self.selected = set()
         self.view = "all"
         self.installed_count = 0
@@ -366,14 +425,41 @@ class SkillsApp(App):
 
     def states(self) -> dict:
         roots = self.roots()
-        return {name: skill_state(name, roots) for name in self.bundled}
+        states = {name: skill_state(name, roots) for name in self.bundled}
+        states.update({name: external_state(name, roots) for name in self.external})
+        return states
 
     def visible(self) -> list:
         states = self.states()
+        listed = self.bundled + self.external
         if self.view == "all":
-            return list(self.bundled)
+            return list(listed)
         wanted = VIEW_STATES[self.view]
-        return [name for name in self.bundled if states[name] == wanted]
+        return [name for name in listed if states[name] == wanted]
+
+    def sections(self) -> list:
+        """(title, detail, names, external) for each group, empty ones dropped.
+
+        The split is the point: one group is files this checkout owns and can
+        diff, the other is somebody else's package that only its own installer
+        can place. They install differently, so they are never one list.
+        """
+        visible = self.visible()
+        groups = [
+            (
+                "YOUR SKILLS",
+                "versioned in this checkout; installed as a copy or a link",
+                [name for name in self.bundled if name in visible],
+                False,
+            ),
+            (
+                "EXTERNAL TOOLS",
+                "third-party; each installed and registered by its own CLI",
+                [name for name in self.external if name in visible],
+                True,
+            ),
+        ]
+        return [group for group in groups if group[2]]
 
     def rows(self) -> list:
         return list(self._main.query(SkillRow))
@@ -385,13 +471,19 @@ class SkillsApp(App):
         return self.step > 0
 
     def plan(self) -> list:
-        """(name, state, verb) for each selected skill, in listed order."""
+        """(name, state, verb, external) for each selection, in listed order."""
         states = self.states()
-        return [
-            (name, states[name], MEANING[states[name]][2])
+        entries = [
+            (name, states[name], MEANING[states[name]][2], False)
             for name in self.bundled
             if name in self.selected
         ]
+        entries.extend(
+            (name, states[name], external_meaning(states[name])[2], True)
+            for name in self.external
+            if name in self.selected
+        )
+        return entries
 
     # -- rendering ------------------------------------------------------
 
@@ -419,7 +511,7 @@ class SkillsApp(App):
     def filters(self) -> str:
         states = self.states()
         counts = {
-            "all": len(self.bundled),
+            "all": len(self.bundled) + len(self.external),
             "differs": sum(1 for s in states.values() if s == OUTDATED),
             "up to date": sum(1 for s in states.values() if s == INSTALLED),
         }
@@ -476,21 +568,30 @@ class SkillsApp(App):
         if focusable:
             focusable[0].focus()
 
-    def main_dashboard(self) -> None:
+    def section_header(self, title: str, detail: str) -> Static:
+        return Static("[b %s]%s[/]\n[%s]%s[/]\n" % (MUTE, title, MUTE, detail))
+
+    def mount_section(self, title: str, detail: str, names: list, external: bool) -> None:
         states = self.states()
-        names = self.visible()
-        if not names:
-            self._main.mount(Static("[%s]Nothing matches this view.[/]" % MUTE))
-            return
+        self._main.mount(self.section_header(title, detail))
         for name in names:
             self._main.mount(
                 SkillRow(
                     name,
                     states[name],
-                    not install.skill_global_default(name),
+                    False if external else not install.skill_global_default(name),
                     name in self.selected,
+                    external,
                 )
             )
+
+    def main_dashboard(self) -> None:
+        groups = self.sections()
+        if not groups:
+            self._main.mount(Static("[%s]Nothing matches this view.[/]" % MUTE))
+            return
+        for title, detail, names, external in groups:
+            self.mount_section(title, detail, names, external)
 
     def main_where(self) -> None:
         self._main.mount(
@@ -522,7 +623,6 @@ class SkillsApp(App):
         )
 
     def main_which(self) -> None:
-        states = self.states()
         self._main.mount(
             Static(
                 "[b]Which skills does this project need?[/]\n\n"
@@ -530,15 +630,18 @@ class SkillsApp(App):
                 % MUTE
             )
         )
-        for name in self.bundled:
-            self._main.mount(
-                SkillRow(
-                    name,
-                    states[name],
-                    not install.skill_global_default(name),
-                    name in self.selected,
-                )
-            )
+        self.mount_section(
+            "YOUR SKILLS",
+            "versioned in this checkout; installed as a copy or a link",
+            list(self.bundled),
+            False,
+        )
+        self.mount_section(
+            "EXTERNAL TOOLS",
+            "third-party; each installed and registered by its own CLI",
+            list(self.external),
+            True,
+        )
         narrow = [n for n in self.bundled if not install.skill_global_default(n)]
         if narrow and self.scope == "user":
             self._main.mount(
@@ -585,9 +688,18 @@ class SkillsApp(App):
         roots = self.roots()
         lines = ["[b]Nothing has been written yet. Here is the plan.[/]\n"]
         writes = backups = 0
-        for name, state, verb in plan:
-            colour, label, _ = MEANING[state]
+        for name, state, verb, external in plan:
+            colour, label, _ = external_meaning(state) if external else MEANING[state]
             lines.append("%s [b]%s[/]" % (pill(verb.upper(), BG, colour), name))
+            if external:
+                tool = install.external_tool(name)
+                lines.append("   [%s]%s[/]" % (MUTE, tool.origin))
+                lines.append(
+                    "   [%s]needs %s on PATH; ignores copy/link — its installer "
+                    "decides the shape[/]" % (ADVISE, tool.requires)
+                )
+                lines.append("")
+                continue
             if verb == "skip":
                 lines.append("   [%s]already identical to this checkout[/]" % MUTE)
             else:
@@ -610,6 +722,14 @@ class SkillsApp(App):
         lines.append(
             "\n[%s]Every replaced file stays recoverable from .skills-backups/.[/]" % MUTE
         )
+        outside = [name for name, _, _, external in plan if external]
+        if outside:
+            lines.append(
+                "[%s]Counts cover this checkout's own writes only. %s %s its "
+                "own installer, so what it writes is neither counted here nor "
+                "backed up by this tool.[/]"
+                % (MUTE, ", ".join(outside), "runs" if len(outside) == 1 else "run")
+            )
         self._main.mount(Static("\n".join(lines)))
 
     def render_foot(self) -> None:
@@ -760,16 +880,17 @@ class SkillsApp(App):
 
     def start_install(self) -> None:
         names = [name for name in self.bundled if name in self.selected]
-        if not names:
+        outside = [name for name in self.external if name in self.selected]
+        if not names and not outside:
             self.render_status("[%s]select at least one skill first[/]" % ADVISE)
             return
         self._spinning = True
         self.installed_count = 0
         self.failures = 0
-        self.install_worker(names, self.roots())
+        self.install_worker(names, outside, self.roots())
 
     @work(thread=True, exclusive=True)
-    def install_worker(self, names: list, roots: list) -> None:
+    def install_worker(self, names: list, outside: list, roots: list) -> None:
         for root in roots:
             for name in names:
                 try:
@@ -778,8 +899,35 @@ class SkillsApp(App):
                     )
                 except (install.InstallError, OSError) as exc:
                     self.call_from_thread(self.note_failure, name, str(exc))
-            self.call_from_thread(install.write_receipt, root, names, self.mode, False)
-        self.call_from_thread(self.finish, names)
+            if names:
+                self.call_from_thread(
+                    install.write_receipt, root, names, self.mode, False
+                )
+        for name in outside:
+            try:
+                self.install_external(name)
+            except (install.InstallError, OSError) as exc:
+                self.call_from_thread(self.note_failure, name, str(exc))
+        self.call_from_thread(self.finish, names + outside)
+
+    def external_installers(self) -> dict:
+        """name -> a no-argument call handing that tool to its own installer.
+
+        A table rather than a branch so a registry entry with nothing wired to
+        it is a missing key a test can see, instead of a failure that surfaces
+        only when somebody selects the row and presses install.
+        """
+        return {
+            "graphify": lambda: install.install_graphify(
+                self.agents, self.scope, self.project_dir, False, lambda _line: None
+            ),
+        }
+
+    def install_external(self, name: str) -> None:
+        runner = self.external_installers().get(name)
+        if runner is None:
+            raise install.InstallError(f"no installer wired for external tool: {name}")
+        runner()
 
     def note_failure(self, name: str, message: str) -> None:
         self.failures += 1

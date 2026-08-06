@@ -12,6 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from textual.widgets import Static  # noqa: E402
+
 import install  # noqa: E402
 import skills_tui  # noqa: E402
 
@@ -21,6 +23,7 @@ BUNDLED = sorted(
     if path.is_dir() and (path / "SKILL.md").is_file()
 )
 FIRST = BUNDLED[0]
+EXTERNAL = list(install.EXTERNAL_NAMES)
 
 
 class TTY(io.StringIO):
@@ -113,6 +116,64 @@ class StateTests(unittest.TestCase):
         self.assertEqual(skills_tui._without_frontmatter("# Title\n"), "# Title\n")
 
 
+class ExternalToolTests(unittest.TestCase):
+    """External tools are installed by their own CLI, so they read differently."""
+
+    def test_an_absent_tool_is_available(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(
+                skills_tui.external_state("graphify", [Path(directory)]),
+                skills_tui.AVAILABLE,
+            )
+
+    def test_a_present_tool_is_installed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "graphify").mkdir()
+            self.assertEqual(
+                skills_tui.external_state("graphify", [root]), skills_tui.INSTALLED
+            )
+
+    def test_one_root_missing_it_outranks_a_root_that_has_it(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            has, lacks = Path(directory) / "a", Path(directory) / "b"
+            (has / "graphify").mkdir(parents=True)
+            lacks.mkdir()
+            self.assertEqual(
+                skills_tui.external_state("graphify", [has, lacks]),
+                skills_tui.AVAILABLE,
+            )
+
+    def test_a_present_tool_offers_update_not_skip(self) -> None:
+        """Re-running an external installer upgrades; it is never a no-op."""
+        colour, label, verb = skills_tui.external_meaning(skills_tui.INSTALLED)
+        self.assertEqual(verb, "update")
+        self.assertEqual(colour, skills_tui.REPLACE)
+        self.assertNotEqual(label, "UP TO DATE")
+
+    def test_an_absent_tool_reads_as_an_additive_install(self) -> None:
+        colour, _, verb = skills_tui.external_meaning(skills_tui.AVAILABLE)
+        self.assertEqual((colour, verb), (skills_tui.ADD, "install"))
+
+    def test_every_registered_tool_has_an_installer_wired(self) -> None:
+        """A registry entry with nothing wired would fail only at install time."""
+        app = skills_tui.SkillsApp(Path.cwd(), "project", ["claude"], "copy", False)
+        self.assertEqual(
+            sorted(install.EXTERNAL_NAMES), sorted(app.external_installers())
+        )
+
+    def test_an_unregistered_tool_is_refused(self) -> None:
+        app = skills_tui.SkillsApp(Path.cwd(), "project", ["claude"], "copy", False)
+        with self.assertRaises(install.InstallError) as caught:
+            app.install_external("not-a-tool")
+        self.assertIn("no installer wired", str(caught.exception))
+
+    def test_the_preview_describes_a_tool_this_repo_does_not_carry(self) -> None:
+        body = skills_tui.PreviewScreen("graphify").body()
+        self.assertIn("External tool", body)
+        self.assertIn("graphifyy", body)
+
+
 class ColourContractTests(unittest.TestCase):
     """Each hue means one thing, so the mapping is worth pinning down."""
 
@@ -159,7 +220,7 @@ class DashboardTests(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test() as pilot:
             await pilot.pause()
-            self.assertEqual([row.skill for row in app.rows()], BUNDLED)
+            self.assertEqual([row.skill for row in app.rows()], BUNDLED + EXTERNAL)
 
     async def test_space_selects_the_focused_row(self) -> None:
         app = self.app()
@@ -170,12 +231,50 @@ class DashboardTests(unittest.IsolatedAsyncioTestCase):
             await pilot.press("space")
             self.assertEqual(app.selected, set())
 
+    async def test_the_two_kinds_are_listed_under_separate_headings(self) -> None:
+        app = self.app()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            titles = [title for title, _, _, _ in app.sections()]
+            self.assertEqual(titles, ["YOUR SKILLS", "EXTERNAL TOOLS"])
+            yours = next(names for title, _, names, _ in app.sections() if title == "YOUR SKILLS")
+            theirs = next(
+                names for title, _, names, _ in app.sections() if title == "EXTERNAL TOOLS"
+            )
+            self.assertEqual(yours, BUNDLED)
+            self.assertEqual(theirs, EXTERNAL)
+
+    async def test_an_empty_group_gets_no_heading(self) -> None:
+        """A heading over nothing reads as a category that failed to load."""
+        app = self.app()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.view = "differs"
+            self.assertEqual(app.sections(), [])
+
+    async def test_an_external_row_is_marked_external(self) -> None:
+        app = self.app()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            by_name = {row.skill: row for row in app.rows()}
+            self.assertTrue(by_name[EXTERNAL[0]].external)
+            self.assertFalse(by_name[BUNDLED[0]].external)
+
+    async def test_selecting_an_external_tool_plans_it_as_external(self) -> None:
+        app = self.app()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.selected.add(EXTERNAL[0])
+            entry = next(row for row in app.plan() if row[0] == EXTERNAL[0])
+            self.assertTrue(entry[3])
+            self.assertEqual(entry[2], "install")
+
     async def test_a_toggles_everything_then_nothing(self) -> None:
         app = self.app()
         async with app.run_test() as pilot:
             await pilot.pause()
             await pilot.press("a")
-            self.assertEqual(app.selected, set(BUNDLED))
+            self.assertEqual(app.selected, set(BUNDLED + EXTERNAL))
             await pilot.press("a")
             self.assertEqual(app.selected, set())
 
@@ -367,7 +466,25 @@ class GuidedTests(unittest.IsolatedAsyncioTestCase):
             await pilot.press("enter")  # which
             await pilot.press("space")  # select the first skill
             await pilot.pause()
-            self.assertEqual(app.plan(), [(BUNDLED[0], skills_tui.AVAILABLE, "install")])
+            self.assertEqual(
+                app.plan(), [(BUNDLED[0], skills_tui.AVAILABLE, "install", False)]
+            )
+
+    async def test_the_review_says_what_it_cannot_account_for(self) -> None:
+        """Silence here would read as "these counts cover everything"."""
+        app = self.app(guided=True)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.selected.add(EXTERNAL[0])
+            app.step = 4
+            app.render_main()
+            await pilot.pause()
+            text = " ".join(
+                str(widget.content) for widget in app._main.query(Static)
+            )
+            self.assertIn("its own installer", text)
+            self.assertIn("nor backed up by this tool", text)
+            self.assertIn("ignores copy/link", text)
 
     async def test_finishing_the_guide_installs_and_returns_to_the_dashboard(self) -> None:
         app = self.app(guided=True)

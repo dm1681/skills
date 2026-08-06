@@ -297,6 +297,20 @@ and operational boundary.
 
 ### Optional Graphify installation
 
+Graphify is reachable two ways: as a row in the dashboard's **External tools**
+group, or with `--graphify` for a scripted run. Both are opt-in and both end up
+in the same place; the flag exists so CI never has to open a UI.
+
+The dashboard lists it apart from this collection's own skills on purpose. A
+bundled skill is a folder in this checkout, so the dashboard can diff it and
+tell you whether it is up to date. An external tool is somebody else's package:
+it follows your scope choice, ignores copy/link because its own installer
+decides the shape, and reports only `NOT INSTALLED` or `PRESENT` — never `UP TO
+DATE`, which would be a guess. Selecting one that is already present offers
+`update`, since re-running its installer upgrades rather than doing nothing.
+What it writes is not included in the review screen's write and backup counts,
+and the review says so.
+
 `--graphify` is an explicit opt-in to third-party software installation. It
 requires [`uv`](https://docs.astral.sh/uv/) and runs:
 

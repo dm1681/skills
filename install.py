@@ -15,7 +15,7 @@ import tempfile
 import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Iterable, Mapping, Optional, TextIO
+from typing import Callable, Iterable, Mapping, NamedTuple, Optional, TextIO
 
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -50,6 +50,40 @@ MATT_SKILLS_AGENTS = {
 
 class InstallError(RuntimeError):
     """A user-actionable installation error."""
+
+
+class ExternalTool(NamedTuple):
+    """A skill this collection can install but does not own.
+
+    Bundled skills are files in this checkout: installing one is a copy or a
+    symlink, and its state is a byte comparison against `skills/<name>`. An
+    external tool is somebody else's package with its own installer, so it
+    honours `--scope` but never `--mode`, and the most this collection can say
+    about its state is whether a directory by that name is present.
+    """
+
+    name: str
+    summary: str
+    origin: str
+    requires: str
+
+
+EXTERNAL_TOOLS = (
+    ExternalTool(
+        name="graphify",
+        summary="Turn any input into a persistent, queryable knowledge graph",
+        origin="graphifyy on PyPI, installed and registered by its own CLI",
+        requires="uv",
+    ),
+)
+EXTERNAL_NAMES = tuple(tool.name for tool in EXTERNAL_TOOLS)
+
+
+def external_tool(name: str) -> ExternalTool:
+    for tool in EXTERNAL_TOOLS:
+        if tool.name == name:
+            return tool
+    raise InstallError(f"unknown external tool: {name}")
 
 
 def is_terminal(stream: TextIO) -> bool:
