@@ -3,7 +3,7 @@
 All notable changes to this repository are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [8.0.0] - 2026-08-05
 
 ### Added
 
@@ -17,10 +17,6 @@ All notable changes to this repository are documented here. Versions follow
   so the change footprint reads at a glance in the full request path and not
   only in the PR delta view. The mark is a shape in the existing muted text
   color rather than a second color channel, and context nodes stay unmarked.
-- Added `references/host-adaptation.md` to `orchestrate-olympus`, defining the
-  required host capabilities, the stable-identifier rule for task and subagent
-  IDs, and explicit fallbacks for missing host features such as pinning,
-  follow-up turns, parallel child slots, bounded waits, and archiving.
 
 ### Changed
 
@@ -46,14 +42,10 @@ All notable changes to this repository are documented here. Versions follow
   existing destination now has to match the requested mode, not merely hold
   equal contents, so converting a copy to a link no longer requires deleting
   the destination by hand. Refusals name the shape found.
-- Made the `orchestrate-olympus` contract host-neutral. The normative
-  documents now describe the parent agent session, host tasks, subagents, and
-  hosted cloud reviews instead of Codex-specific features; Codex remains a
-  named example only in the host-adaptation reference, the OpenAI interface
-  file, and legacy checkpoint-schema history.
-- `scripts/checkpoint.py` now accepts any stable whitespace-free host task
-  identifier (4–128 characters) instead of requiring a Codex-style UUID, and
-  renders the recovery prompt with a host-neutral skill invocation.
+- The guided installer no longer offers to download third-party skills. The
+  `mattpocock/skills` prompt existed because Olympus orchestration required
+  those workflows; with that skill removed, nothing bundled here depends on
+  them, so they are installed only via an explicit `--matt-skills`.
 
 ### Fixed
 
@@ -81,8 +73,7 @@ All notable changes to this repository are documented here. Versions follow
   Three wizard tests parsed an empty argument list, so `--home` fell back to
   `Path.home()` and the wizard inspected whatever was already installed there.
   A pre-existing install that differed from the checkout added a backup
-  confirmation the scripted input never answered, so
-  `test_declining_matt_skills_warns_that_olympus_is_incomplete` failed on some
+  confirmation the scripted input never answered, so those tests failed on some
   machines and passed on others. Each test now supplies a temporary home.
 - The backup confirmation is now covered deliberately, for both the accept and
   decline paths and for one and several differing paths, instead of being
@@ -92,9 +83,14 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Removed
 
-- Removed the Graphify lifecycle from `orchestrate-olympus`, including its
-  role gates, checkpoint state, and dedicated reference. The repository's
-  separate opt-in Graphify installer remains available.
+- Removed the `orchestrate-olympus` skill and everything that existed to serve
+  it: the skill directory (`SKILL.md`, 16 references, `agents/openai.yaml`, and
+  `scripts/checkpoint.py`), its nine dedicated test modules, the installer's
+  Olympus prerequisite step, and the Olympus framing in the README and
+  `docs/matt-pocock-skills.md`. The full contract and its history remain
+  recoverable from Git. This supersedes the earlier removal of the Graphify
+  lifecycle from that skill; the repository's separate opt-in Graphify
+  installer is unaffected.
 
 ## [7.1.0] - 2026-07-26
 

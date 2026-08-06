@@ -1,15 +1,15 @@
-# Matt Pocock skills prerequisite
+# Matt Pocock skills (optional)
 
-The `orchestrate-olympus` skill delegates implementation, test-driven
-development, and two-axis review to workflows from
-[`mattpocock/skills`](https://github.com/mattpocock/skills). The interactive
-installer recommends the complete collection so those workflows and their
+[`mattpocock/skills`](https://github.com/mattpocock/skills) provides
+implementation, test-driven development, and two-axis review workflows. No skill
+bundled in this collection depends on them, so they are a pure opt-in. When
+requested, the complete collection is installed so those workflows and their
 transitive skill dependencies remain coherent.
 
 ## Install behavior
 
-The wizard asks before downloading third-party content and defaults to **Yes**.
-Scripted installs remain explicit:
+The wizard never prompts for third-party downloads. Installing them is always
+explicit:
 
 ```sh
 ./install.sh --agent all --matt-skills
@@ -18,9 +18,9 @@ Scripted installs remain explicit:
 The installer invokes the upstream `skills` CLI with all skills selected,
 copies rather than links the result, and suppresses its nested prompts. The CLI
 runs in a disposable staging project; this installer then copies every
-discovered skill into the same resolved roots used for the bundled Olympus
-skill. That preserves `~/.agents/skills` for shared user installs and applies
-the installer's existing backup-before-replace policy.
+discovered skill into the same resolved roots used for the bundled skills. That
+preserves `~/.agents/skills` for shared user installs and applies the
+installer's existing backup-before-replace policy.
 
 | This installer | Upstream `skills` CLI |
 | --- | --- |
@@ -46,12 +46,11 @@ installer's control.
 
 ## One-time repository setup
 
-Installing the files is the machine-level prerequisite. Then invoke
-`/setup-matt-pocock-skills` once from inside the Olympus repository to configure
+Installing the files is the machine-level step. Then invoke
+`/setup-matt-pocock-skills` once from inside the target repository to configure
 the issue tracker, triage labels, and documentation layout. This is a user or
 agent action; the terminal installer cannot invoke a coding-agent slash command
 on the user's behalf.
 
-If the user declines the wizard prompt, the bundled Olympus skill can still be
-copied, but mutating orchestration must pause until the required Matt skills are
-available.
+Skipping these skills entirely is fully supported: every skill bundled in this
+collection installs and runs without them.

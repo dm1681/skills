@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = ROOT / "install.py"
-SKILL = "orchestrate-olympus"
+SKILL = "wow-addon-dev"
 EXPLAINER_SKILL = "semantic-pr-review"
 BUNDLED = sorted(
     path.name

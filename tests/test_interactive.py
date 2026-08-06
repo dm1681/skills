@@ -12,7 +12,7 @@ SPEC = importlib.util.spec_from_file_location("interactive_installer", ROOT / "i
 assert SPEC is not None and SPEC.loader is not None
 INSTALLER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(INSTALLER)
-SKILL = "orchestrate-olympus"
+SKILL = "wow-addon-dev"
 EXPLAINER_SKILL = "semantic-pr-review"
 
 
@@ -119,7 +119,6 @@ class InteractiveTests(unittest.TestCase):
                     "enter",  # every skill root
                     "down",
                     "enter",  # link mode
-                    "enter",  # Matt Pocock skills yes
                     "up",
                     "enter",  # Graphify yes
                     "enter",  # apply
@@ -129,7 +128,7 @@ class InteractiveTests(unittest.TestCase):
             self.assertEqual("user", args.scope)
             self.assertEqual(["universal", "claude"], args.agent)
             self.assertEqual("link", args.mode)
-            self.assertTrue(args.matt_skills)
+            self.assertFalse(args.matt_skills)
             self.assertTrue(args.graphify)
 
     def test_multiple_bundled_skills_are_selectable_with_summaries(self) -> None:
@@ -155,9 +154,9 @@ class InteractiveTests(unittest.TestCase):
                 self.assertIn(name, rendered)
                 self.assertIn(INSTALLER.skill_summary(name), rendered)
 
-    def test_olympus_prerequisites_are_skipped_when_olympus_is_not_selected(
-        self,
-    ) -> None:
+    def test_wizard_never_offers_to_fetch_third_party_skills(self) -> None:
+        """No bundled skill requires mattpocock/skills, so the wizard must not
+        offer to download them. `--matt-skills` remains the only way in."""
         with tempfile.TemporaryDirectory() as directory:
             args = INSTALLER.parser().parse_args(["--home", directory])
             output = TTYBuffer()
@@ -176,14 +175,9 @@ class InteractiveTests(unittest.TestCase):
             self.assertFalse(args.matt_skills)
             self.assertFalse(args.graphify)
         rendered = output.getvalue()
-        self.assertNotIn("Olympus prerequisites", rendered)
         self.assertNotIn("mattpocock/skills", rendered)
 
     def test_skill_summaries_come_from_the_bundled_agent_interface(self) -> None:
-        self.assertEqual(
-            "Run, pause, recover, and present Olympus work",
-            INSTALLER.skill_summary(SKILL),
-        )
         self.assertEqual(
             "Build portable, snapshot-verified PR flows",
             INSTALLER.skill_summary(EXPLAINER_SKILL),
@@ -228,10 +222,10 @@ class InteractiveTests(unittest.TestCase):
     def test_default_wizard_configures_shared_user_install(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             args = INSTALLER.parser().parse_args(["--home", directory])
-            # scope, agents, mode, Matt skills=yes, Graphify=yes, proceed
+            # scope, agents, mode, Graphify=yes, proceed
             output = TTYBuffer()
             console = INSTALLER.Console(
-                TTYBuffer("\n\n\n\ny\ny\n"),
+                TTYBuffer("\n\n\ny\ny\n"),
                 output,
                 color=False,
                 unicode=False,
@@ -242,7 +236,7 @@ class InteractiveTests(unittest.TestCase):
             self.assertEqual(["universal", "claude"], args.agent)
             self.assertEqual([SKILL], args.skill)
             self.assertEqual("copy", args.mode)
-            self.assertTrue(args.matt_skills)
+            self.assertFalse(args.matt_skills)
             self.assertTrue(args.graphify)
             self.assertIn("Skills setup", output.getvalue())
             self.assertIn("Review", output.getvalue())
@@ -253,8 +247,8 @@ class InteractiveTests(unittest.TestCase):
             home = Path(directory) / "home"
             home.mkdir()
             args = INSTALLER.parser().parse_args(["--home", str(home)])
-            # project, path, Codex, link, no Matt skills, no Graphify, proceed
-            answers = f"2\n{directory}\n2\n2\nn\nn\ny\n"
+            # project, path, Codex, link, no Graphify, proceed
+            answers = f"2\n{directory}\n2\n2\nn\ny\n"
             console = INSTALLER.Console(
                 TTYBuffer(answers),
                 TTYBuffer(),
@@ -282,10 +276,10 @@ class InteractiveTests(unittest.TestCase):
     def test_cancel_returns_without_changes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             args = INSTALLER.parser().parse_args(["--home", directory])
-            # default scope, agent, mode, no Matt skills, no Graphify, cancel at review
+            # default scope, agent, mode, no Graphify, cancel at review
             output = TTYBuffer()
             console = INSTALLER.Console(
-                TTYBuffer("\n\n\nn\nn\nn\n"),
+                TTYBuffer("\n\n\nn\nn\n"),
                 output,
                 color=False,
                 unicode=False,
@@ -293,21 +287,6 @@ class InteractiveTests(unittest.TestCase):
             )
             self.assertFalse(INSTALLER.run_wizard(args, [SKILL], console))
             self.assertIn("No changes made", output.getvalue())
-
-    def test_declining_matt_skills_warns_that_olympus_is_incomplete(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            args = INSTALLER.parser().parse_args(["--home", directory])
-            output = TTYBuffer()
-            console = INSTALLER.Console(
-                TTYBuffer("\n\n\nn\nn\ny\n"),
-                output,
-                color=False,
-                unicode=False,
-                width=72,
-            )
-            self.assertTrue(INSTALLER.run_wizard(args, [SKILL], console))
-            self.assertFalse(args.matt_skills)
-            self.assertIn("required by Olympus", output.getvalue())
 
     def stale_home(self, directory: str) -> Path:
         """A home directory holding an installed skill that differs from this release."""
@@ -328,9 +307,9 @@ class InteractiveTests(unittest.TestCase):
             home = self.stale_home(directory)
             args = INSTALLER.parser().parse_args(["--home", str(home)])
             output = TTYBuffer()
-            # scope, agents, mode, no Matt skills, no Graphify, back up, apply
+            # scope, agents, mode, no Graphify, back up, apply
             console = INSTALLER.Console(
-                TTYBuffer("\n\n\nn\nn\ny\ny\n"),
+                TTYBuffer("\n\n\nn\ny\ny\n"),
                 output,
                 color=False,
                 unicode=False,
@@ -352,7 +331,7 @@ class InteractiveTests(unittest.TestCase):
             args = INSTALLER.parser().parse_args(["--home", str(home)])
             output = TTYBuffer()
             console = INSTALLER.Console(
-                TTYBuffer("\n\n\nn\nn\ny\ny\n"),
+                TTYBuffer("\n\n\nn\ny\ny\n"),
                 output,
                 color=False,
                 unicode=False,
@@ -367,7 +346,7 @@ class InteractiveTests(unittest.TestCase):
             args = INSTALLER.parser().parse_args(["--home", str(home)])
             output = TTYBuffer()
             console = INSTALLER.Console(
-                TTYBuffer("\n\n\nn\nn\nn\n"),
+                TTYBuffer("\n\n\nn\nn\n"),
                 output,
                 color=False,
                 unicode=False,
