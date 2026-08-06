@@ -24,5 +24,5 @@ mapping together, and update both in the same pull request.
 For the optional Graphify package and its separate platform mapping, see
 [`graphify.md`](graphify.md).
 
-For the required Olympus workflow dependency and its upstream CLI mapping, see
+For the optional Matt Pocock workflows and their upstream CLI mapping, see
 [`matt-pocock-skills.md`](matt-pocock-skills.md).

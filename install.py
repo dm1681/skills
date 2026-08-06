@@ -39,7 +39,6 @@ GRAPHIFY_PLATFORMS = {
     "copilot": "copilot",
     "claude": "claude",
 }
-OLYMPUS_SKILL = "orchestrate-olympus"
 MATT_SKILLS_SOURCE = "mattpocock/skills"
 MATT_SKILLS_AGENTS = {
     "universal": "codex",
@@ -1017,25 +1016,9 @@ def run_wizard(
         ],
         args.mode,
     )
-    if OLYMPUS_SKILL in args.skill:
-        console.section("Olympus prerequisites")
-        console.note(
-            "Matt Pocock's engineering skills provide the implement, TDD, and "
-            "two-axis code-review workflows used by Olympus orchestration."
-        )
-        matt_default = True if args.matt_skills is None else args.matt_skills
-        args.matt_skills = _confirm(
-            console,
-            "Install all mattpocock/skills for the selected agents?",
-            matt_default,
-        )
-        if not args.matt_skills:
-            console.warning(
-                "These workflows are required by Olympus; orchestration will be "
-                "incomplete until mattpocock/skills are installed."
-            )
-    else:
-        args.matt_skills = bool(args.matt_skills)
+    # No bundled skill requires mattpocock/skills, so the wizard does not offer
+    # to fetch third-party skills. `--matt-skills` still installs them on request.
+    args.matt_skills = bool(args.matt_skills)
     args.graphify = _confirm(
         console,
         "Install Graphify and configure it for the selected agents?",
@@ -1076,7 +1059,7 @@ def run_wizard(
             ("Destination", ", ".join(str(root) for root in roots)),
             (
                 "Matt skills",
-                "install all (required by Olympus)" if args.matt_skills else "skip",
+                "install all" if args.matt_skills else "skip",
             ),
             ("Graphify", "install and configure" if args.graphify else "skip"),
         ]
@@ -1200,7 +1183,7 @@ def parser() -> argparse.ArgumentParser:
         "--matt-skills",
         dest="matt_skills",
         action="store_true",
-        help="install all mattpocock/skills required by Olympus orchestration",
+        help="install all mattpocock/skills for the selected agents",
     )
     matt_skills.add_argument(
         "--no-matt-skills",
@@ -1290,8 +1273,8 @@ def execute_install(
         console.success("Preview complete." if args.dry_run else "Setup complete.")
         if args.matt_skills and not args.dry_run:
             console.note(
-                "Next: run /setup-matt-pocock-skills once inside the Olympus "
-                "repository before starting orchestration."
+                "Next: run /setup-matt-pocock-skills once inside the target "
+                "repository to finish configuring the workflows."
             )
 
 

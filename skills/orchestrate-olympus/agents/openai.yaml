@@ -1,4 +1,0 @@
-interface:
-  display_name: "Orchestrate Olympus"
-  short_description: "Run, pause, recover, and present Olympus work"
-  default_prompt: "Use $orchestrate-olympus to recover live state and safely start, resume, pause, repair, maintain, review, or present one Olympus delivery lane."
