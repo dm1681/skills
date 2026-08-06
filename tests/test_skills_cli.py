@@ -1,0 +1,223 @@
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+CLI = ROOT / "skills_cli.py"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import skills_cli  # noqa: E402
+
+BUNDLED = sorted(
+    path.name
+    for path in (ROOT / "skills").iterdir()
+    if path.is_dir() and (path / "SKILL.md").is_file()
+)
+
+
+class ArgumentTests(unittest.TestCase):
+    def test_project_install_delegates_non_interactively(self) -> None:
+        argv = skills_cli.install_argv(
+            ["wow-addon-dev"],
+            "project",
+            Path("/repo"),
+            [],
+            "copy",
+            False,
+            False,
+        )
+        self.assertEqual(
+            argv,
+            [
+                "--non-interactive",
+                "--scope",
+                "project",
+                "--project-dir",
+                str(Path("/repo")),
+                "--mode",
+                "copy",
+                "--skill",
+                "wow-addon-dev",
+            ],
+        )
+
+    def test_optional_flags_are_forwarded(self) -> None:
+        argv = skills_cli.install_argv(
+            ["a", "b"],
+            "user",
+            Path("/repo"),
+            ["claude", "universal"],
+            "link",
+            True,
+            True,
+        )
+        self.assertEqual(argv[argv.index("--scope") + 1], "user")
+        self.assertEqual(argv[argv.index("--mode") + 1], "link")
+        self.assertEqual([argv[i + 1] for i, v in enumerate(argv) if v == "--agent"],
+                         ["claude", "universal"])
+        self.assertEqual([argv[i + 1] for i, v in enumerate(argv) if v == "--skill"],
+                         ["a", "b"])
+        self.assertIn("--force", argv)
+        self.assertIn("--dry-run", argv)
+
+
+class ShimTests(unittest.TestCase):
+    def test_sh_shim_uses_forward_slashes(self) -> None:
+        shim = skills_cli.sh_shim(Path(r"C:\Users\dev\skills"))
+        self.assertIn("REPO='C:/Users/dev/skills'", shim)
+        self.assertNotIn("\\Users", shim)
+        self.assertIn('"$CLI" "$@"', shim)
+
+    def test_sh_shim_escapes_a_quote_in_the_path(self) -> None:
+        self.assertEqual(skills_cli._sh_quote("a'b"), "'a'\\''b'")
+
+    def test_cmd_shim_branches_with_labels_not_blocks(self) -> None:
+        # Inside a parenthesized block batch expands %ERRORLEVEL% at parse time,
+        # which would report the code from before the command that just ran.
+        shim = skills_cli.cmd_shim(Path(r"C:\repo"))
+        self.assertIn("goto run_uv", shim)
+        self.assertIn(r'set "REPO=C:\repo"', shim)
+        for line in shim.splitlines():
+            if "%ERRORLEVEL%" in line:
+                self.assertEqual(line.strip(), "exit /b %ERRORLEVEL%")
+
+    def test_write_shims_is_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            bin_dir = Path(directory) / "bin"
+            first = skills_cli.write_shims(ROOT, bin_dir)
+            self.assertTrue(all(status == "wrote" for _, status in first))
+            second = skills_cli.write_shims(ROOT, bin_dir)
+            self.assertTrue(all(status == "unchanged" for _, status in second))
+            for path, _ in first:
+                self.assertTrue(path.is_file())
+
+    def test_dry_run_writes_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            bin_dir = Path(directory) / "bin"
+            results = skills_cli.write_shims(ROOT, bin_dir, dry_run=True)
+            self.assertTrue(all(status == "would write" for _, status in results))
+            self.assertFalse(bin_dir.exists())
+
+    def test_windows_gets_a_batch_launcher_too(self) -> None:
+        names = {path.name for path, _, _, _ in skills_cli.shims(ROOT, Path("bin"))}
+        expected = {"skills", "skills.cmd"} if os.name == "nt" else {"skills"}
+        self.assertEqual(names, expected)
+
+
+class PathTests(unittest.TestCase):
+    def test_path_membership_ignores_separator_style(self) -> None:
+        bin_dir = Path("/home/dev/.local/bin")
+        env = {"PATH": os.pathsep.join(["/usr/bin", str(bin_dir) + os.sep])}
+        self.assertTrue(skills_cli.path_contains(bin_dir, env))
+
+    def test_missing_directory_is_reported(self) -> None:
+        self.assertFalse(
+            skills_cli.path_contains(Path("/opt/bin"), {"PATH": "/usr/bin"})
+        )
+
+    def test_blank_entries_are_skipped(self) -> None:
+        entries = skills_cli.path_entries({"PATH": os.pathsep.join(["", "/usr/bin", " "])})
+        self.assertEqual([str(entry) for entry in entries], [str(Path("/usr/bin"))])
+
+    def test_profile_follows_the_shell(self) -> None:
+        home = Path("/home/dev")
+        self.assertEqual(
+            skills_cli.profile_for({"SHELL": "/bin/zsh"}, home), home / ".zshrc"
+        )
+        self.assertEqual(
+            skills_cli.profile_for({"SHELL": "/bin/bash"}, home), home / ".bashrc"
+        )
+        self.assertEqual(skills_cli.profile_for({}, home), home / ".profile")
+
+    def test_profile_line_is_written_once_and_uses_home(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            bin_dir = home / ".local" / "bin"
+            env = {"SHELL": "/bin/bash"}
+            first = skills_cli.add_to_posix_path(bin_dir, env, home=home)
+            self.assertIn("appended", first)
+            profile = home / ".bashrc"
+            body = profile.read_text(encoding="utf-8")
+            self.assertIn('export PATH="$HOME/.local/bin:$PATH"', body)
+            second = skills_cli.add_to_posix_path(bin_dir, env, home=home)
+            self.assertIn("already configured", second)
+            self.assertEqual(profile.read_text(encoding="utf-8"), body)
+
+    def test_profile_dry_run_leaves_the_file_alone(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            result = skills_cli.add_to_posix_path(
+                home / ".local" / "bin", {}, dry_run=True, home=home
+            )
+            self.assertIn("would append", result)
+            self.assertFalse((home / ".profile").exists())
+
+    @unittest.skipUnless(os.name == "nt", "reads the Windows user environment")
+    def test_windows_path_preview_names_the_directory(self) -> None:
+        bin_dir = Path.home() / ".local" / "bin"
+        self.assertIn(str(bin_dir), skills_cli.add_to_windows_path(bin_dir, dry_run=True))
+
+
+class CommandLineTests(unittest.TestCase):
+    def run_cli(self, *arguments: str, expected: int = 0, cwd: Path = ROOT):
+        result = subprocess.run(
+            [sys.executable, str(CLI), *arguments],
+            cwd=str(cwd),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(
+            result.returncode,
+            expected,
+            msg="stdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr),
+        )
+        return result
+
+    def test_list_matches_the_bundled_skills(self) -> None:
+        result = self.run_cli("list")
+        self.assertEqual(result.stdout.split(), BUNDLED)
+
+    def test_where_prints_the_checkout(self) -> None:
+        self.assertEqual(self.run_cli("where").stdout.strip(), str(ROOT))
+
+    def test_install_writes_into_the_project(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            self.run_cli(
+                "install", BUNDLED[0], "--project-dir", str(project), "--agent", "claude"
+            )
+            self.assertTrue((project / ".claude" / "skills" / BUNDLED[0] / "SKILL.md").is_file())
+            self.assertFalse((project / ".agents").exists())
+
+    def test_unknown_skill_is_rejected(self) -> None:
+        result = self.run_cli("install", "not-a-skill", expected=2)
+        self.assertIn("unknown skill", result.stderr)
+
+    def test_names_and_all_are_mutually_exclusive(self) -> None:
+        result = self.run_cli("install", BUNDLED[0], "--all", expected=2)
+        self.assertIn("not both", result.stderr)
+
+    def test_missing_project_directory_is_reported(self) -> None:
+        result = self.run_cli(
+            "install", BUNDLED[0], "--project-dir", str(ROOT / "no-such-dir"), expected=2
+        )
+        self.assertIn("does not exist", result.stderr)
+
+    def test_no_names_without_a_terminal_explains_itself(self) -> None:
+        result = self.run_cli("install", expected=2)
+        self.assertIn("--all", result.stderr)
+
+    def test_bare_invocation_shows_help(self) -> None:
+        self.assertIn("setup-path", self.run_cli(expected=2).stdout)
+
+
+if __name__ == "__main__":
+    unittest.main()

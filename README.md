@@ -69,42 +69,58 @@ Interface number is current — only the in-game build check can.
 
 ## Install
 
-Run the installer without options to open the guided setup. It walks through
-coding agents, two skill-selection phases, copy or link mode, optional Graphify
-setup, and a final review before changing anything. It never offers to download
-third-party skills:
+Run the installer without options to open the dashboard:
 
 ```sh
 ./install.sh
 ```
 
-Selection is keyboard-driven: `↑`/`↓` to move, `Space` to toggle a checkbox,
-`Enter` to confirm. This needs a native console. A pty-based shell — Git Bash or
-mintty on Windows — hides the terminal from Python, so the wizard falls back to
-numbered prompts there and says so; run `install.ps1` from PowerShell or Windows
-Terminal for the checkbox interface. A bare run with no usable terminal installs
-nothing and explains what to pass instead, rather than defaulting to every skill
-in every root.
+Every skill appears as a row carrying its live state — not installed, up to
+date, or differing from this checkout — beside a sidebar holding the view
+filter, the destination, and copy/link mode. Keys: `↑`/`↓` to move, `Space` to
+select, `Enter` for the `SKILL.md` preview, `V` to filter the list, `S` to
+switch between a repo-level and a machine-wide install, `M` between copy and
+link, `I` to install, `G` for the guided flow, `Q` to quit. A skill that already
+exists and differs is never replaced silently: it asks first, then moves the old
+copy into an adjacent `.skills-backups/` directory.
 
-### Two selection phases
+### Guided mode
 
-Scope is not an either/or in the wizard: one run can populate both.
+Installing into a destination for the first time — one with no
+`.dm1681-skills.json` receipt — opens a four-step flow instead: where to
+install, which skills, copy or link, then a review that spells out every write
+and backup and states plainly that nothing has been written yet. The sidebar
+becomes a step rail; nothing else about the layout moves. Press `G` to switch
+modes at any time, or force either with `skills install --guided` /
+`--no-guided`.
 
-1. **Global skills** — installed for every project on this machine. A skill that
-   declares `global_default: false` in its `agents/openai.yaml` is listed but not
-   pre-selected, so a narrow, domain-specific skill never lands machine-wide by
-   accepting defaults. `wow-addon-dev` is one.
-2. **Repo-level skills** — opt-in, defaulting to No. Choosing it asks for a
-   project directory, then lists the skills again. Anything already selected in
-   phase 1 is marked `already global` and left unchecked, because a project copy
-   of an already-global skill is redundant. Selecting it anyway is allowed: that
-   is how you pin one project to this checkout's version.
+### What the colours mean
 
-Either phase accepts `none`, so a global-only or project-only install is a
-normal outcome. Selecting nothing in both ends the run without changes.
+Colour is information, not decoration, and one hue means one thing everywhere:
 
-Scripted installs are unaffected — `--scope user|project` still installs one
-scope, exactly as before.
+| Hue | Meaning |
+| --- | --- |
+| mauve | your selection, focus, and the active step — never data |
+| blue | an additive install; nothing existing is lost |
+| peach | a replacement; the old copy is backed up first |
+| green | already identical to this checkout; nothing will happen |
+| teal | a location — paths, roots, scope |
+| yellow | allowed, but probably not what you want |
+| red | failure, so a healthy run is provably red-free |
+
+A skill's state is painted in the colour of the *consequence* of selecting it,
+so the hue carries unchanged from the state pill to the action verb to the
+review step. Counting the peach tells you how many overwrites are queued.
+
+The dashboard needs a real terminal. A pty-based shell — Git Bash or mintty on
+Windows — hides the terminal from Python, so run `install.ps1` from PowerShell
+or Windows Terminal there. A bare run with no usable terminal installs nothing
+and explains what to pass instead, rather than defaulting to every skill in
+every root.
+
+Skills that declare `global_default: false` in their `agents/openai.yaml` are
+labelled `repo-level only` on their tile. `wow-addon-dev` is one: a narrow,
+domain-specific skill should not reach every unrelated session.
 
 On Windows PowerShell:
 
@@ -113,24 +129,54 @@ On Windows PowerShell:
 ```
 
 Both launchers prefer `uv`, which automatically uses or provisions Python 3.12
-and syncs the locked environment. If `uv` is unavailable, they fall back to an
-installed Python 3.9 or newer. A separate system Python installation is not
-required when `uv` is present.
+and syncs the locked environment — including Textual, which the dashboard needs.
+If `uv` is unavailable, they fall back to an installed Python 3.9 or newer;
+without Textual there, naming skills on the command line still works and the
+installer says so rather than failing with a traceback.
 
-The interface adapts to narrow terminals and automatically uses plain text when
-color or Unicode is unavailable. Its recommended default is a user-scoped copy
-into every skill root: `~/.agents/skills`, the shared location supported by
-Codex, Cursor, and GitHub Copilot, and `~/.claude/skills`, which Claude Code
-reads instead of the shared directory.
-
-In an interactive terminal, use Up and Down to move between options, Space to
-toggle or choose the focused option, and Enter to confirm. Multi-select screens
-keep every checked option when you press Enter. Redirected input and terminals
-without raw-key support automatically use numbered prompts instead.
+The default destination is a user-scoped copy into every skill root:
+`~/.agents/skills`, the shared location supported by Codex, Cursor, and GitHub
+Copilot, and `~/.claude/skills`, which Claude Code reads instead of the shared
+directory.
 
 Passing installer options keeps the command non-interactive, which makes it
-safe for scripts and CI. Use `--interactive` to open the wizard with preset
-options, or `--non-interactive` to explicitly suppress it.
+safe for scripts and CI. Use `--interactive` to open the dashboard with preset
+options, or `--non-interactive` to explicitly suppress it. `--graphify`,
+`--matt-skills`, and `--target` are scripted-only; combining them with
+`--interactive` is an error rather than a silent no-op.
+
+### Run it from any directory
+
+Install the launcher once and the collection follows you into every project:
+
+```sh
+./install.sh --skill NAME        # or open the dashboard first
+skills setup-path                # writes ~/.local/bin/skills (+ skills.cmd)
+skills setup-path --add-path     # if that directory is not on PATH yet
+```
+
+From then on, in any repository:
+
+```sh
+cd ~/code/some-project
+skills                    # dashboard, targeting this directory
+skills install NAME       # repo-level install, no paths to type
+skills install NAME --user  # machine-wide instead
+skills list               # what this collection ships
+skills where              # path to the checkout the shims point at
+```
+
+`skills install` defaults to a repo-level install of the current working
+directory, writing `./.agents/skills/NAME` and `./.claude/skills/NAME`. Naming
+no skill opens the dashboard; naming one skips it entirely, so the command stays
+usable in scripts and over SSH. Installing a `global_default: false` skill with
+`--user` prints a note first, since those are meant to stay repo-level.
+
+On Windows the shims are written as an extensionless `skills` for Git Bash and
+`skills.cmd` for PowerShell and cmd.exe. `--add-path` edits the current user's
+registry environment rather than calling `setx`, which silently truncates any
+`PATH` longer than 1024 characters. Re-run `skills setup-path` after moving the
+checkout: each shim hard-codes the path it was generated from.
 
 Install for every supported agent family. This is the default, and writes one
 shared copy to `.agents/skills` and one Claude-specific copy to
@@ -154,16 +200,16 @@ Useful options:
 --agent universal|codex|cursor|copilot|claude|all
                              defaults to all: every skill root, so the
                              install is visible to whichever agent you use
---scope user|project         scripted installs only; the wizard asks for both
+--scope user|project         scripted installs only; the dashboard switches
+                             scope with the `s` key instead
 --project-dir PATH
 --skill NAME                 repeatable; defaults to all skills
 --mode copy|link             copy is the cross-platform default
 --matt-skills                install all Matt Pocock skills for chosen agents
 --no-matt-skills             skip Matt Pocock skills (the default)
 --graphify                   install/upgrade Graphify and register its skill
---interactive                force the guided setup wizard
---non-interactive            never prompt; useful for scripts and CI
---no-color                   disable interactive terminal colors
+--interactive                force the dashboard open
+--non-interactive            never open it; useful for scripts and CI
 --target PATH                override the resolved skills directory
 --force                      replace an existing differing skill after backup
 --dry-run
@@ -207,8 +253,8 @@ the scanned skills root) before the new version is installed.
 
 Matt Pocock's [`mattpocock/skills`](https://github.com/mattpocock/skills)
 collection provides `implement`, `tdd`, and `code-review` workflows. No skill in
-this collection requires them, so the guided installer does not offer to fetch
-them and the wizard never prompts for a third-party download.
+this collection requires them, so the dashboard does not offer to fetch them and
+never prompts for a third-party download.
 
 Opt in explicitly with `--matt-skills`. This requires Node.js 18 or newer and
 runs the upstream cross-agent installer non-interactively:

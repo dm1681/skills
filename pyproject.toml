@@ -4,7 +4,9 @@ version = "8.1.0"
 description = "Version-controlled coding-agent skills with a cross-platform installer"
 readme = "README.md"
 requires-python = ">=3.9"
-dependencies = []
+dependencies = [
+    "textual>=8.2.8",
+]
 
 [tool.uv]
 package = false

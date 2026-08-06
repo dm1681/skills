@@ -13,12 +13,25 @@ This repository is a version-controlled collection of agent skills in the open
 - `scripts/init-repo.sh` — scaffold another repo to use the cloud skills sync.
 - `.claude/hooks/session-start.sh` + `.claude/settings.json` — Claude Code web
   `SessionStart` hook that runs the installer in cloud sessions.
-- `install.py` / `install.sh` — guided/CLI installer for local machines.
+- `install.py` / `install.sh` / `install.ps1` — installer for local machines.
+  Owns root resolution, backups, receipts, and the scripted command line.
+- `skills_tui.py` — Textual interface. The only interactive one; both entry
+  points open it. One shell, two modes: a dashboard, and a guided flow for a
+  first install. Performs installs through `install.install_one`, so the rules
+  live in one place. Its colour contract is documented at the top of the file
+  and is load-bearing — one hue means one thing, and red is reserved for
+  failure so a healthy run contains none.
+- `skills_cli.py` — the `skills` command. `setup-path` writes launcher shims
+  into a `PATH` directory so `skills install NAME` works from any project and
+  defaults to a repo-level install of the current directory.
 - `scripts/validate_repo.py`, `tests/` — validation and unit tests.
 
 ## Working in this repo
 
 - Environment: `uv sync --locked` (Python 3.12 via uv; 3.9+ fallback).
+- `textual` is the one runtime dependency, and only the dashboard needs it.
+  Every scripted path must keep working without it — say so plainly instead of
+  raising an `ImportError`.
 - Validate skills: `uv run python scripts/validate_repo.py`.
 - Run tests: `uv run python -m unittest discover -s tests`.
 - Run both before committing. See `RELEASING.md` for versioning and releases.
