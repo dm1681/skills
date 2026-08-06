@@ -6,10 +6,16 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import install  # noqa: E402
+
 INSTALLER = ROOT / "install.py"
 SKILL = "wow-addon-dev"
 EXPLAINER_SKILL = "semantic-pr-review"
@@ -159,6 +165,31 @@ class InstallerTests(unittest.TestCase):
             self.assertIn("uv tool install --upgrade graphifyy", result.stdout)
             self.assertIn("graphify install --platform codex", result.stdout)
             self.assertFalse((home / ".agents").exists())
+
+    def test_the_executable_lookup_survives_a_styled_uv(self) -> None:
+        """uv colours this path even into a pipe, and a Path full of escape
+        codes never exists, so the fallback found nothing on exactly the
+        machines that needed it."""
+        with tempfile.TemporaryDirectory() as directory:
+            bin_dir = Path(directory) / "bin"
+            bin_dir.mkdir()
+            executable = bin_dir / "graphify"
+            executable.write_text("#!/bin/sh\n", encoding="utf-8")
+            executable.chmod(0o755)
+            fake_uv = Path(directory) / "uv"
+            # Style the output unless NO_COLOR is set, exactly as uv does.
+            fake_uv.write_text(
+                "#!/bin/sh\n"
+                f'if [ -n "$NO_COLOR" ]; then printf "%s\\n" "{bin_dir}"; '
+                f'else printf "\\033[36m%s\\033[39m\\n" "{bin_dir}"; fi\n',
+                encoding="utf-8",
+            )
+            fake_uv.chmod(0o755)
+            # An empty PATH forces the uv fallback, which is the path under test;
+            # otherwise the real graphify on this machine answers first.
+            with unittest.mock.patch.dict(os.environ, {"PATH": ""}):
+                found = install._find_graphify(str(fake_uv), Path(directory))
+            self.assertEqual(found, str(executable))
 
     def test_graphify_rejects_custom_target(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

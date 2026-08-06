@@ -240,12 +240,16 @@ def _find_graphify(uv: str, cwd: Path) -> Optional[str]:
     executable = shutil.which("graphify")
     if executable:
         return executable
+    # NO_COLOR, not capture_output alone: uv styles this path even when its
+    # output is a pipe, and the escape codes end up inside the Path, so the
+    # directory never exists and this fallback silently finds nothing.
     result = subprocess.run(
         [uv, "tool", "dir", "--bin"],
         cwd=cwd,
         check=False,
         text=True,
         capture_output=True,
+        env={**os.environ, "NO_COLOR": "1"},
     )
     if result.returncode != 0 or not result.stdout.strip():
         return None
@@ -281,10 +285,16 @@ def install_graphify(
             "--graphify requires uv; install it from https://docs.astral.sh/uv/ and rerun"
         )
     _run([uv, "tool", "install", "--upgrade", "graphifyy"], cwd)
+    # Graphify's own documented fix for "graphify: command not found" after a
+    # fresh install. It edits shell profiles, so it runs only when the tool is
+    # genuinely missing from PATH rather than on every install.
+    if not shutil.which("graphify"):
+        _run([uv, "tool", "update-shell"], cwd)
     graphify = _find_graphify(uv, cwd)
     if not graphify:
         raise InstallError(
-            "graphifyy was installed but the graphify executable could not be located"
+            "graphifyy was installed but the graphify executable could not be located. "
+            "Run `uv tool update-shell`, open a new terminal, and rerun"
         )
     for command in graphify_install_commands(agents, scope, graphify):
         _run(command, cwd)
