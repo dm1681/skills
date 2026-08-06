@@ -144,9 +144,18 @@ optional):
 | `AGENT_SKILLS_SUBDIR` | `skills` | directory holding `<skill>/SKILL.md` entries |
 | `AGENT_SKILLS_DEST` | `~/.claude/skills:~/.agents/skills` | colon-separated destination roots |
 | `AGENT_SKILLS_PROJECT_DIR` | `$PWD` | repo to check for local skills |
+| `AGENT_GLOBAL_INSTRUCTIONS` | `off` | `link` or `copy` to also install `global/AGENTS.md` as user-level guidance |
+| `AGENT_GLOBAL_AGENTS_FILE` | `~/.agents/AGENTS.md` | shared destination for those instructions |
+| `AGENT_GLOBAL_CLAUDE_FILE` | `~/.claude/CLAUDE.md` | Claude Code destination, which points at the shared file |
 
 The Claude hook maps `CLAUDE_PROJECT_DIR` onto `AGENT_SKILLS_PROJECT_DIR`
 automatically; set the rest only if you need to override a default.
+
+`AGENT_GLOBAL_INSTRUCTIONS` is off by default because it replaces files in the
+home directory (each is backed up into `~/.skills-backups/` first). `link`
+writes pointers back to the local checkout; `copy` writes the text itself. A
+cloned source is always installed as `copy`, since the clone is a temporary
+directory that a pointer would outlive.
 
 ## Choosing a source: vendor vs. clone
 

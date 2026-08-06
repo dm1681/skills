@@ -7,6 +7,8 @@ This repository is a version-controlled collection of agent skills in the open
 
 - `skills/<name>/SKILL.md` — a skill (plus optional `references/`, `scripts/`,
   `agents/`).
+- `global/AGENTS.md` — user-level instructions that apply to every project,
+  installed into `~/.agents/AGENTS.md` and `~/.claude/CLAUDE.md`.
 - `scripts/sync-agent-skills.sh` — agent-neutral installer that copies skills
   into every user-scope skill root (`~/.claude/skills` and the shared
   `~/.agents/skills`).
@@ -46,6 +48,26 @@ or the per-repo `SessionStart` hook. Scaffold another repo with
 `scripts/package-skills.sh`. See
 [`docs/cloud-skills-sync.md`](docs/cloud-skills-sync.md).
 
+## Global (user-level) instructions
+
+`global/AGENTS.md` holds instructions that apply to every project, not just this
+repo. Installing them is opt-in and writes two small pointer files that chain
+back here, so this checkout stays the single source of truth:
+
+    ~/.claude/CLAUDE.md  ->  ~/.agents/AGENTS.md  ->  <repo>/global/AGENTS.md
+
+```bash
+./install.sh --global-instructions
+```
+
+Both pointer files are backed up before being replaced. Use
+`--global-instructions copy` to write the instruction text into
+`~/.agents/AGENTS.md` instead of a reference — needed for agents that do not
+resolve `@path` imports, and for machines where this checkout is not present.
+The `SessionStart` sync script does the same when `AGENT_GLOBAL_INSTRUCTIONS`
+is set to `link` or `copy` (it forces `copy` when it installs from a clone,
+because the clone is a temporary directory).
+
 ## Conventions
 
 - `AGENTS.md` is the single source of agent guidance; `CLAUDE.md` imports it
@@ -69,51 +91,3 @@ itself before it starts.
   a fresh start comment naming the new head SHA instead of editing the old one,
   so the thread records every round.
 
----
-
-# Personal global instructions
-
-_Merged from `~/.claude/CLAUDE.md` on 20260727-193413. These apply to all projects (not just this repo)._
-
-## Global instructions
-
-These apply to all projects, in addition to any project-level `CLAUDE.md`.
-
-## Visualization-driven development
-
-When building a new feature, first ask whether a visualization could illustrate its effect — a plot, an overlay, a rendered artifact, a before/after chart, anything lookable or watchable. If one would:
-
-1. **Build the visualization first, before implementing the feature.** Generate it against expected, synthetic, or baseline data so it cements your understanding and states an explicit *hypothesis*: what should the result look like if the feature works?
-2. **Then implement** the feature.
-3. **Then regenerate the same visualization for real**, against actual output, and compare it to the hypothesis to confirm or refute it.
-
-Treat the visualization as the feature's hypothesis-and-check, not an afterthought. Prefer watchable/lookable artifacts (overlays, rendered media, charts, side-by-side before/after) over terminal tables when the effect is spatial or temporal. Tell the user where the artifact is saved so they can look at it.
-
-### Prefer videos to convey understanding
-
-Beyond static plots, **generate videos** (before, after, or both side-by-side) whenever they would help the user *understand* the effect — and that is most of the time, not the exception. A playhead sweeping an analysis, an overlay riding the actual footage, an animated before/after — these convey temporal and spatial behavior that a still frame cannot, and they are how the user catches errors a static artifact would hide.
-
-- **Default to producing a video when the effect is temporal, spatial, or sequential** (signals over time, tracking/overlays on media, transitions, simulations, state evolution). Only skip it when a video genuinely adds nothing over a still (e.g. a one-shot categorical snapshot) — and say so explicitly when you skip.
-- A "before" video shows the old/baseline/naive behavior; an "after" shows the new/correct behavior; **both, side-by-side or sequential, is ideal** for proving a change did what was intended.
-- Make videos *honest*: label what each panel is, and if an artifact is later found to be wrong or misleading, leave it but annotate/caption it as not-entirely-correct rather than silently deleting it.
-- Always tell the user the path, and surface the file so they can watch it.
-## graphify
-- **graphify** (`~/.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
-When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
-
-## Output shaping (ADHD reader)
-
-Assume the reader has ADHD. Shape every response — code, debugging, planning, casual — to be immediately actionable:
-
-- Lead with the next action (command/path/snippet first; context after, if at all).
-- Number multi-step work; one bounded action per step.
-- End with one concrete next action doable in under 2 minutes.
-- Restate progress each turn ("Step 3 of 5 done: X. Next: Y").
-- Give time estimates in concrete units (minutes/hours), never "some work."
-- Make finished work visible: what now works + how to try it.
-- Errors are matter-of-fact: state cause and fix, no "uh oh."
-- One issue at a time; defer tangents as a separate offer.
-- Cap lists at 5; if longer, split now/later or must/nice.
-- No preamble, no recap, no closing pleasantries.
-
-Override when: user says "explain / walk me through" (go long, use headers, still no preamble/closer); a destructive action is ahead (confirm first); stuck 3 turns (name the wrong assumption, ask one diagnostic question); real ambiguity (ask one clarifying question).
