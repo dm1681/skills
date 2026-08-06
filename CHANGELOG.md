@@ -7,6 +7,15 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Added
 
+- `viz-driven-dev`, a skill carrying the hypothesis-first visualization
+  workflow that previously lived inline in `global/AGENTS.md`. The global
+  instructions keep a short pointer, so every session stops paying for
+  guidance that only feature work needs.
+- `validate_repo.py` warns when a `SKILL.md` passes 150 lines or its
+  description lacks "Use when" trigger phrasing. Warnings do not fail the
+  run; they encode the skill conventions instead of documenting them in
+  prose.
+
 - `global/AGENTS.md` holds user-level instructions that apply to every project,
   installable with `install.sh --global-instructions` or by setting
   `AGENT_GLOBAL_INSTRUCTIONS` for the sync script. Both are opt-in. The default
@@ -30,6 +39,14 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Changed
 
+- `semantic-pr-review`'s entrypoint dropped from 212 to about 120 lines. Build
+  commands and the browser verification procedure moved to a new
+  `references/build-and-verify.md`, and prose that duplicated the other
+  references now points at them instead, so the entrypoint is a router rather
+  than a second copy.
+- The repo `AGENTS.md` and `global/AGENTS.md` are trimmed to purpose, gotchas,
+  and pointers; structure an agent can discover by listing files is no longer
+  restated.
 - `semantic-pr-review` explorers are dark-only, using Catppuccin Mocha for
   every excerpt so a preview reads identically for every viewer instead of
   shifting with the reader's system theme.
@@ -39,6 +56,17 @@ All notable changes to this repository are documented here. Versions follow
   `--source-ref` defaults to `pr.evidence_sha` when present, falling back to
   `pr.head_sha`, so a model analyzed against a snapshot other than the PR head
   still validates.
+
+### Fixed
+
+- Installing or updating graphify no longer leaves its instruction block
+  appended to pointer files this repository manages. `install_graphify` strips
+  a trailing `# graphify` section from `~/.claude/CLAUDE.md` and
+  `~/.agents/AGENTS.md` when the managed chain to `global/AGENTS.md` already
+  carries the registration, so the same instructions stop loading twice into
+  every session. Only a trailing block is touched, and only while the
+  instructions stay reachable; the section `copy` mode inlines mid-file is
+  left alone.
 
 ## [9.0.0] - 2026-08-05
 
