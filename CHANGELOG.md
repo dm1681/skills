@@ -7,6 +7,12 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Added
 
+- New `wow-addon-dev` skill covering retail World of Warcraft addon
+  development: TOC manifests and load order, the event and widget model,
+  SavedVariables, taint and secure templates, the Midnight-era secret-value
+  restrictions on combat data, the library ecosystem, performance discipline,
+  and BigWigs-packager publishing. Ships a copyable addon skeleton under
+  `assets/skeleton/` and a `scripts/check_toc.py` manifest validator.
 - `semantic-pr-review` marks every node the PR changed with a corner delta,
   so the change footprint reads at a glance in the full request path and not
   only in the PR delta view. The mark is a shape in the existing muted text
