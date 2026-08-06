@@ -7,6 +7,18 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Added
 
+- `semantic-pr-review` can now show what the PR changed, not only the
+  resulting code. Setting optional `pr.base_sha` (the merge base) makes the
+  scaffold derive, for every source in a touched file, a `PR diff` link to
+  GitHub's files-changed page anchored at the exact file and line
+  (`#diff-<sha256-of-path>R<line>` — editor URL schemes cannot open a diff
+  view, so the anchor is the working substitute), and a `diff_preview` on the
+  node: the unified hunks overlapping the code excerpt, rendered in the hover
+  card under "What the PR changed" with added/removed lines colored. An
+  unresolvable base degrades like an unusable `--cursor-root` — links omitted,
+  reason on the page — and strict verification recomputes every hunk and
+  anchor from the same base and head.
+
 - `viz-driven-dev`, a skill carrying the hypothesis-first visualization
   workflow that previously lived inline in `global/AGENTS.md`. The global
   instructions keep a short pointer, so every session stops paying for

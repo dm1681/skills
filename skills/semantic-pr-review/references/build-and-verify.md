@@ -17,6 +17,8 @@ python3 <skill-root>/scripts/scaffold_pr_explorer.py \
 
 `--source-ref` defaults to `pr.evidence_sha` when set, otherwise `pr.head_sha`. Omit `--cursor-root` to fail closed to immutable GitHub links; supply it only for a worktree on the same SHA. A remote path, a different `HEAD`, or drifted source bytes omit the editor links with a warning and still build the explorer; a link is never emitted for a file the scaffold cannot match byte for byte.
 
+Set `pr.base_sha` in the model (fetch the merge base alongside the head in workflow step 1) to add `PR diff` links and hover diff previews; a base the repository cannot resolve degrades the same way, with a warning and a page notice rather than a failed build.
+
 Create the standalone page with the bundled renderer, `scripts/render_standalone.py` — command, sandbox, and link rules in [interactive-flowchart.md](interactive-flowchart.md). Use `scripts/prepare_standalone.py` only when adapting a sandboxed iframe page produced by another renderer.
 
 ## Verification procedure
@@ -32,7 +34,7 @@ python3 <skill-root>/scripts/verify_pr_explorer.py /absolute/path/to/fragment.ht
   --strict
 ```
 
-Strict validation must compare every rendered preview byte-for-byte with its Git blob, verify labels and immutable URLs from the same range, and verify every Cursor target's worktree `HEAD` and full source bytes.
+Strict validation must compare every rendered preview byte-for-byte with its Git blob, verify labels and immutable URLs from the same range, and verify every Cursor target's worktree `HEAD` and full source bytes. When the model carries `pr.base_sha`, it also recomputes every diff preview from the same base and head and every `PR diff` anchor from the file path's SHA-256.
 
 3. In a real browser, exercise the assertions in [interactive-flowchart.md](interactive-flowchart.md) § Interaction checks: branch switching, Previous/Next navigation, node selection, dynamic source links, editor deep links, pointer entry into node tooltips, code selection, and delayed tooltip dismissal.
 4. Assert the orientation title is populated and a primary button has non-default computed font, background, and border-radius values — this catches blocked scripts and missing base styles. Compare computed styles before and after clicking Next: a node's appearance must change (an `aria-pressed` move with identical styling means selection is invisible to sighted readers), and a changed node must differ from a context node in the default view, or the legend describes a view the reader is not in.

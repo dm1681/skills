@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -96,6 +97,41 @@ def _blob_text(repo_root: Path, source_sha: str, source_path: str) -> str:
     return result.stdout.decode("utf-8")
 
 
+# Mirrors the scaffold's cap so strict verification recomputes the same
+# truncated excerpt byte for byte.
+DIFF_PREVIEW_MAX_LINES = 30
+
+
+def _diff_hunks(diff_text: str) -> list[tuple[int, int, list[str]]]:
+    """Return (new_start, new_count, lines) for each hunk in a unified diff."""
+    hunks: list[tuple[int, int, list[str]]] = []
+    lines: list[str] | None = None
+    for line in diff_text.splitlines():
+        match = re.match(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", line)
+        if match:
+            lines = [line]
+            hunks.append((int(match.group(1)), int(match.group(2) or 1), lines))
+        elif lines is not None and line[:1] in (" ", "+", "-", "\\"):
+            lines.append(line)
+    return hunks
+
+
+def _diff_excerpt(diff_text: str, start_line: int, end_line: int) -> str | None:
+    """Return the diff hunks overlapping one head-side line range."""
+    selected: list[str] = []
+    for new_start, new_count, lines in _diff_hunks(diff_text):
+        if new_start + max(new_count, 1) - 1 < start_line or new_start > end_line:
+            continue
+        selected.extend(lines)
+    if not selected:
+        return None
+    if len(selected) > DIFF_PREVIEW_MAX_LINES:
+        omitted = len(selected) - DIFF_PREVIEW_MAX_LINES
+        selected = selected[:DIFF_PREVIEW_MAX_LINES]
+        selected.append(f"… {omitted} more diff lines; open the PR diff")
+    return "\n".join(selected)
+
+
 def _cursor_target(url_path: str) -> Path:
     """Return the on-disk file a Cursor URL path addresses.
 
@@ -140,6 +176,15 @@ def _check_source_contract(
         return errors
 
     repository = model.get("pr", {}).get("repository", "")
+    # Diff links and previews exist only when the scaffold could resolve a
+    # base that is not the pre-image; recompute under the same conditions.
+    base_sha = pr.get("base_sha")
+    diff_base = None
+    if base_sha and not pr.get("evidence_sha"):
+        try:
+            diff_base = _git(repo_root, "rev-parse", f"{base_sha}^{{commit}}")
+        except (OSError, subprocess.CalledProcessError):
+            diff_base = None
     for node in model.get("nodes", []):
         node_id = node.get("id")
         sources = node.get("sources") or []
@@ -176,6 +221,20 @@ def _check_source_contract(
                 errors.append(
                     f"node {node_id} source {source_index} GitHub URL mismatch"
                 )
+            diff_url = source.get("diff_url")
+            if diff_url:
+                anchor = hashlib.sha256(
+                    source_path.encode("utf-8")
+                ).hexdigest()
+                expected_diff = (
+                    f"https://github.com/{repository}/pull/"
+                    f"{pr.get('number')}/files#diff-{anchor}R{start_line}"
+                )
+                if diff_url != expected_diff:
+                    errors.append(
+                        f"node {node_id} source {source_index} PR diff URL "
+                        "mismatch"
+                    )
 
             try:
                 blob = _blob_text(repo_root, expected_sha, source_path)
@@ -281,6 +340,30 @@ def _check_source_contract(
             errors.append(f"node {node_id} code_preview label mismatch")
         if preview.get("source_sha") != expected_sha:
             errors.append(f"node {node_id} code_preview snapshot mismatch")
+
+        diff_preview = node.get("diff_preview")
+        if isinstance(diff_preview, dict):
+            if diff_base is None:
+                errors.append(
+                    f"node {node_id} diff_preview cannot be verified "
+                    "without a resolvable pr.base_sha"
+                )
+                continue
+            expected_excerpt = _diff_excerpt(
+                _git(
+                    repo_root, "diff", diff_base, expected_sha, "--", source_path
+                ),
+                start_line,
+                end_line,
+            )
+            if diff_preview.get("code") != expected_excerpt:
+                errors.append(f"node {node_id} diff_preview bytes mismatch")
+            if diff_preview.get("base_sha") != diff_base:
+                errors.append(
+                    f"node {node_id} diff_preview base snapshot mismatch"
+                )
+            if diff_preview.get("source_sha") != expected_sha:
+                errors.append(f"node {node_id} diff_preview snapshot mismatch")
 
     return errors
 
@@ -474,6 +557,17 @@ def _check_quality_contract(text: str) -> list[str]:
             errors.append(
                 f"node {node_id} code_preview exceeds 12 lines"
             )
+
+    # Diff previews are optional model data, so the rendering markers are
+    # required only when a node actually embeds one.
+    has_diff_previews = any(
+        isinstance(node.get("diff_preview"), dict)
+        for node in model.get("nodes", [])
+    )
+    if has_diff_previews and "appendDiffLines" not in text:
+        errors.append(
+            "strict explorer embeds diff previews but does not render them"
+        )
 
     actual_handoffs: set[tuple[str, str]] = set()
     for edge in model.get("edges", []):

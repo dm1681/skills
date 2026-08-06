@@ -18,6 +18,7 @@
       --ctp-green: #a6e3a1;
       --ctp-yellow: #f9e2af;
       --ctp-peach: #fab387;
+      --ctp-red: #f38ba8;
       color: var(--foreground);
       width: 100%;
       font-size: var(--font-size-base);
@@ -298,6 +299,19 @@
       border: 0;
       white-space: inherit;
       font: inherit;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-diff-add {
+      color: var(--ctp-green);
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-diff-del {
+      color: var(--ctp-red);
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-diff-hunk {
+      color: var(--ctp-overlay-0);
+      font-style: italic;
     }
 
     #__PR_EXPLORER_ROOT_ID__ .prx-token-keyword {
@@ -753,6 +767,22 @@
         return node.sources[node.code_preview.source_index] || null;
       }
 
+      function appendDiffLines(target, source) {
+        String(source).split("\n").forEach((line, index) => {
+          if (index) target.append(document.createTextNode("\n"));
+          const span = document.createElement("span");
+          span.className = line.startsWith("+")
+            ? "prx-diff-add"
+            : line.startsWith("-")
+              ? "prx-diff-del"
+              : line.startsWith("@@")
+                ? "prx-diff-hunk"
+                : "prx-diff-context";
+          span.textContent = line;
+          target.append(span);
+        });
+      }
+
       function previewHref(source) {
         return source?.cursor_url || source?.github_url || source?.local_path || "";
       }
@@ -810,6 +840,46 @@
         pre.append(code);
         previewArea.append(labelRow, pre);
         richTooltip.append(previewArea);
+
+        const diff = node.diff_preview;
+        if (diff) {
+          const diffArea = document.createElement("div");
+          diffArea.className = "prx-tooltip-code";
+          const diffLabelRow = document.createElement("div");
+          diffLabelRow.className = "prx-tooltip-code-label";
+          const diffHeading = document.createElement("strong");
+          diffHeading.textContent = "What the PR changed";
+          const diffHref = source?.diff_url || "";
+          const diffLabel = document.createElement(diffHref ? "a" : "span");
+          if (diffHref) {
+            diffLabel.className = "prx-tooltip-source";
+            diffLabel.href = diffHref;
+            diffLabel.target = "_blank";
+            diffLabel.rel = "noopener";
+            diffLabel.setAttribute(
+              "aria-label",
+              `Open the PR diff for ${diff.source_label}`
+            );
+          }
+          const diffText = document.createElement("code");
+          diffText.textContent = "PR diff";
+          diffLabel.append(diffText);
+          if (diffHref) {
+            const diffMarker = document.createElement("span");
+            diffMarker.setAttribute("aria-hidden", "true");
+            diffMarker.textContent = "↗";
+            diffLabel.append(diffMarker);
+          }
+          diffLabelRow.append(diffHeading, diffLabel);
+
+          const diffPre = document.createElement("pre");
+          diffPre.className = "prx-code-preview prx-diff-preview";
+          const diffBlock = document.createElement("code");
+          appendDiffLines(diffBlock, diff.code);
+          diffPre.append(diffBlock);
+          diffArea.append(diffLabelRow, diffPre);
+          richTooltip.append(diffArea);
+        }
         return true;
       }
 
@@ -912,6 +982,7 @@
         node.sources.forEach((source) => {
           [
             ["GitHub", source.github_url],
+            ["PR diff", source.diff_url],
             ["Local editor", source.cursor_url],
             ["Local", source.local_path],
           ].forEach(([kind, href]) => {
