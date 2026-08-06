@@ -150,10 +150,16 @@ options, or `--non-interactive` to explicitly suppress it. `--graphify`,
 Install the launcher once and the collection follows you into every project:
 
 ```sh
-./install.sh --skill NAME        # or open the dashboard first
-skills setup-path                # writes ~/.local/bin/skills (+ skills.cmd)
-skills setup-path --add-path     # if that directory is not on PATH yet
+./install.sh --setup-path             # writes ~/.local/bin/skills (+ skills.cmd)
+./install.sh --setup-path --add-path  # ...and puts that directory on PATH
 ```
+
+Then open a new terminal. Go through `./install.sh` rather than `skills
+setup-path` on a machine that does not have the command yet: `setup-path` is
+what *creates* `skills`, so asking a fresh clone to run it is circular. Both
+spellings do the same work — the installer delegates to the same code — and
+`skills setup-path` is the right one once the command exists, for example after
+moving the checkout. Without `uv`, `python3 skills_cli.py setup-path` works too.
 
 From then on, in any repository:
 

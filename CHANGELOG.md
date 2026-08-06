@@ -28,6 +28,18 @@ All notable changes to this repository are documented here. Versions follow
   `SkillsApp.external_installers`; a test pins the two together so a registry
   entry with nothing behind it fails in CI rather than at install time.
 
+### Fixed
+
+- `./install.sh --setup-path` writes the `skills` launcher, so the command can
+  be bootstrapped on a machine that does not have it. The documented route was
+  `skills setup-path`, which is circular — `setup-path` is what creates
+  `skills` — and nothing else wrote the shim, so on a fresh clone the command
+  was unreachable and every attempt ended in `command not found`. The installer
+  is always present in a checkout, so it is the one thing that can break the
+  loop; it delegates to the same code, and `skills setup-path` remains correct
+  once the command exists. A successful install now also names the command when
+  the shim is missing, rather than leaving the gap to be discovered later.
+
 ### Changed
 
 - `semantic-pr-review` explorers are dark-only, using Catppuccin Mocha for
