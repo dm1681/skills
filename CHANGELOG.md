@@ -3,7 +3,7 @@
 All notable changes to this repository are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [8.1.0] - 2026-08-05
 
 ### Added
 
