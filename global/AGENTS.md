@@ -9,22 +9,13 @@ Install with `./install.sh --global-instructions` (see the repo `AGENTS.md`).
 
 ## Visualization-driven development
 
-When building a new feature, first ask whether a visualization could illustrate its effect — a plot, an overlay, a rendered artifact, a before/after chart, anything lookable or watchable. If one would:
+When building a feature whose effect can be seen or watched, work
+hypothesis-first with the `viz-driven-dev` skill (installed from the skills
+repo): build the visualization or video of the expected effect *before*
+implementing, then regenerate the same artifact from real output to confirm or
+refute it. Prefer videos for temporal or spatial effects, and always tell the
+user where the artifact is saved.
 
-1. **Build the visualization first, before implementing the feature.** Generate it against expected, synthetic, or baseline data so it cements your understanding and states an explicit *hypothesis*: what should the result look like if the feature works?
-2. **Then implement** the feature.
-3. **Then regenerate the same visualization for real**, against actual output, and compare it to the hypothesis to confirm or refute it.
-
-Treat the visualization as the feature's hypothesis-and-check, not an afterthought. Prefer watchable/lookable artifacts (overlays, rendered media, charts, side-by-side before/after) over terminal tables when the effect is spatial or temporal. Tell the user where the artifact is saved so they can look at it.
-
-### Prefer videos to convey understanding
-
-Beyond static plots, **generate videos** (before, after, or both side-by-side) whenever they would help the user *understand* the effect — and that is most of the time, not the exception. A playhead sweeping an analysis, an overlay riding the actual footage, an animated before/after — these convey temporal and spatial behavior that a still frame cannot, and they are how the user catches errors a static artifact would hide.
-
-- **Default to producing a video when the effect is temporal, spatial, or sequential** (signals over time, tracking/overlays on media, transitions, simulations, state evolution). Only skip it when a video genuinely adds nothing over a still (e.g. a one-shot categorical snapshot) — and say so explicitly when you skip.
-- A "before" video shows the old/baseline/naive behavior; an "after" shows the new/correct behavior; **both, side-by-side or sequential, is ideal** for proving a change did what was intended.
-- Make videos *honest*: label what each panel is, and if an artifact is later found to be wrong or misleading, leave it but annotate/caption it as not-entirely-correct rather than silently deleting it.
-- Always tell the user the path, and surface the file so they can watch it.
 ## graphify
 - **graphify** (`~/.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
 When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
