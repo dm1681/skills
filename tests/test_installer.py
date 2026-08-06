@@ -191,6 +191,44 @@ class InstallerTests(unittest.TestCase):
                 found = install._find_graphify(str(fake_uv), Path(directory))
             self.assertEqual(found, str(executable))
 
+    def test_the_installer_can_write_the_launcher_shim(self) -> None:
+        """`skills setup-path` is what creates `skills`, so a fresh machine
+        cannot use it to bootstrap. The installer is always present in a clone,
+        so it has to be able to do this or the command is unreachable."""
+        result = self.run_installer("--setup-path", "--dry-run")
+        self.assertIn("would write", result.stdout)
+        self.assertIn("skills", result.stdout)
+
+    def test_setup_path_does_not_also_install_skills(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            result = self.run_installer(
+                "--setup-path", "--dry-run", "--home", str(home)
+            )
+            self.assertNotIn("would copy", result.stdout)
+            self.assertFalse((home / ".agents").exists())
+
+    def test_the_launcher_hint_names_a_command_that_exists(self) -> None:
+        """A hint pointing at `skills setup-path` would repeat the bug."""
+        with tempfile.TemporaryDirectory() as directory:
+            hint = install.launcher_hint(Path(directory))
+            self.assertIsNotNone(hint)
+            self.assertIn("--setup-path", hint)
+            self.assertNotIn("skills setup-path", hint)
+
+    def test_no_hint_once_the_shim_is_in_place(self) -> None:
+        import skills_cli
+
+        with tempfile.TemporaryDirectory() as directory:
+            bin_dir = Path(directory)
+            shim = bin_dir / skills_cli.SHIM_NAME
+            shim.write_text("#!/bin/sh\n", encoding="utf-8")
+            shim.chmod(0o755)
+            with unittest.mock.patch.dict(
+                os.environ, {"PATH": str(bin_dir)}
+            ):
+                self.assertIsNone(install.launcher_hint(bin_dir))
+
     def test_graphify_rejects_custom_target(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             result = self.run_installer(

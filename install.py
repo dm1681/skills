@@ -612,6 +612,42 @@ def install_global_instructions(home: Path, mode: str, dry_run: bool) -> list[st
     ]
 
 
+def setup_path(args: argparse.Namespace) -> int:
+    """Write the `skills` launcher shims from the installer.
+
+    `skills setup-path` is what creates the `skills` command, so telling a
+    fresh machine to run it is circular: the command does not exist yet. This
+    entry point breaks that loop, because `./install.sh` is always available in
+    a clone. Imported here rather than at module scope because skills_cli
+    imports this module.
+    """
+    import skills_cli
+
+    return skills_cli.command_setup_path(
+        argparse.Namespace(bin=None, dry_run=args.dry_run, add_path=args.add_path)
+    )
+
+
+def launcher_hint(bin_dir: Optional[Path] = None) -> Optional[str]:
+    """One line telling the reader how to get the `skills` command, or None.
+
+    Silent when the shim is already there, so a machine that is set up never
+    sees it, and a machine that is not gets the exact command instead of
+    discovering the gap the next time it types `skills`.
+    """
+    import skills_cli
+
+    bin_dir = skills_cli.DEFAULT_BIN if bin_dir is None else bin_dir
+    if (bin_dir / skills_cli.SHIM_NAME).is_file() and shutil.which(
+        skills_cli.SHIM_NAME
+    ):
+        return None
+    return (
+        "Next: `./install.sh --setup-path --add-path` writes the `skills` "
+        "command so this works from any project."
+    )
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         description="Install this collection into shared or agent-specific skill directories."
@@ -671,6 +707,19 @@ def parser() -> argparse.ArgumentParser:
         "--non-interactive",
         action="store_true",
         help="use command-line options without opening the dashboard",
+    )
+    result.add_argument(
+        "--setup-path",
+        action="store_true",
+        help=(
+            "write the `skills` launcher shims and exit; the only way to get "
+            "that command on a machine that does not have it yet"
+        ),
+    )
+    result.add_argument(
+        "--add-path",
+        action="store_true",
+        help="with --setup-path, also add the shim directory to your PATH",
     )
     result.add_argument("--force", action="store_true")
     result.add_argument("--dry-run", action="store_true")
@@ -748,6 +797,10 @@ def execute_install(args: argparse.Namespace, selected: list[str]) -> None:
             "Next: run /setup-matt-pocock-skills once inside the target "
             "repository to finish configuring the workflows."
         )
+    if not args.dry_run:
+        hint = launcher_hint()
+        if hint:
+            print(hint)
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -758,6 +811,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         if args.list:
             print("\n".join(bundled))
             return 0
+        if args.setup_path:
+            return setup_path(args)
         if should_open_dashboard(raw_args, args, sys.stdin, sys.stdout, os.environ):
             return open_dashboard(args)
         if not raw_args:

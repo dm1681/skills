@@ -32,7 +32,9 @@ This repository is a version-controlled collection of agent skills in the open
   a test pins those two together.
 - `skills_cli.py` — the `skills` command. `setup-path` writes launcher shims
   into a `PATH` directory so `skills install NAME` works from any project and
-  defaults to a repo-level install of the current directory.
+  defaults to a repo-level install of the current directory. Bootstrap it with
+  `./install.sh --setup-path`, which delegates here: `skills setup-path` cannot
+  run on a machine that has no `skills` command yet.
 - `scripts/validate_repo.py`, `tests/` — validation and unit tests.
 
 ## Working in this repo
