@@ -15,6 +15,19 @@ All notable changes to this repository are documented here. Versions follow
   source of truth; `copy` writes the text into `~/.agents/AGENTS.md` for agents
   that do not resolve `@path` imports. Existing files are backed up first.
 
+- The dashboard groups its rows under `YOUR SKILLS` and `EXTERNAL TOOLS`, and
+  graphify is now selectable and installable from that second group instead of
+  only through the `--graphify` flag. The split is behavioural, not cosmetic:
+  an external tool follows `--scope` but ignores copy/link because its own
+  installer decides the shape, reports `PRESENT` rather than `UP TO DATE`
+  because there is no source here to diff it against, and offers `update`
+  rather than `skip` when present, since re-running an external installer
+  upgrades. The review screen names what it cannot account for — an external
+  tool's writes are neither counted nor backed up by this collection. Register
+  a tool in `install.EXTERNAL_TOOLS` and wire it in
+  `SkillsApp.external_installers`; a test pins the two together so a registry
+  entry with nothing behind it fails in CI rather than at install time.
+
 ### Changed
 
 - `semantic-pr-review` explorers are dark-only, using Catppuccin Mocha for

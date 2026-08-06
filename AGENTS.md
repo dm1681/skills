@@ -22,7 +22,14 @@ This repository is a version-controlled collection of agent skills in the open
   first install. Performs installs through `install.install_one`, so the rules
   live in one place. Its colour contract is documented at the top of the file
   and is load-bearing — one hue means one thing, and red is reserved for
-  failure so a healthy run contains none.
+  failure so a healthy run contains none. Rows are grouped into `YOUR SKILLS`
+  (this checkout's own, diffable, installed as a copy or link) and
+  `EXTERNAL TOOLS` (third-party, placed by their own CLI). The split is not
+  cosmetic: an external tool honours `--scope` but never `--mode`, cannot
+  report `UP TO DATE` because there is nothing here to diff it against, and
+  writes files this installer neither counts nor backs up. Register one in
+  `install.EXTERNAL_TOOLS` and wire it in `SkillsApp.external_installers`;
+  a test pins those two together.
 - `skills_cli.py` — the `skills` command. `setup-path` writes launcher shims
   into a `PATH` directory so `skills install NAME` works from any project and
   defaults to a repo-level install of the current directory.
