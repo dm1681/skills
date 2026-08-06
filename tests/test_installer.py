@@ -32,6 +32,29 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(expected, result.returncode, result.stdout + result.stderr)
         return result
 
+    def test_bare_invocation_without_a_terminal_refuses_to_guess(self) -> None:
+        """A bare `install.py` means "ask me". Without a usable terminal there is
+        nothing to fall back on, and installing every skill into every root would
+        silently make the choices the wizard exists to collect -- including a
+        machine-wide install of a skill marked `global_default: false`.
+
+        Reachable in practice: a pty shell such as Git Bash on Windows hides the
+        terminal from Python, so the wizard cannot start there.
+        """
+        result = self.run_installer(expected=2)
+        combined = result.stdout + result.stderr
+        self.assertIn("nothing was installed", combined)
+        self.assertIn("--non-interactive", combined)
+
+    def test_explicit_non_interactive_still_accepts_every_default(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            self.run_installer("--non-interactive", "--home", str(home))
+            for name in (SKILL, EXPLAINER_SKILL):
+                self.assertTrue(
+                    (home / ".agents" / "skills" / name / "SKILL.md").is_file()
+                )
+
     def test_default_installs_into_every_skill_root(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)

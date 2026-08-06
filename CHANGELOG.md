@@ -3,6 +3,47 @@
 All notable changes to this repository are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- The guided installer now runs two skill-selection phases instead of asking
+  for one scope. Phase one picks machine-wide skills; phase two is an opt-in
+  project install that marks anything already chosen globally as `already
+  global` and leaves it unchecked, since a project copy of an already-global
+  skill is redundant. Either phase accepts `none`, so global-only and
+  project-only installs are both normal, and one run can populate both scopes.
+- Skills can declare `global_default: false` in `agents/openai.yaml` to be
+  listed without being pre-selected for a machine-wide install. `wow-addon-dev`
+  uses it: a narrow, domain-specific skill should not reach every unrelated
+  session just because the wizard's defaults were accepted.
+- `wow-addon-dev` ships `agents/openai.yaml`, so the wizard shows a real
+  one-line summary instead of the generic `Bundled in this collection.`
+
+### Changed
+
+- `--scope` is now a scripted-install control only. The wizard no longer asks
+  it, because a single run can install into both scopes.
+
+### Fixed
+
+- A bare `./install.sh` with no usable terminal no longer installs everything
+  silently. It skipped the wizard and fell through to "every skill into every
+  root", which made exactly the choices the wizard exists to collect --
+  including a machine-wide install of a skill marked `global_default: false`.
+  It now exits with an actionable error. This is reachable in practice: a pty
+  shell such as Git Bash on Windows hides the terminal from Python, so the
+  wizard cannot start there. Explicit runs are unchanged, and
+  `--non-interactive` still accepts every default.
+- The wizard says when a terminal cannot provide arrow-key selection instead of
+  silently serving numbered prompts. Selection is checkbox-based -- Space
+  toggles, Enter confirms -- but a pty shell falls back to numbers, and nothing
+  distinguished "your terminal is limited" from "this is the interface".
+- Continuation rows in the review summary keep their alignment. A row with an
+  empty label padded the value with leading spaces, which `textwrap` strips, so
+  extra destination paths rendered flush against the left margin instead of
+  under the value column.
+
 ## [8.0.0] - 2026-08-05
 
 ### Added

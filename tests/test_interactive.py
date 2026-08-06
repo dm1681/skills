@@ -15,6 +15,11 @@ SPEC.loader.exec_module(INSTALLER)
 SKILL = "wow-addon-dev"
 EXPLAINER_SKILL = "semantic-pr-review"
 
+# Wizard answer order, with `--target` unset:
+#   agents, global skills, repo-level? [, project dir, project skills],
+#   mode, Graphify, [backup,] apply
+GLOBAL_ONLY = "\n\nn\n\nn\ny\n"
+
 
 class TTYBuffer(io.StringIO):
     def isatty(self) -> bool:
@@ -32,6 +37,15 @@ class InteractiveTests(unittest.TestCase):
             unicode=True,
             width=72,
             key_reader=lambda: next(key_stream),
+        )
+        return console, output
+
+    def scripted_console(
+        self, answers: str, width: int = 72
+    ) -> tuple[object, TTYBuffer]:
+        output = TTYBuffer()
+        console = INSTALLER.Console(
+            TTYBuffer(answers), output, color=False, unicode=False, width=width
         )
         return console, output
 
@@ -110,13 +124,45 @@ class InteractiveTests(unittest.TestCase):
         console, _ = self.navigable_console(["up", "space", "enter"])
         self.assertTrue(INSTALLER._confirm(console, "Apply this setup?", False))
 
+    def test_empty_selection_is_refused_unless_explicitly_allowed(self) -> None:
+        """Deselecting everything must not silently mean "install nothing" in a
+        prompt that requires a choice, but the skill phases do allow it."""
+        options = [("a", "A", "First."), ("b", "B", "Second.")]
+        console, output = self.navigable_console(["space", "enter", "space", "enter"])
+        # Toggling off the only default leaves an empty set, so the first Enter
+        # is rejected; the second Enter lands after 'a' is toggled back on.
+        selected = INSTALLER._select_many(console, "Required", options, ["a"])
+        self.assertEqual(["a"], selected)
+        self.assertIn("Select at least one option", output.getvalue())
+
+        console, _ = self.navigable_console(["space", "enter"])
+        self.assertEqual(
+            [],
+            INSTALLER._select_many(
+                console, "Optional", options, ["a"], allow_empty=True
+            ),
+        )
+
+    def test_none_answers_an_optional_selection_in_the_numbered_fallback(self) -> None:
+        console, output = self.scripted_console("none\n")
+        selected = INSTALLER._select_many(
+            console,
+            "Optional",
+            [("a", "A", "First."), ("b", "B", "Second.")],
+            ["a"],
+            allow_empty=True,
+        )
+        self.assertEqual([], selected)
+        self.assertIn("'none'", output.getvalue())
+
     def test_full_wizard_can_be_completed_with_navigation_keys(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             args = INSTALLER.parser().parse_args(["--home", directory])
             console, _ = self.navigable_console(
                 [
-                    "enter",  # user scope
-                    "enter",  # every skill root
+                    "enter",  # agents: every skill root
+                    "enter",  # global skills: defaults
+                    "enter",  # repo-level? No
                     "down",
                     "enter",  # link mode
                     "up",
@@ -124,9 +170,10 @@ class InteractiveTests(unittest.TestCase):
                     "enter",  # apply
                 ]
             )
-            self.assertTrue(INSTALLER.run_wizard(args, [SKILL], console))
-            self.assertEqual("user", args.scope)
+            self.assertTrue(INSTALLER.run_wizard(args, [EXPLAINER_SKILL], console))
             self.assertEqual(["universal", "claude"], args.agent)
+            self.assertEqual([EXPLAINER_SKILL], args.skill)
+            self.assertEqual([], args.project_skill)
             self.assertEqual("link", args.mode)
             self.assertFalse(args.matt_skills)
             self.assertTrue(args.graphify)
@@ -137,15 +184,8 @@ class InteractiveTests(unittest.TestCase):
         self.assertIn(EXPLAINER_SKILL, bundled)
         with tempfile.TemporaryDirectory() as directory:
             args = INSTALLER.parser().parse_args(["--home", directory])
-            output = TTYBuffer()
-            console = INSTALLER.Console(
-                # scope, agents, skills, mode, Graphify, proceed
-                TTYBuffer(f"\n\n{bundled.index(EXPLAINER_SKILL) + 1}\n\nn\ny\n"),
-                output,
-                color=False,
-                unicode=False,
-                width=72,
-            )
+            choice = bundled.index(EXPLAINER_SKILL) + 1
+            console, output = self.scripted_console(f"\n{choice}\nn\n\nn\ny\n")
             self.assertTrue(INSTALLER.run_wizard(args, bundled, console))
             self.assertEqual([EXPLAINER_SKILL], args.skill)
         rendered = output.getvalue()
@@ -159,28 +199,191 @@ class InteractiveTests(unittest.TestCase):
         offer to download them. `--matt-skills` remains the only way in."""
         with tempfile.TemporaryDirectory() as directory:
             args = INSTALLER.parser().parse_args(["--home", directory])
-            output = TTYBuffer()
-            console = INSTALLER.Console(
-                # scope, agents, skills, mode, Graphify, proceed
-                TTYBuffer("\n\n2\n\nn\ny\n"),
-                output,
-                color=False,
-                unicode=False,
-                width=72,
-            )
+            console, output = self.scripted_console("\n2\nn\n\nn\ny\n")
             self.assertTrue(
                 INSTALLER.run_wizard(args, [SKILL, EXPLAINER_SKILL], console)
             )
             self.assertEqual([EXPLAINER_SKILL], args.skill)
             self.assertFalse(args.matt_skills)
             self.assertFalse(args.graphify)
+        self.assertNotIn("mattpocock/skills", output.getvalue())
+
+    def test_numbered_fallback_explains_how_to_get_checkbox_selection(self) -> None:
+        """Arrow-key checkboxes are the intended interface. When the terminal
+        cannot provide them, the wizard must say so instead of silently serving
+        numbered prompts that look like the design."""
+        with tempfile.TemporaryDirectory() as directory:
+            args = INSTALLER.parser().parse_args(["--home", directory])
+            console, output = self.scripted_console(GLOBAL_ONLY)
+            self.assertFalse(console.supports_navigation)
+            self.assertTrue(INSTALLER.run_wizard(args, [EXPLAINER_SKILL], console))
         rendered = output.getvalue()
-        self.assertNotIn("mattpocock/skills", rendered)
+        self.assertIn("does not expose arrow keys", rendered)
+        self.assertIn("install.ps1", rendered)
+
+    def test_no_fallback_notice_when_arrow_keys_work(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = INSTALLER.parser().parse_args(["--home", directory])
+            console, output = self.navigable_console(
+                ["enter", "enter", "enter", "enter", "enter", "enter"]
+            )
+            self.assertTrue(console.supports_navigation)
+            self.assertTrue(INSTALLER.run_wizard(args, [EXPLAINER_SKILL], console))
+        self.assertNotIn("does not expose arrow keys", output.getvalue())
+
+    def test_checkbox_markers_render_for_multi_select(self) -> None:
+        """Space toggles a checkbox and Enter confirms; the marker must read as
+        a checkbox in both the Unicode and ASCII renderings."""
+        options = [("a", "A", "First."), ("b", "B", "Second.")]
+        console, output = self.navigable_console(["down", "space", "enter"])
+        self.assertEqual(
+            ["a", "b"], INSTALLER._select_many(console, "Pick", options, ["a"])
+        )
+        rendered = output.getvalue()
+        self.assertIn("■", rendered)
+        self.assertIn("□", rendered)
+        self.assertIn("Space toggle", rendered)
+        self.assertIn("Enter confirm", rendered)
+
+        ascii_output = TTYBuffer()
+        keys = iter(["down", "space", "enter"])
+        ascii_console = INSTALLER.Console(
+            TTYBuffer(),
+            ascii_output,
+            color=False,
+            unicode=False,
+            width=72,
+            key_reader=lambda: next(keys),
+        )
+        INSTALLER._select_many(ascii_console, "Pick", options, ["a"])
+        self.assertIn("[x]", ascii_output.getvalue())
+        self.assertIn("[ ]", ascii_output.getvalue())
+
+    def test_wizard_asks_no_installation_scope_question(self) -> None:
+        """Scope is no longer either/or: a run can populate both scopes, so the
+        old single scope choice would contradict the two selection phases."""
+        with tempfile.TemporaryDirectory() as directory:
+            args = INSTALLER.parser().parse_args(["--home", directory])
+            console, output = self.scripted_console(GLOBAL_ONLY)
+            self.assertTrue(INSTALLER.run_wizard(args, [EXPLAINER_SKILL], console))
+        rendered = output.getvalue()
+        self.assertNotIn("Installation scope", rendered)
+        self.assertIn("Global skills", rendered)
+        self.assertIn("Repo-level skills", rendered)
+
+    def test_domain_specific_skills_are_listed_but_not_preselected_globally(
+        self,
+    ) -> None:
+        """`global_default: false` keeps a narrow skill out of a machine-wide
+        install unless it is asked for by name."""
+        self.assertFalse(INSTALLER.skill_global_default(SKILL))
+        self.assertTrue(INSTALLER.skill_global_default(EXPLAINER_SKILL))
+        bundled = [EXPLAINER_SKILL, SKILL]
+        with tempfile.TemporaryDirectory() as directory:
+            args = INSTALLER.parser().parse_args(["--home", directory])
+            console, output = self.scripted_console(GLOBAL_ONLY)
+            self.assertTrue(INSTALLER.run_wizard(args, bundled, console))
+            self.assertEqual([EXPLAINER_SKILL], args.skill)
+        rendered = output.getvalue()
+        self.assertIn(SKILL, rendered)
+        self.assertRegex(rendered, rf"{EXPLAINER_SKILL} . recommended")
+        self.assertNotRegex(rendered, rf"{SKILL} . recommended\n")
+
+    def test_repo_phase_marks_skills_already_chosen_globally(self) -> None:
+        bundled = [EXPLAINER_SKILL, SKILL]
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory) / "home"
+            home.mkdir()
+            project = Path(directory) / "project"
+            project.mkdir()
+            args = INSTALLER.parser().parse_args(["--home", str(home)])
+            # agents, global defaults, repo yes, path, project defaults, mode,
+            # Graphify, apply
+            console, output = self.scripted_console(
+                f"\n\ny\n{project}\n\n\nn\ny\n"
+            )
+            self.assertTrue(INSTALLER.run_wizard(args, bundled, console))
+            self.assertEqual([EXPLAINER_SKILL], args.skill)
+            self.assertEqual([SKILL], args.project_skill)
+            self.assertEqual(project.resolve(), args.project_dir)
+        rendered = output.getvalue()
+        self.assertIn(f"{EXPLAINER_SKILL} - already global", rendered)
+
+    def test_declining_the_repo_phase_asks_no_project_questions(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = INSTALLER.parser().parse_args(["--home", directory])
+            console, output = self.scripted_console(GLOBAL_ONLY)
+            self.assertTrue(INSTALLER.run_wizard(args, [EXPLAINER_SKILL], console))
+            self.assertEqual([], args.project_skill)
+        self.assertNotIn("Project directory", output.getvalue())
+
+    def test_a_project_only_install_needs_no_global_selection(self) -> None:
+        bundled = [EXPLAINER_SKILL, SKILL]
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory) / "home"
+            home.mkdir()
+            project = Path(directory) / "project"
+            project.mkdir()
+            args = INSTALLER.parser().parse_args(["--home", str(home)])
+            # agents, global 'none', repo yes, path, project '2', mode, Graphify, apply
+            console, _ = self.scripted_console(f"\nnone\ny\n{project}\n2\n\nn\ny\n")
+            self.assertTrue(INSTALLER.run_wizard(args, bundled, console))
+            self.assertEqual([], args.skill)
+            self.assertEqual([SKILL], args.project_skill)
+        self.assertEqual(
+            [("Project", "project", [SKILL])],
+            INSTALLER.install_stages(args, args.skill),
+        )
+
+    def test_selecting_nothing_anywhere_makes_no_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = INSTALLER.parser().parse_args(["--home", directory])
+            # agents, global 'none', repo no
+            console, output = self.scripted_console("\nnone\nn\n")
+            self.assertFalse(INSTALLER.run_wizard(args, [EXPLAINER_SKILL], console))
+        self.assertIn("No skills selected", output.getvalue())
+
+    def test_review_lists_each_stage_with_its_destinations(self) -> None:
+        bundled = [EXPLAINER_SKILL, SKILL]
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory) / "home"
+            home.mkdir()
+            project = Path(directory) / "project"
+            project.mkdir()
+            args = INSTALLER.parser().parse_args(["--home", str(home)])
+            console, output = self.scripted_console(
+                f"\n\ny\n{project}\n\n\nn\ny\n", width=100
+            )
+            self.assertTrue(INSTALLER.run_wizard(args, bundled, console))
+        rendered = output.getvalue()
+        self.assertIn(f"Global       {EXPLAINER_SKILL}", rendered)
+        self.assertIn(f"Project      {SKILL}", rendered)
+        # Continuation rows carry the destination and stay under the value column.
+        for line in rendered.splitlines():
+            if str(home) in line and "skills" in line:
+                self.assertTrue(
+                    line.startswith(" " * 13),
+                    msg=f"destination row lost its alignment: {line!r}",
+                )
+
+    def test_scripted_installs_stay_single_scope(self) -> None:
+        """`project_skill` is set only by the wizard, so a CLI install keeps the
+        one-scope behavior `--scope` has always had."""
+        args = INSTALLER.parser().parse_args(["--scope", "project", "--skill", SKILL])
+        self.assertIsNone(args.project_skill)
+        self.assertEqual(
+            [("Skills", "project", [SKILL])],
+            INSTALLER.install_stages(args, [SKILL]),
+        )
 
     def test_skill_summaries_come_from_the_bundled_agent_interface(self) -> None:
         self.assertEqual(
             "Build portable, snapshot-verified PR flows",
             INSTALLER.skill_summary(EXPLAINER_SKILL),
+        )
+        self.assertEqual(
+            "Build retail WoW addons under taint and secret-value fences",
+            INSTALLER.skill_summary(SKILL),
         )
         self.assertEqual(
             "Bundled in this collection.",
@@ -222,19 +425,11 @@ class InteractiveTests(unittest.TestCase):
     def test_default_wizard_configures_shared_user_install(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             args = INSTALLER.parser().parse_args(["--home", directory])
-            # scope, agents, mode, Graphify=yes, proceed
-            output = TTYBuffer()
-            console = INSTALLER.Console(
-                TTYBuffer("\n\n\ny\ny\n"),
-                output,
-                color=False,
-                unicode=False,
-                width=32,
-            )
-            self.assertTrue(INSTALLER.run_wizard(args, [SKILL], console))
-            self.assertEqual("user", args.scope)
+            # agents, global skills, repo no, mode, Graphify=yes, proceed
+            console, output = self.scripted_console("\n\nn\n\ny\ny\n", width=32)
+            self.assertTrue(INSTALLER.run_wizard(args, [EXPLAINER_SKILL], console))
             self.assertEqual(["universal", "claude"], args.agent)
-            self.assertEqual([SKILL], args.skill)
+            self.assertEqual([EXPLAINER_SKILL], args.skill)
             self.assertEqual("copy", args.mode)
             self.assertFalse(args.matt_skills)
             self.assertTrue(args.graphify)
@@ -246,23 +441,34 @@ class InteractiveTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory) / "home"
             home.mkdir()
+            project = Path(directory) / "project"
+            project.mkdir()
             args = INSTALLER.parser().parse_args(["--home", str(home)])
-            # project, path, Codex, link, no Graphify, proceed
-            answers = f"2\n{directory}\n2\n2\nn\ny\n"
-            console = INSTALLER.Console(
-                TTYBuffer(answers),
-                TTYBuffer(),
-                color=False,
-                unicode=False,
-                width=72,
-            )
-            self.assertTrue(INSTALLER.run_wizard(args, [SKILL], console))
-            self.assertEqual("project", args.scope)
-            self.assertEqual(Path(directory).resolve(), args.project_dir)
+            # Codex only, global none, repo yes, path, project 1, link, no
+            # Graphify, proceed
+            console, _ = self.scripted_console(f"2\nnone\ny\n{project}\n1\n2\nn\ny\n")
+            self.assertTrue(INSTALLER.run_wizard(args, [EXPLAINER_SKILL], console))
             self.assertEqual(["codex"], args.agent)
+            self.assertEqual([], args.skill)
+            self.assertEqual([EXPLAINER_SKILL], args.project_skill)
+            self.assertEqual(project.resolve(), args.project_dir)
             self.assertEqual("link", args.mode)
-            self.assertFalse(args.matt_skills)
             self.assertFalse(args.graphify)
+
+    def test_a_missing_project_directory_is_rejected_before_continuing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory) / "home"
+            home.mkdir()
+            project = Path(directory) / "project"
+            project.mkdir()
+            missing = Path(directory) / "not-there"
+            args = INSTALLER.parser().parse_args(["--home", str(home)])
+            console, output = self.scripted_console(
+                f"\n\ny\n{missing}\n{project}\n\n\nn\ny\n"
+            )
+            self.assertTrue(INSTALLER.run_wizard(args, [EXPLAINER_SKILL], console))
+            self.assertEqual(project.resolve(), args.project_dir)
+        self.assertIn("Directory does not exist", output.getvalue())
 
     def test_status_output_wraps_long_paths_in_very_narrow_terminal(self) -> None:
         output = TTYBuffer()
@@ -276,22 +482,15 @@ class InteractiveTests(unittest.TestCase):
     def test_cancel_returns_without_changes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             args = INSTALLER.parser().parse_args(["--home", directory])
-            # default scope, agent, mode, no Graphify, cancel at review
-            output = TTYBuffer()
-            console = INSTALLER.Console(
-                TTYBuffer("\n\n\nn\nn\n"),
-                output,
-                color=False,
-                unicode=False,
-                width=72,
-            )
-            self.assertFalse(INSTALLER.run_wizard(args, [SKILL], console))
+            # agents, global skills, repo no, mode, no Graphify, cancel at review
+            console, output = self.scripted_console("\n\nn\n\nn\nn\n")
+            self.assertFalse(INSTALLER.run_wizard(args, [EXPLAINER_SKILL], console))
             self.assertIn("No changes made", output.getvalue())
 
     def stale_home(self, directory: str) -> Path:
         """A home directory holding an installed skill that differs from this release."""
         home = Path(directory)
-        destination = home / ".agents" / "skills" / SKILL
+        destination = home / ".agents" / "skills" / EXPLAINER_SKILL
         destination.mkdir(parents=True)
         (destination / "SKILL.md").write_text("stale local edit\n", encoding="utf-8")
         return home
@@ -306,16 +505,9 @@ class InteractiveTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             home = self.stale_home(directory)
             args = INSTALLER.parser().parse_args(["--home", str(home)])
-            output = TTYBuffer()
-            # scope, agents, mode, no Graphify, back up, apply
-            console = INSTALLER.Console(
-                TTYBuffer("\n\n\nn\ny\ny\n"),
-                output,
-                color=False,
-                unicode=False,
-                width=72,
-            )
-            self.assertTrue(INSTALLER.run_wizard(args, [SKILL], console))
+            # agents, global skills, repo no, mode, no Graphify, back up, apply
+            console, output = self.scripted_console("\n\nn\n\nn\ny\ny\n")
+            self.assertTrue(INSTALLER.run_wizard(args, [EXPLAINER_SKILL], console))
             self.assertTrue(args.force)
             rendered = output.getvalue()
             self.assertIn("Existing installations", rendered)
@@ -325,34 +517,20 @@ class InteractiveTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             home = self.stale_home(directory)
             for root in (".claude",):
-                destination = home / root / "skills" / SKILL
+                destination = home / root / "skills" / EXPLAINER_SKILL
                 destination.mkdir(parents=True)
                 (destination / "SKILL.md").write_text("stale\n", encoding="utf-8")
             args = INSTALLER.parser().parse_args(["--home", str(home)])
-            output = TTYBuffer()
-            console = INSTALLER.Console(
-                TTYBuffer("\n\n\nn\ny\ny\n"),
-                output,
-                color=False,
-                unicode=False,
-                width=72,
-            )
-            self.assertTrue(INSTALLER.run_wizard(args, [SKILL], console))
+            console, output = self.scripted_console("\n\nn\n\nn\ny\ny\n")
+            self.assertTrue(INSTALLER.run_wizard(args, [EXPLAINER_SKILL], console))
             self.assertIn("2 installed skill paths differ from", output.getvalue())
 
     def test_declining_the_backup_confirmation_makes_no_changes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             home = self.stale_home(directory)
             args = INSTALLER.parser().parse_args(["--home", str(home)])
-            output = TTYBuffer()
-            console = INSTALLER.Console(
-                TTYBuffer("\n\n\nn\nn\n"),
-                output,
-                color=False,
-                unicode=False,
-                width=72,
-            )
-            self.assertFalse(INSTALLER.run_wizard(args, [SKILL], console))
+            console, output = self.scripted_console("\n\nn\n\nn\nn\n")
+            self.assertFalse(INSTALLER.run_wizard(args, [EXPLAINER_SKILL], console))
             self.assertFalse(args.force)
             self.assertIn("No changes made", output.getvalue())
 

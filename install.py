@@ -214,6 +214,14 @@ class Console:
         label_width = max(len(label) for label, _ in rows)
         if self.width >= 68:
             for label, value in rows:
+                # An empty label is a continuation row (an extra destination for
+                # the row above). textwrap strips leading spaces, so the padding
+                # has to travel as an indent rather than inside the text.
+                if not label:
+                    self.wrap(
+                        value, indent=4 + label_width, break_long_words=True
+                    )
+                    continue
                 prefix = f"{label:<{label_width}}  "
                 self.wrap(
                     prefix + value,
@@ -223,7 +231,8 @@ class Console:
                 )
         else:
             for label, value in rows:
-                self.write(self.styled(f"  {label}", self.DIM))
+                if label:
+                    self.write(self.styled(f"  {label}", self.DIM))
                 self.wrap(value, indent=4, break_long_words=True)
 
     @contextmanager
@@ -434,6 +443,7 @@ def _navigate_options(
     options: list[tuple[str, str, str]],
     defaults: set[int],
     multiple: bool,
+    allow_empty: bool = False,
 ) -> set[int]:
     selected = set(defaults)
     current = min(selected) if selected else 0
@@ -470,7 +480,7 @@ def _navigate_options(
                 elif key == "enter":
                     if not multiple:
                         selected = {current}
-                    if selected:
+                    if selected or allow_empty:
                         break
                     warning = "Select at least one option before continuing."
     finally:
@@ -522,15 +532,19 @@ def _select_many(
     title: str,
     options: list[tuple[str, str, str]],
     defaults: list[str],
+    allow_empty: bool = False,
 ) -> list[str]:
-    console.section(title)
+    if title:
+        console.section(title)
     if console.supports_navigation:
         default_indexes = {
             index
             for index, (value, _, _) in enumerate(options)
             if value in defaults
         }
-        selected = _navigate_options(console, options, default_indexes, True)
+        selected = _navigate_options(
+            console, options, default_indexes, True, allow_empty
+        )
         return [
             value
             for index, (value, _, _) in enumerate(options)
@@ -543,12 +557,14 @@ def _select_many(
         if recommended:
             indexes.append(str(index))
         console.option(index, label, description, recommended)
-    default = ",".join(indexes) or "1"
+    default = ",".join(indexes) or ("none" if allow_empty else "1")
+    prompt = "Choose one or more numbers, separated by commas"
+    if allow_empty:
+        prompt += ", 'all', or 'none'"
     while True:
-        answer = console.ask(
-            "Choose one or more numbers, separated by commas",
-            default,
-        )
+        answer = console.ask(prompt, default)
+        if allow_empty and answer.lower() in {"none", "skip"}:
+            return []
         if answer.lower() == "all":
             return [value for value, _, _ in options]
         tokens = [
@@ -634,6 +650,24 @@ def skill_summary(name: str) -> str:
                 if summary:
                     return summary
     return "Bundled in this collection."
+
+
+def skill_global_default(name: str) -> bool:
+    """Whether the wizard pre-selects a skill for a machine-wide install.
+
+    A narrow, domain-specific skill opts out with `global_default: false` in its
+    agent interface file. It stays listed and selectable; it just is not checked
+    by default, because loading it everywhere costs every unrelated session the
+    skill's description for no benefit.
+    """
+    interface = SOURCE_ROOT / name / "agents" / "openai.yaml"
+    if interface.is_file():
+        for line in interface.read_text(encoding="utf-8").splitlines():
+            key, separator, value = line.strip().partition(":")
+            if key == "global_default" and separator:
+                setting = value.strip().strip('"').strip("'").lower()
+                return setting not in {"false", "no", "0", "off"}
+    return True
 
 
 def expand_agents(values: Iterable[str]) -> list[str]:
@@ -908,22 +942,82 @@ def destination_matches_mode(destination: Path, mode: str) -> bool:
     return destination.is_symlink() if mode == "link" else not destination.is_symlink()
 
 
-def _replacement_paths(args: argparse.Namespace, skills: list[str]) -> list[Path]:
-    roots = resolve_roots(
-        args.agent,
-        args.scope,
-        args.home,
-        args.project_dir,
-        args.target,
-    )
+def stage_roots(args: argparse.Namespace, scope: str) -> list[Path]:
+    return resolve_roots(args.agent, scope, args.home, args.project_dir, args.target)
+
+
+def install_stages(
+    args: argparse.Namespace, selected: list[str]
+) -> list[tuple[str, str, list[str]]]:
+    """The `(label, scope, skills)` installs this run performs, in order.
+
+    A run can populate both scopes. The wizard sets `project_skill` to express
+    its second selection phase; a scripted install leaves it unset and keeps the
+    single-scope behavior that `--scope` has always had.
+    """
+    project_selected = getattr(args, "project_skill", None)
+    if args.target is not None or project_selected is None:
+        return [("Skills", args.scope, selected)]
+    stages: list[tuple[str, str, list[str]]] = []
+    if selected:
+        stages.append(("Global", "user", selected))
+    if project_selected:
+        stages.append(("Project", "project", project_selected))
+    return stages
+
+
+def _replacement_paths(
+    args: argparse.Namespace, stages: list[tuple[str, str, list[str]]]
+) -> list[Path]:
     paths: list[Path] = []
-    for root in roots:
-        for skill_name in skills:
-            destination = root / skill_name
-            exists = destination.exists() or destination.is_symlink()
-            if exists and not trees_equal(destination, SOURCE_ROOT / skill_name):
-                paths.append(destination)
+    for _, scope, skills in stages:
+        for root in stage_roots(args, scope):
+            for skill_name in skills:
+                destination = root / skill_name
+                exists = destination.exists() or destination.is_symlink()
+                if exists and not trees_equal(destination, SOURCE_ROOT / skill_name):
+                    paths.append(destination)
     return paths
+
+
+def _select_project_skills(
+    console: Console,
+    args: argparse.Namespace,
+    bundled: list[str],
+) -> list[str]:
+    """Second selection phase: skills installed inside one project directory.
+
+    Skills already chosen for the machine-wide install are marked and left
+    unchecked, because a project copy of an already-global skill is redundant.
+    Selecting one anyway is allowed: pinning a project to this checkout's
+    version is a legitimate reason to duplicate it.
+    """
+    console.section("Repo-level skills")
+    if not _confirm(console, "Also install into one project directory?", False):
+        return []
+    while True:
+        entered = console.ask(
+            "Project directory",
+            str(args.project_dir.expanduser().resolve()),
+        )
+        project_dir = Path(entered).expanduser().resolve()
+        if project_dir.is_dir():
+            args.project_dir = project_dir
+            break
+        console.warning(f"Directory does not exist: {project_dir}")
+    already_global = set(args.skill or [])
+    options = [
+        (
+            name,
+            f"{name} - already global" if name in already_global else name,
+            skill_summary(name),
+        )
+        for name in bundled
+    ]
+    defaults = [name for name in bundled if name not in already_global]
+    # Title omitted: the "Repo-level skills" section header above already frames
+    # this list, and a second header would read as a separate step.
+    return _select_many(console, "", options, defaults, allow_empty=True)
 
 
 def run_wizard(
@@ -933,33 +1027,18 @@ def run_wizard(
 ) -> bool:
     """Collect installer choices and return whether installation should proceed."""
     console.header()
-
-    if args.target is None:
-        args.scope = _select_one(
-            console,
-            "Installation scope",
-            [
-                ("user", "This user", "Available from projects on this machine."),
-                (
-                    "project",
-                    "One project",
-                    "Stored inside a project so the setup stays local.",
-                ),
-            ],
-            args.scope,
+    if not console.supports_navigation:
+        # Selection normally uses arrow keys with Space to toggle checkboxes.
+        # A pty-based shell (Git Bash / mintty on Windows) hides the console
+        # from Python, so say why the prompts look different rather than
+        # silently serving the lesser interface.
+        console.note(
+            "This terminal does not expose arrow keys, so selection uses "
+            "numbered prompts. For checkbox selection, run the installer from "
+            "a native console: install.ps1 in PowerShell or Windows Terminal."
         )
-        if args.scope == "project":
-            while True:
-                entered = console.ask(
-                    "Project directory",
-                    str(args.project_dir.expanduser().resolve()),
-                )
-                project_dir = Path(entered).expanduser().resolve()
-                if project_dir.is_dir():
-                    args.project_dir = project_dir
-                    break
-                console.warning(f"Directory does not exist: {project_dir}")
-    else:
+
+    if args.target is not None:
         console.section("Installation target")
         console.note(str(args.target.expanduser().resolve()))
 
@@ -987,17 +1066,37 @@ def run_wizard(
         agent_defaults,
     )
 
-    if len(bundled) == 1:
-        args.skill = bundled.copy()
-        console.section("Skills")
-        console.note(f"Install {bundled[0]}")
-    else:
+    if args.target is not None:
+        # A custom target is one explicit directory, so there is no global or
+        # project distinction left to draw.
         args.skill = _select_many(
             console,
             "Skills",
             [(name, name, skill_summary(name)) for name in bundled],
             args.skill or bundled,
         )
+    else:
+        global_defaults = args.skill or [
+            name for name in bundled if skill_global_default(name)
+        ]
+        # Section titles are written unwrapped, so the framing sentence travels
+        # as a note that a narrow terminal can still fold.
+        console.section("Global skills")
+        console.note("Available from every project on this machine.")
+        args.skill = _select_many(
+            console,
+            "",
+            [(name, name, skill_summary(name)) for name in bundled],
+            global_defaults,
+            allow_empty=True,
+        )
+        args.project_skill = _select_project_skills(console, args, bundled)
+        if not args.skill and not args.project_skill:
+            # Stop before the remaining questions: with nothing to install, mode
+            # and Graphify have nothing to apply to.
+            console.write()
+            console.note("No skills selected. No changes made.")
+            return False
 
     args.mode = _select_one(
         console,
@@ -1025,7 +1124,8 @@ def run_wizard(
         args.graphify,
     )
 
-    differing = _replacement_paths(args, args.skill)
+    stages = install_stages(args, args.skill)
+    differing = _replacement_paths(args, stages)
     if differing and not args.force:
         console.section("Existing installations")
         many = len(differing) != 1
@@ -1042,21 +1142,15 @@ def run_wizard(
             return False
         args.force = True
 
-    roots = resolve_roots(
-        args.agent,
-        args.scope,
-        args.home,
-        args.project_dir,
-        args.target,
-    )
     console.section("Review")
-    console.summary(
+    rows: list[tuple[str, str]] = [("Agents", ", ".join(args.agent))]
+    for label, scope, skills in stages:
+        rows.append((label, ", ".join(skills)))
+        for root in stage_roots(args, scope):
+            rows.append(("", str(root)))
+    rows.extend(
         [
-            ("Scope", args.scope if args.target is None else "custom target"),
-            ("Agents", ", ".join(args.agent)),
-            ("Skills", ", ".join(args.skill)),
             ("Mode", args.mode),
-            ("Destination", ", ".join(str(root) for root in roots)),
             (
                 "Matt skills",
                 "install all" if args.matt_skills else "skip",
@@ -1064,6 +1158,7 @@ def run_wizard(
             ("Graphify", "install and configure" if args.graphify else "skip"),
         ]
     )
+    console.summary(rows)
     if not _confirm(console, "Apply this setup?", True):
         console.write()
         console.note("No changes made.")
@@ -1192,6 +1287,9 @@ def parser() -> argparse.ArgumentParser:
         help="skip Matt Pocock skills in the interactive wizard",
     )
     result.set_defaults(matt_skills=None)
+    # Set only by the wizard's second selection phase. `None` means "this run has
+    # no project phase", which keeps scripted installs single-scope.
+    result.set_defaults(project_skill=None)
     interaction = result.add_mutually_exclusive_group()
     interaction.add_argument(
         "--interactive",
@@ -1220,28 +1318,32 @@ def execute_install(
     selected: list[str],
     console: Optional[Console],
 ) -> None:
-    roots = resolve_roots(
-        args.agent, args.scope, args.home, args.project_dir, args.target
-    )
+    stages = install_stages(args, selected)
     if console:
         console.section("Installing" if not args.dry_run else "Preview")
-    for root in roots:
-        for skill_name in selected:
-            result = install_one(
-                SOURCE_ROOT / skill_name,
-                root,
-                args.mode,
-                args.force,
-                args.dry_run,
-            )
-            if console:
-                if result.startswith("installed"):
-                    console.success(result)
+    for label, scope, skills in stages:
+        if console and len(stages) > 1:
+            console.note(f"{label}:")
+        for root in stage_roots(args, scope):
+            for skill_name in skills:
+                result = install_one(
+                    SOURCE_ROOT / skill_name,
+                    root,
+                    args.mode,
+                    args.force,
+                    args.dry_run,
+                )
+                if console:
+                    if result.startswith("installed"):
+                        console.success(result)
+                    else:
+                        console.note(result)
                 else:
-                    console.note(result)
-            else:
-                print(result)
-        write_receipt(root, selected, args.mode, args.dry_run)
+                    print(result)
+            write_receipt(root, skills, args.mode, args.dry_run)
+    # Third-party installs follow `--scope`, which the two-phase wizard leaves at
+    # its `user` default: these are machine-level tools, not per-project copies.
+    roots = stage_roots(args, args.scope)
     if args.matt_skills:
         if console:
             console.section("Matt Pocock skills")
@@ -1298,6 +1400,20 @@ def main(argv: Optional[list[str]] = None) -> int:
             console = Console(sys.stdin, sys.stdout, color=False if args.no_color else None)
             if not run_wizard(args, bundled, console):
                 return 0
+        elif not raw_args:
+            # A bare invocation means "ask me". If the guided setup cannot run,
+            # there is nothing to fall back on: installing every skill into every
+            # root by default would silently make choices the user came here to
+            # make, including machine-wide installs of narrow skills that the
+            # wizard deliberately leaves unchecked.
+            raise InstallError(
+                "the guided setup needs an interactive terminal, and no options "
+                "were given, so nothing was installed. Choose explicitly, for "
+                "example `--skill NAME`, or pass --non-interactive to accept "
+                "every default. On Windows, a pty shell such as Git Bash hides "
+                "the terminal from Python: run install.ps1 in PowerShell or "
+                "Windows Terminal for the guided setup."
+            )
         selected = args.skill or bundled
         unknown = sorted(set(selected) - set(bundled))
         if unknown:

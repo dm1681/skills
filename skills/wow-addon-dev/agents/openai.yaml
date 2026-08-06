@@ -1,0 +1,8 @@
+interface:
+  display_name: "WoW Addon Development"
+  short_description: "Build retail WoW addons under taint and secret-value fences"
+  default_prompt: "Use $wow-addon-dev to verify the live client build, triage whether this addon idea is still possible on modern retail, scaffold a loadable addon, and validate the TOC before launching the client."
+install:
+  # Narrow, domain-specific: list it in the wizard without pre-checking it for a
+  # machine-wide install. Project-scope installs are the intended path.
+  global_default: false
