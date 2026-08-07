@@ -125,8 +125,39 @@ def available_skills() -> list[str]:
     )
 
 
+def skill_frontmatter_description(name: str) -> str:
+    """The `description:` from a skill's SKILL.md frontmatter, or "".
+
+    Every skill has one — it is what an agent matches on to decide whether to
+    load the skill — so it is the reliable fallback when a skill ships no agent
+    interface file. Deliberately naive about YAML: the frontmatter this repo
+    validates is one `key: value` per line, and taking a dependency to read
+    three lines would cost every scripted path its dependency-free promise.
+    """
+    entrypoint = SOURCE_ROOT / name / "SKILL.md"
+    if not entrypoint.is_file():
+        return ""
+    lines = entrypoint.read_text(encoding="utf-8").splitlines()
+    if not lines or lines[0].strip() != "---":
+        return ""
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        key, separator, value = line.partition(":")
+        if key.strip() == "description" and separator:
+            return value.strip().strip('"').strip("'")
+    return ""
+
+
 def skill_summary(name: str) -> str:
-    """Return one short line describing a bundled skill."""
+    """Return one short line describing a bundled skill.
+
+    Prefers the agent interface file's `short_description`, which is written to
+    be one line. Falls back to the first sentence of the SKILL.md description,
+    because a skill without an interface file is not a skill without a
+    description, and "Bundled in this collection." tells a reader nothing they
+    could choose on.
+    """
     interface = SOURCE_ROOT / name / "agents" / "openai.yaml"
     if interface.is_file():
         for line in interface.read_text(encoding="utf-8").splitlines():
@@ -135,7 +166,28 @@ def skill_summary(name: str) -> str:
                 summary = value.strip().strip('"').strip("'")
                 if summary:
                     return summary
+    description = skill_frontmatter_description(name)
+    if description:
+        return first_clause(description)
     return "Bundled in this collection."
+
+
+def first_clause(description: str, limit: int = 96) -> str:
+    """The opening gist of a trigger description, as one short line.
+
+    A `description:` is written for matching, not for reading: it states the
+    gist, then a dash, then everything the gist glossed over, then "Use when"
+    and the trigger phrasing. The first *sentence* is therefore not short — for
+    one bundled skill it is 250 characters — so cut at the first clause break
+    too, whichever comes first, and cap what survives at a word boundary. These
+    lines sit in fixed-width UI rows and in the cloud session offer, where one
+    long entry buries the next.
+    """
+    cut = re.search(r"(?<=[.!?])\s|\s[-–—]\s", description)
+    clause = (description[: cut.start()] if cut else description).strip()
+    if len(clause) <= limit:
+        return clause
+    return clause[:limit].rsplit(" ", 1)[0].rstrip(",;:") + "…"
 
 
 def skill_global_default(name: str) -> bool:
@@ -644,6 +696,145 @@ def setup_path(args: argparse.Namespace) -> int:
     )
 
 
+CLOUD_DECLINED = Path(".claude") / ".skills-cloud-declined"
+
+
+def cloud_installed_skills(home: Path) -> list[str]:
+    """Bundled skills already present in this home's user-scope roots."""
+    roots = resolve_roots(["all"], "user", home, home, None)
+    present = {
+        name
+        for name in available_skills()
+        for root in roots
+        if (root / name).exists() or (root / name).is_symlink()
+    }
+    return sorted(present)
+
+
+def cloud_offer(home: Path, repo: Path = REPO_ROOT) -> Optional[str]:
+    """The session-start message that asks the user what to install, or None.
+
+    None means stay silent, and silence is the common case by design: this text
+    is prepended to a fresh cloud session before the user has said anything, so
+    it has to earn its place in the context window every time. It earns it only
+    when the collection is reachable and nothing from it is installed yet.
+
+    The offer deliberately stops at asking. A cloud setup script runs before
+    anyone is present to consult, so choosing there means choosing for the user
+    and re-choosing on every environment rebuild; handing the catalog to the
+    agent instead moves the decision to the one moment the user is actually in
+    the room. That is also why declining is a file rather than a flag — it has
+    to outlive a session that no longer exists.
+    """
+    if (home / CLOUD_DECLINED).exists():
+        return None
+    if cloud_installed_skills(home):
+        return None
+    # as_posix throughout: these lines are commands the agent will run, and it
+    # runs them in the POSIX shell of a cloud container. Mixing separators into
+    # something meant to be copied reads as a mistake even where it would work.
+    installer = f"{repo.as_posix()}/install.sh"
+    names = available_skills()
+    width = max(len(name) for name in names)
+    # Spell the suggested set out rather than pointing at --non-interactive,
+    # which means "every bundled skill" and would machine-wide install exactly
+    # the narrow ones global_default marks as not wanting that. A generated
+    # list cannot drift from the flag the way a sentence about it would.
+    suggested = "".join(
+        f" --skill {name}" for name in names if skill_global_default(name)
+    )
+    lines = [
+        f"[skills] dm1681/skills is available at {repo.as_posix()}, and none of",
+        "its skills are installed in this session yet.",
+        "",
+        "Ask the user which they want, then run the matching command below.",
+        "Install nothing before they answer.",
+        "",
+    ]
+    for name in names:
+        scope = (
+            "suggested machine-wide"
+            if skill_global_default(name)
+            else "narrow; project scope on request"
+        )
+        lines.append(f"  {name.ljust(width)}  ({scope})")
+        lines.append(f"      {skill_summary(name)}")
+    lines += [
+        "",
+        "Also available, neither bundled here nor installed by default:",
+        f"  {'graphify'.ljust(width)}  external, needs uv",
+        f"      {external_tool('graphify').summary}",
+        f"  {'matt-skills'.ljust(width)}  external, needs npx",
+        "      mattpocock/skills engineering workflows. Its `code-review` shares",
+        "      a name with Claude's built-in and replaces it for the session.",
+        "",
+        "Commands:",
+        f"  everything suggested   {installer}{suggested}",
+        f"  named skills only      {installer} --skill NAME [--skill NAME ...]",
+        f"  this repo only         {installer} --skill NAME --scope project",
+        f"  global instructions    {installer} --global-instructions",
+        f"  graphify               {installer} --graphify",
+        f"  matt-skills            {installer} --matt-skills",
+        f"  nothing, stop asking   touch {(home / CLOUD_DECLINED).as_posix()}",
+        "",
+        "Flags combine, and passing any of them installs without prompting.",
+        f"  {installer} --non-interactive  installs EVERY bundled skill,",
+        "  the narrow ones included, so prefer naming skills over that.",
+    ]
+    return "\n".join(lines)
+
+
+def cloud_bootstrap(home: Path, repo: Path = REPO_ROOT, dry_run: bool = False) -> str:
+    """Register the cloud session-start hook in this home's Claude settings.
+
+    Installs no skills, on purpose: this is the whole point of the flag. A cloud
+    setup script that installs a fixed set has to be edited every time that set
+    should change, and the copy pasted into the environment's setup field drifts
+    from the repository the moment anything moves. Registering a hook instead
+    means the setup field holds three lines that never change again, and what is
+    offered is whatever the checkout says today.
+    """
+    hook = f"{repo.as_posix()}/scripts/cloud-session-start.sh"
+    settings = home / ".claude" / "settings.json"
+    existing: dict = {}
+    if settings.is_file():
+        try:
+            loaded = json.loads(settings.read_text(encoding="utf-8"))
+        except ValueError:
+            # Salvage rather than overwrite: this file is the user's, and a
+            # syntax error in it is not permission to discard their hooks.
+            return (
+                f"{settings} is not valid JSON; left untouched. Add a SessionStart "
+                f"hook running {hook} by hand, or move the file aside and re-run."
+            )
+        if isinstance(loaded, dict):
+            existing = loaded
+    hooks = existing.setdefault("hooks", {})
+    if not isinstance(hooks, dict):
+        return f"{settings} has a non-object 'hooks' key; left untouched."
+    events = hooks.setdefault("SessionStart", [])
+    if not isinstance(events, list):
+        return f"{settings} has a non-list 'SessionStart' key; left untouched."
+    # Compare parsed commands, not serialized JSON: json.dumps escapes a
+    # backslash, so testing the raw path against the dump never matches the
+    # value this function itself just wrote, and every run appended a duplicate.
+    registered = {
+        item.get("command")
+        for entry in events
+        if isinstance(entry, dict)
+        for item in entry.get("hooks", [])
+        if isinstance(item, dict)
+    }
+    if hook in registered:
+        return f"unchanged    {settings}"
+    events.append({"hooks": [{"type": "command", "command": hook}]})
+    if dry_run:
+        return f"would write  {settings}"
+    settings.parent.mkdir(parents=True, exist_ok=True)
+    settings.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+    return f"wrote        {settings}"
+
+
 def launcher_hint(bin_dir: Optional[Path] = None) -> Optional[str]:
     """One line telling the reader how to get the `skills` command, or None.
 
@@ -776,6 +967,20 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="with --setup-path, also add the shim directory to your PATH",
     )
+    result.add_argument(
+        "--cloud-bootstrap",
+        action="store_true",
+        help=(
+            "register the cloud session-start hook and exit, installing no "
+            "skills; for a cloud environment setup script, which runs before "
+            "anyone is there to choose"
+        ),
+    )
+    result.add_argument(
+        "--cloud-offer",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
     result.add_argument("--force", action="store_true")
     result.add_argument("--dry-run", action="store_true")
     result.add_argument("--list", action="store_true", help="list bundled skills and exit")
@@ -870,6 +1075,16 @@ def main(argv: Optional[list[str]] = None) -> int:
         bundled = available_skills()
         if args.list:
             print("\n".join(bundled))
+            return 0
+        if args.cloud_offer:
+            # Ahead of the dashboard check and the bare-invocation guard: this
+            # runs from a hook with no terminal, and silence is a valid answer.
+            offer = cloud_offer(args.home.expanduser())
+            if offer:
+                print(offer)
+            return 0
+        if args.cloud_bootstrap:
+            print(cloud_bootstrap(args.home.expanduser(), dry_run=args.dry_run))
             return 0
         if args.setup_path:
             return setup_path(args)

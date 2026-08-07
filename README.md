@@ -9,6 +9,7 @@ self-contained under [`skills/`](skills/).
 | Skill | Purpose |
 | --- | --- |
 | `semantic-pr-review` | Explain a pull request as a source-verified semantic hierarchy and interactive flowchart. |
+| `viz-driven-dev` | Build the plot, overlay, or video that would show a feature's effect before implementing it, then regenerate it from real output. |
 | `wow-addon-dev` | Build, debug, package, and publish retail World of Warcraft addons under the taint and secret-value fences. |
 
 ## Semantic PR review
@@ -217,8 +218,12 @@ Useful options:
 --global-instructions [link|copy]
                              install global/AGENTS.md as user-level guidance
                              in ~/.agents/AGENTS.md and ~/.claude/CLAUDE.md
+--cloud-bootstrap            register the cloud SessionStart hook and exit,
+                             installing nothing; for a cloud environment's
+                             setup script, which runs before anyone can choose
 --interactive                force the dashboard open
---non-interactive            never open it; useful for scripts and CI
+--non-interactive            never open it; installs EVERY bundled skill unless
+                             --skill narrows it, narrow ones included
 --target PATH                override the resolved skills directory
 --force                      replace an existing differing skill after backup
 --dry-run
@@ -353,7 +358,28 @@ git checkout v8.1.0
 ## Cloud sessions (agent-agnostic)
 
 Cloud/web sessions run in a fresh, ephemeral container that does not carry your
-local user-scope skills. The agent-neutral installer
+local user-scope skills.
+
+The lightest way to cover a whole cloud **environment** is three lines in its
+**Setup script** field, which never need editing again:
+
+```bash
+rm -rf /opt/agent-skills
+git clone --depth 1 https://github.com/dm1681/skills /opt/agent-skills || true
+/opt/agent-skills/install.sh --cloud-bootstrap || true
+```
+
+`--cloud-bootstrap` installs no skills. It registers a user-scope `SessionStart`
+hook ([`scripts/cloud-session-start.sh`](scripts/cloud-session-start.sh)) that,
+on a session where none of these skills are installed, hands the agent the
+catalog and the exact install commands and tells it to ask you first. A setup
+script runs before anyone is present to consult, so choosing there means
+choosing for you; choosing in the session puts it back where it belongs. Silence
+it for good with `touch ~/.claude/.skills-cloud-declined`, or for an environment
+with `AGENT_SKILLS_CLOUD_OFFER=off`.
+
+For an environment where nobody will answer — CI, say — install a fixed set
+instead. The agent-neutral installer
 [`scripts/sync-agent-skills.sh`](scripts/sync-agent-skills.sh) copies these
 skills into every agent's skill root (`~/.claude/skills` for Claude Code and the
 shared `~/.agents/skills` for Codex/Cursor/Copilot) so whichever agent runs the
