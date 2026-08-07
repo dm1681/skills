@@ -37,18 +37,6 @@ All notable changes to this repository are documented here. Versions follow
   `SkillsApp.external_installers`; a test pins the two together so a registry
   entry with nothing behind it fails in CI rather than at install time.
 
-### Fixed
-
-- `./install.sh --setup-path` writes the `skills` launcher, so the command can
-  be bootstrapped on a machine that does not have it. The documented route was
-  `skills setup-path`, which is circular — `setup-path` is what creates
-  `skills` — and nothing else wrote the shim, so on a fresh clone the command
-  was unreachable and every attempt ended in `command not found`. The installer
-  is always present in a checkout, so it is the one thing that can break the
-  loop; it delegates to the same code, and `skills setup-path` remains correct
-  once the command exists. A successful install now also names the command when
-  the shim is missing, rather than leaving the gap to be discovered later.
-
 ### Changed
 
 - `semantic-pr-review`'s entrypoint dropped from 212 to about 120 lines. Build
@@ -70,6 +58,36 @@ All notable changes to this repository are documented here. Versions follow
   still validates.
 
 ### Fixed
+
+- `./install.sh --setup-path` writes the `skills` launcher, so the command can
+  be bootstrapped on a machine that does not have it. The documented route was
+  `skills setup-path`, which is circular — `setup-path` is what creates
+  `skills` — and nothing else wrote the shim, so on a fresh clone the command
+  was unreachable and every attempt ended in `command not found`. The installer
+  is always present in a checkout, so it is the one thing that can break the
+  loop; it delegates to the same code, and `skills setup-path` remains correct
+  once the command exists. A successful install now also names the command when
+  the shim is missing, rather than leaving the gap to be discovered later.
+- `--setup-path` honours `--home`, deriving the shim directory the same way
+  `DEFAULT_BIN` does instead of reading the real home at import time. Every
+  other path already isolated on that flag, so a test of this one could only
+  describe the machine it ran on: it passed on a fresh checkout and failed on
+  any machine that had actually run `--setup-path`, which is the inverse of a
+  useful signal.
+- The Windows leg of CI is green again. Two test harnesses, not the installer,
+  were platform-bound: a `#!/bin/sh` stand-in for `uv` cannot be executed by
+  `CreateProcess`, which has no shebang support, so it is written as a `.cmd`
+  there; and a hand-written launcher shim omitted `skills.cmd`, the only name a
+  `shutil.which` matching on `PATHEXT` can find, so it now calls `write_shims`
+  rather than keeping a copy that has to remember.
+- The `sync-agent-skills.sh` tests are skipped on Windows, with the reason
+  stated. `AGENT_SKILLS_DEST` is colon-separated, so an absolute Windows path
+  cannot survive it — `C:\Users\x` splits into a root of `C` plus a remainder,
+  and the run deposits a stray `./C` tree in the working directory, which is the
+  repository when the suite runs from a checkout. That is a real limit of the
+  POSIX script rather than something a test can pass its way around; the script
+  is the POSIX and cloud entry point, and Windows installs through `install.ps1`,
+  which CI covers in its own job.
 
 - Installing or updating graphify no longer leaves its instruction block
   appended to pointer files this repository manages. `install_graphify` strips

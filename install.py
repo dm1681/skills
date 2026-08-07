@@ -630,8 +630,17 @@ def setup_path(args: argparse.Namespace) -> int:
     """
     import skills_cli
 
+    # Derive the shim directory from args.home rather than leaving it to
+    # DEFAULT_BIN, which reads the real home at import time. The formula is the
+    # same one DEFAULT_BIN uses, so an ordinary run is unaffected; what changes
+    # is that --home now isolates this path like it isolates every other, so a
+    # test cannot silently report on the machine it happens to run on.
     return skills_cli.command_setup_path(
-        argparse.Namespace(bin=None, dry_run=args.dry_run, add_path=args.add_path)
+        argparse.Namespace(
+            bin=args.home.expanduser() / ".local" / "bin",
+            dry_run=args.dry_run,
+            add_path=args.add_path,
+        )
     )
 
 

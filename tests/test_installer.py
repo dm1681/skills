@@ -176,15 +176,33 @@ class InstallerTests(unittest.TestCase):
             executable = bin_dir / "graphify"
             executable.write_text("#!/bin/sh\n", encoding="utf-8")
             executable.chmod(0o755)
-            fake_uv = Path(directory) / "uv"
-            # Style the output unless NO_COLOR is set, exactly as uv does.
-            fake_uv.write_text(
-                "#!/bin/sh\n"
-                f'if [ -n "$NO_COLOR" ]; then printf "%s\\n" "{bin_dir}"; '
-                f'else printf "\\033[36m%s\\033[39m\\n" "{bin_dir}"; fi\n',
-                encoding="utf-8",
-            )
-            fake_uv.chmod(0o755)
+            # Style the output unless NO_COLOR is set, exactly as uv does. The
+            # stand-in has to be a shape the platform can actually execute:
+            # CreateProcess has no shebang support, so an extensionless /bin/sh
+            # script is "not a valid Win32 application" there, while it does
+            # run .cmd. Labels rather than parenthesised if-blocks, so a path
+            # containing parentheses cannot break the batch parser.
+            escape = chr(27)
+            if os.name == "nt":
+                fake_uv = Path(directory) / "uv.cmd"
+                fake_uv.write_text(
+                    "@echo off\r\n"
+                    "if defined NO_COLOR goto plain\r\n"
+                    f"echo {escape}[36m{bin_dir}{escape}[39m\r\n"
+                    "goto :eof\r\n"
+                    ":plain\r\n"
+                    f"echo {bin_dir}\r\n",
+                    encoding="utf-8",
+                )
+            else:
+                fake_uv = Path(directory) / "uv"
+                fake_uv.write_text(
+                    "#!/bin/sh\n"
+                    f'if [ -n "$NO_COLOR" ]; then printf "%s\\n" "{bin_dir}"; '
+                    f'else printf "\\033[36m%s\\033[39m\\n" "{bin_dir}"; fi\n',
+                    encoding="utf-8",
+                )
+                fake_uv.chmod(0o755)
             # An empty PATH forces the uv fallback, which is the path under test;
             # otherwise the real graphify on this machine answers first.
             with unittest.mock.patch.dict(os.environ, {"PATH": ""}):
@@ -195,9 +213,13 @@ class InstallerTests(unittest.TestCase):
         """`skills setup-path` is what creates `skills`, so a fresh machine
         cannot use it to bootstrap. The installer is always present in a clone,
         so it has to be able to do this or the command is unreachable."""
-        result = self.run_installer("--setup-path", "--dry-run")
-        self.assertIn("would write", result.stdout)
-        self.assertIn("skills", result.stdout)
+        # --home, so the assertion describes the installer and not whichever
+        # machine runs it: a developer box that already has the shims reports
+        # "unchanged", and the test would only pass on a never-set-up machine.
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.run_installer("--setup-path", "--dry-run", "--home", directory)
+            self.assertIn("would write", result.stdout)
+            self.assertIn("skills", result.stdout)
 
     def test_setup_path_does_not_also_install_skills(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -221,9 +243,12 @@ class InstallerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             bin_dir = Path(directory)
-            shim = bin_dir / skills_cli.SHIM_NAME
-            shim.write_text("#!/bin/sh\n", encoding="utf-8")
-            shim.chmod(0o755)
+            # Let the product write its own shims. Hand-rolling the POSIX one
+            # only looked equivalent: shutil.which on Windows matches PATHEXT,
+            # so an extensionless `skills` is invisible there and the hint kept
+            # firing on a machine that was in fact set up. write_shims knows to
+            # add skills.cmd; a copy in the test would have to remember.
+            skills_cli.write_shims(skills_cli.REPO_ROOT, bin_dir)
             with unittest.mock.patch.dict(
                 os.environ, {"PATH": str(bin_dir)}
             ):
