@@ -3,17 +3,41 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Optional
 
 
 ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = ROOT / "install.py"
 SYNC = ROOT / "scripts" / "sync-agent-skills.sh"
 SOURCE = ROOT / "global" / "AGENTS.md"
+
+
+def _bash() -> Optional[str]:
+    """A bash that can drive the sync script, or None to skip these tests.
+
+    Windows is excluded on purpose, and not because bash is missing there.
+    `AGENT_SKILLS_DEST` is colon-separated, so a drive letter cannot survive
+    it: `C:\\Users\\x` splits into a root of `C` and a remainder, and the run
+    writes a stray `./C` tree into whatever directory it started in — the
+    repository, when the suite runs from a checkout. Nothing the test can pass
+    avoids that, so this is a real limit of the POSIX script rather than a
+    harness detail to work around. `sync-agent-skills.sh` is the POSIX and
+    cloud entry point; Windows installs through `install.ps1`, which CI covers
+    separately. Which bash also varies: on this developer's box `bash` is
+    WSL's, mapping the drive at /mnt/c and unable to open `C:/...` at all.
+    """
+    if os.name == "nt":
+        return None
+    return shutil.which("bash")
+
+
+BASH = _bash()
 
 
 def run_installer(*arguments: str, expected: int = 0) -> subprocess.CompletedProcess[str]:
@@ -105,6 +129,7 @@ class InstallerGlobalInstructionTests(unittest.TestCase):
             self.assertFalse((home / ".agents" / "AGENTS.md").exists())
 
 
+@unittest.skipIf(BASH is None, "needs a POSIX shell and colon-free absolute paths")
 class SyncScriptGlobalInstructionTests(unittest.TestCase):
     def _project(self, directory: Path) -> Path:
         project = directory / "checkout"
@@ -127,7 +152,7 @@ class SyncScriptGlobalInstructionTests(unittest.TestCase):
             **env,
         )
         result = subprocess.run(
-            ["bash", str(SYNC)],
+            [BASH, str(SYNC)],
             text=True,
             capture_output=True,
             check=False,
