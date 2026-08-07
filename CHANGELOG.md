@@ -7,6 +7,31 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Added
 
+- A cloud default that installs nothing. `install.sh --cloud-bootstrap`
+  registers a user-scope `SessionStart` hook
+  (`scripts/cloud-session-start.sh`) and stops, so a cloud environment's setup
+  script is three lines that never need editing again. On a session where none
+  of these skills are installed, the hook puts the catalog and the exact
+  install commands into the agent's context and tells it to ask before
+  installing anything. A setup script runs before anyone is present to consult,
+  so every skill set it hard-codes is one chosen on the user's behalf and
+  re-chosen by hand in a web UI field whenever it should change; moving the
+  decision into the session puts it where somebody can actually answer.
+  The offer stays silent once any bundled skill is installed, silent when
+  `~/.claude/.skills-cloud-declined` exists — declining has to outlive the
+  session that declined — and silent for a whole environment on
+  `AGENT_SKILLS_CLOUD_OFFER=off`. It lists graphify and mattpocock/skills with
+  their prerequisites, and names the `code-review` collision with Claude's
+  built-in. Registering the hook merges into existing settings and never
+  rewrites a `settings.json` it cannot parse.
+- The offer's "everything suggested" command is generated from
+  `global_default`, naming each skill explicitly rather than pointing at
+  `--non-interactive`. That flag means *every* bundled skill, so suggesting it
+  would machine-wide install exactly the narrow skills the flag marks as not
+  wanting that — which is how the previous cloud setup script had come to
+  install `wow-addon-dev` into every session. Generating the command from the
+  flag keeps the two from drifting.
+
 - `viz-driven-dev`, a skill carrying the hypothesis-first visualization
   workflow that previously lived inline in `global/AGENTS.md`. The global
   instructions keep a short pointer, so every session stops paying for
@@ -59,6 +84,13 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Fixed
 
+- A skill with no `agents/openai.yaml` describes itself in the dashboard and the
+  cloud offer instead of reading "Bundled in this collection." `skill_summary`
+  falls back to the SKILL.md frontmatter `description`, cut at its first clause:
+  a description is written for matching, so it states the gist, then a dash, then
+  everything the gist glossed over, and its first *sentence* runs to 250
+  characters for one bundled skill. `viz-driven-dev` ships no interface file and
+  was the skill with nothing to show.
 - `./install.sh --setup-path` writes the `skills` launcher, so the command can
   be bootstrapped on a machine that does not have it. The documented route was
   `skills setup-path`, which is circular — `setup-path` is what creates

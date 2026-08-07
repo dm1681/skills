@@ -47,24 +47,75 @@ environment's **Setup script** field:
   the environment, and click its gear icon (a new environment's **Add
   environment** dialog has the same field). Paste, then save.
 
-That script installs your own skills from `dm1681/skills` **and** the Matt Pocock
-engineering skills from `mattpocock/skills` — the same installer, just pointed at
-a second source via `AGENT_SKILLS_REPO` / `AGENT_SKILLS_SUBDIR`:
+The whole script is three lines, and **installs no skills**:
 
 ```bash
-# install a second (or third) source by re-invoking the installer with env vars
+rm -rf /opt/agent-skills
+git clone --depth 1 https://github.com/dm1681/skills /opt/agent-skills || true
+/opt/agent-skills/install.sh --cloud-bootstrap || true
+```
+
+`--cloud-bootstrap` registers a user-scope `SessionStart` hook and stops there.
+The hook asks *you*, once the session is running, which skills you want; see
+[Choosing in the session](#choosing-in-the-session) below.
+
+That indirection is the point. A setup script runs before anyone is present to
+consult, so any skill set it hard-codes is a set chosen on your behalf — and
+changing it means editing a field in a web UI that has already drifted from the
+repository. Registering a hook instead means this field never needs editing
+again, and what you are offered is whatever the checkout says today.
+
+It applies to every repo used in that environment and needs nothing committed per
+repo. The result is cached (the script re-runs only when you change the
+environment or after the cache expires). Requires network access that allows
+cloning GitHub.
+
+### Choosing in the session
+
+On each fresh cloud session the hook checks whether any of the collection's
+skills are installed. If some are, it says nothing. If none are, it puts the
+catalog and the exact install commands into the session's context and tells the
+agent to ask you before installing anything.
+
+What it offers:
+
+| Option | Command |
+| --- | --- |
+| the skills marked machine-wide | `install.sh --skill NAME --skill NAME` (generated, named explicitly) |
+| one skill, this repo only | `install.sh --skill NAME --scope project` |
+| user-level instructions | `install.sh --global-instructions` |
+| graphify (needs `uv`) | `install.sh --graphify` |
+| mattpocock/skills (needs `npx`) | `install.sh --matt-skills` |
+
+Two things the offer is careful about:
+
+- It never suggests `--non-interactive`, which installs *every* bundled skill.
+  A skill marked `global_default: false` is narrow on purpose, and installing it
+  machine-wide costs every unrelated session its description. The suggested
+  command is generated from that same flag, so it cannot drift from it.
+- Matt's `code-review` shares a name with Claude's built-in `/code-review` and
+  replaces it for the session. The offer says so, so the choice is informed.
+
+To silence it permanently, `touch ~/.claude/.skills-cloud-declined` — declining
+has to outlive the session that declined. To switch it off for a whole
+environment, set `AGENT_SKILLS_CLOUD_OFFER=off`.
+
+If you would rather have a fixed set installed with no questions — a CI-style
+environment, say — skip `--cloud-bootstrap` and call the sync script directly,
+which installs everything under `skills/` unconditionally:
+
+```bash
+AGENT_SKILLS_PROJECT_DIR=/opt/agent-skills \
+  /opt/agent-skills/scripts/sync-agent-skills.sh || true
+# a second source, same installer, pointed elsewhere
 AGENT_SKILLS_REPO=mattpocock/skills AGENT_SKILLS_SUBDIR=skills/engineering \
 AGENT_SKILLS_PROJECT_DIR=/opt/agent-skills \
   /opt/agent-skills/scripts/sync-agent-skills.sh || true
 ```
 
-It applies to every repo used in that environment and needs nothing committed per
-repo. The result is cached (the script re-runs only when you change the
-environment or after the cache expires), so new skills appear on the next cache
-rebuild; use the per-repo hook if you need them always fresh. Requires network
-access that allows cloning GitHub. Note that Matt's `code-review` shares a name
-with Claude's built-in `/code-review` and replaces it — the script has a
-commented line to keep the built-in instead.
+That path installs every bundled skill, narrow ones included, and takes no
+account of `global_default`. It is the right tool when nobody will be present to
+answer; it is the wrong one when somebody will.
 
 ## What "agent-agnostic" means here
 
