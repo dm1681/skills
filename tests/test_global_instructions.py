@@ -13,6 +13,11 @@ from typing import Optional
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import install  # noqa: E402
+
 INSTALLER = ROOT / "install.py"
 SYNC = ROOT / "scripts" / "sync-agent-skills.sh"
 SOURCE = ROOT / "global" / "AGENTS.md"
@@ -127,6 +132,45 @@ class InstallerGlobalInstructionTests(unittest.TestCase):
             run_installer("--home", str(home))
             self.assertFalse((home / ".claude" / "CLAUDE.md").exists())
             self.assertFalse((home / ".agents" / "AGENTS.md").exists())
+
+
+class GlobalInstructionStatusTests(unittest.TestCase):
+    """The per-file status the dashboard's global-instructions row reads."""
+
+    def paths(self, home: Path) -> tuple[Path, Path]:
+        return home / ".agents" / "AGENTS.md", home / ".claude" / "CLAUDE.md"
+
+    def test_a_fresh_home_is_missing_both_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            status = dict(install.global_instruction_status(home, "link"))
+            shared, claude = self.paths(home)
+            self.assertEqual(status, {shared: "missing", claude: "missing"})
+
+    def test_an_install_reads_back_as_current(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            install.install_global_instructions(home, "link", False)
+            states = [s for _, s in install.global_instruction_status(home, "link")]
+            self.assertEqual(states, ["current", "current"])
+
+    def test_an_edited_file_reads_as_differing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            install.install_global_instructions(home, "link", False)
+            shared, _ = self.paths(home)
+            shared.write_text("# mine now\n", encoding="utf-8")
+            status = dict(install.global_instruction_status(home, "link"))
+            self.assertEqual(status[shared], "differs")
+
+    def test_the_status_is_probed_against_the_asked_for_mode(self) -> None:
+        """Link-installed files differ from what copy mode would write, and
+        saying so is the point: installing in copy mode would replace them."""
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            install.install_global_instructions(home, "link", False)
+            states = [s for _, s in install.global_instruction_status(home, "copy")]
+            self.assertEqual(states, ["differs", "current"])
 
 
 @unittest.skipIf(BASH is None, "needs a POSIX shell and colon-free absolute paths")

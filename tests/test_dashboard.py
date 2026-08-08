@@ -24,6 +24,7 @@ BUNDLED = sorted(
 )
 FIRST = BUNDLED[0]
 EXTERNAL = list(install.EXTERNAL_NAMES)
+GLOBAL = skills_tui.GLOBAL
 
 
 class TTY(io.StringIO):
@@ -144,6 +145,18 @@ class ExternalToolTests(unittest.TestCase):
                 skills_tui.AVAILABLE,
             )
 
+    def test_presence_is_probed_by_the_marker_not_the_row_name(self) -> None:
+        """matt-skills installs many directories; none is called matt-skills."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.assertEqual(
+                skills_tui.external_state("matt-skills", [root]), skills_tui.AVAILABLE
+            )
+            (root / "setup-matt-pocock-skills").mkdir()
+            self.assertEqual(
+                skills_tui.external_state("matt-skills", [root]), skills_tui.INSTALLED
+            )
+
     def test_a_present_tool_offers_update_not_skip(self) -> None:
         """Re-running an external installer upgrades; it is never a no-op."""
         colour, label, verb = skills_tui.external_meaning(skills_tui.INSTALLED)
@@ -206,12 +219,16 @@ class DashboardTests(unittest.IsolatedAsyncioTestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.project = Path(self.directory.name) / "project"
         self.project.mkdir()
+        self.home = Path(self.directory.name) / "home"
+        self.home.mkdir()
 
     def tearDown(self) -> None:
         self.directory.cleanup()
 
     def app(self, guided=False) -> skills_tui.SkillsApp:
-        return skills_tui.SkillsApp(self.project, "project", ["claude"], "copy", guided)
+        return skills_tui.SkillsApp(
+            self.project, "project", ["claude"], "copy", guided, home=self.home
+        )
 
     def claude_root(self) -> Path:
         return self.project / ".claude" / "skills"
@@ -220,7 +237,19 @@ class DashboardTests(unittest.IsolatedAsyncioTestCase):
         app = self.app()
         async with app.run_test() as pilot:
             await pilot.pause()
-            self.assertEqual([row.skill for row in app.rows()], BUNDLED + EXTERNAL)
+            self.assertEqual(
+                [row.skill for row in app.rows()], BUNDLED + EXTERNAL + [GLOBAL]
+            )
+
+    async def test_down_moves_focus_even_when_the_list_overflows(self) -> None:
+        """The scroll container must not swallow the arrow keys; it did once,
+        whenever the list was long enough to scroll."""
+        app = self.app()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("down")
+            await pilot.pause()
+            self.assertEqual(app.focused, app.rows()[1])
 
     async def test_space_selects_the_focused_row(self) -> None:
         app = self.app()
@@ -231,12 +260,14 @@ class DashboardTests(unittest.IsolatedAsyncioTestCase):
             await pilot.press("space")
             self.assertEqual(app.selected, set())
 
-    async def test_the_two_kinds_are_listed_under_separate_headings(self) -> None:
+    async def test_the_three_kinds_are_listed_under_separate_headings(self) -> None:
         app = self.app()
         async with app.run_test() as pilot:
             await pilot.pause()
             titles = [title for title, _, _, _ in app.sections()]
-            self.assertEqual(titles, ["YOUR SKILLS", "EXTERNAL TOOLS"])
+            self.assertEqual(
+                titles, ["YOUR SKILLS", "EXTERNAL TOOLS", "GLOBAL INSTRUCTIONS"]
+            )
             yours = next(names for title, _, names, _ in app.sections() if title == "YOUR SKILLS")
             theirs = next(
                 names for title, _, names, _ in app.sections() if title == "EXTERNAL TOOLS"
@@ -274,7 +305,7 @@ class DashboardTests(unittest.IsolatedAsyncioTestCase):
         async with app.run_test() as pilot:
             await pilot.pause()
             await pilot.press("a")
-            self.assertEqual(app.selected, set(BUNDLED + EXTERNAL))
+            self.assertEqual(app.selected, set(BUNDLED + EXTERNAL + [GLOBAL]))
             await pilot.press("a")
             self.assertEqual(app.selected, set())
 
@@ -387,17 +418,299 @@ class DashboardTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIsInstance(app.screen, skills_tui.PreviewScreen)
 
 
+class GlobalInstructionRowTests(unittest.IsolatedAsyncioTestCase):
+    """The global-instructions row: diffed against what the mode would write,
+    installed through install.install_global_instructions, backed up first."""
+
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.project = Path(self.directory.name) / "project"
+        self.project.mkdir()
+        self.home = Path(self.directory.name) / "home"
+        self.home.mkdir()
+
+    def tearDown(self) -> None:
+        self.directory.cleanup()
+
+    def app(self, mode="copy") -> skills_tui.SkillsApp:
+        return skills_tui.SkillsApp(
+            self.project, "project", ["claude"], mode, False, home=self.home
+        )
+
+    def global_row(self, app: skills_tui.SkillsApp) -> skills_tui.SkillRow:
+        return next(row for row in app.rows() if row.skill == GLOBAL)
+
+    async def select_global(self, app, pilot) -> None:
+        self.global_row(app).focus()
+        await pilot.press("space")
+        await pilot.pause()
+
+    def test_a_fresh_home_reads_as_available(self) -> None:
+        self.assertEqual(
+            skills_tui.global_state(self.home, "copy"), skills_tui.AVAILABLE
+        )
+
+    def test_an_installed_home_matches_the_mode_that_wrote_it(self) -> None:
+        install.install_global_instructions(self.home, "link", False)
+        self.assertEqual(
+            skills_tui.global_state(self.home, "link"), skills_tui.INSTALLED
+        )
+        # Probed for the other mode the same files count as differing, because
+        # installing in that mode really would replace them.
+        self.assertEqual(
+            skills_tui.global_state(self.home, "copy"), skills_tui.OUTDATED
+        )
+
+    def test_one_edited_file_outranks_a_current_one(self) -> None:
+        install.install_global_instructions(self.home, "link", False)
+        claude = self.home / ".claude" / "CLAUDE.md"
+        claude.write_text(claude.read_text(encoding="utf-8") + "\nedited\n", "utf-8")
+        self.assertEqual(
+            skills_tui.global_state(self.home, "link"), skills_tui.OUTDATED
+        )
+
+    async def test_installing_from_the_dashboard_writes_both_files(self) -> None:
+        app = self.app()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await self.select_global(app, pilot)
+            await pilot.press("i")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            self.assertEqual(app.installed_count, 1)
+            self.assertEqual(app.failures, 0)
+            self.assertEqual(self.global_row(app).state, skills_tui.INSTALLED)
+        for path in (
+            self.home / ".agents" / "AGENTS.md",
+            self.home / ".claude" / "CLAUDE.md",
+        ):
+            self.assertIn(
+                install.MANAGED_MARKER, path.read_text(encoding="utf-8")
+            )
+
+    async def test_replacing_asks_first_and_backs_the_old_files_up(self) -> None:
+        claude = self.home / ".claude" / "CLAUDE.md"
+        claude.parent.mkdir(parents=True)
+        claude.write_text("# hand written\n", encoding="utf-8")
+        app = self.app()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            self.assertEqual(self.global_row(app).state, skills_tui.OUTDATED)
+            await self.select_global(app, pilot)
+            await pilot.press("i")
+            await pilot.pause()
+            self.assertIsInstance(app.screen, skills_tui.ConfirmReplace)
+            await pilot.press("y")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            self.assertEqual(app.failures, 0)
+        backups = list((self.home / ".skills-backups" / ".claude").iterdir())
+        self.assertEqual(
+            ["# hand written\n"], [b.read_text(encoding="utf-8") for b in backups]
+        )
+        self.assertIn("@", claude.read_text(encoding="utf-8"))
+
+    async def test_declining_the_replacement_leaves_the_files_alone(self) -> None:
+        claude = self.home / ".claude" / "CLAUDE.md"
+        claude.parent.mkdir(parents=True)
+        claude.write_text("# hand written\n", encoding="utf-8")
+        app = self.app()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await self.select_global(app, pilot)
+            await pilot.press("i")
+            await pilot.pause()
+            await pilot.press("n")
+            await pilot.pause()
+            self.assertEqual(app.installed_count, 0)
+        self.assertEqual(claude.read_text(encoding="utf-8"), "# hand written\n")
+
+    async def test_flipping_the_mode_repaints_the_row_in_place(self) -> None:
+        install.install_global_instructions(self.home, "link", False)
+        app = self.app(mode="copy")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            self.assertEqual(self.global_row(app).state, skills_tui.OUTDATED)
+            focused = app.rows()[3]
+            focused.focus()
+            await pilot.press("m")
+            await pilot.pause()
+            self.assertEqual(app.mode, "link")
+            self.assertEqual(self.global_row(app).state, skills_tui.INSTALLED)
+            # The repaint happened in place, so focus never jumped.
+            self.assertEqual(app.focused, focused)
+
+    async def test_the_review_lists_each_target_file_and_its_backup(self) -> None:
+        claude = self.home / ".claude" / "CLAUDE.md"
+        claude.parent.mkdir(parents=True)
+        claude.write_text("# hand written\n", encoding="utf-8")
+        app = skills_tui.SkillsApp(
+            self.project, "project", ["claude"], "copy", True, home=self.home
+        )
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.selected.add(GLOBAL)
+            app.step = 4
+            app.render_main()
+            await pilot.pause()
+            text = " ".join(
+                str(widget.content) for widget in app._main.query(Static)
+            )
+            self.assertIn(str(self.home / ".agents" / "AGENTS.md"), text)
+            self.assertIn(str(claude), text)
+            self.assertIn(str(self.home / ".skills-backups" / ".claude"), text)
+
+    async def test_enter_previews_the_instructions_text(self) -> None:
+        app = self.app()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            self.global_row(app).focus()
+            await pilot.press("enter")
+            await pilot.pause()
+            self.assertIsInstance(app.screen, skills_tui.PreviewScreen)
+            self.assertIn(
+                "Global agent instructions", app.screen.body()
+            )
+
+
+HIDDEN_SKILL = (
+    "---\n"
+    "name: {name}\n"
+    "description: Grill the plan. Use when stress-testing.\n"
+    "disable-model-invocation: true\n"
+    "---\n"
+    "# Body\n"
+)
+
+
+class ReviewHiddenTests(unittest.IsolatedAsyncioTestCase):
+    """Hidden skills unfold, collapsible, under the external row that owns them."""
+
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.project = Path(self.directory.name) / "project"
+        self.root = self.project / ".claude" / "skills"
+        self.root.mkdir(parents=True)
+        self.home = Path(self.directory.name) / "home"
+        self.home.mkdir()
+
+    def tearDown(self) -> None:
+        self.directory.cleanup()
+
+    def app(self) -> skills_tui.SkillsApp:
+        return skills_tui.SkillsApp(
+            self.project, "project", ["claude"], "copy", False, home=self.home
+        )
+
+    def write_hidden(self, name: str) -> Path:
+        skill_dir = self.root / name
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            HIDDEN_SKILL.format(name=name), encoding="utf-8"
+        )
+        return skill_dir
+
+    def sub_rows(self, app: skills_tui.SkillsApp) -> list:
+        return list(app._main.query(skills_tui.HiddenSkillRow))
+
+    async def select_matt_row(self, app, pilot) -> None:
+        next(row for row in app.rows() if row.skill == "matt-skills").focus()
+        await pilot.press("space")
+        await pilot.pause()
+
+    async def test_selecting_matt_skills_expands_its_hidden_skills(self) -> None:
+        self.write_hidden("grill-with-docs")
+        app = self.app()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            self.assertEqual(self.sub_rows(app), [])
+            await self.select_matt_row(app, pilot)
+            rows = self.sub_rows(app)
+            self.assertEqual([row.skill for row in rows], ["grill-with-docs"])
+            self.assertFalse(rows[0].visible_to_model)
+            # The sub-rows sit directly under their parent in the focus order.
+            nav = app.nav_rows()
+            parent = next(i for i, r in enumerate(nav) if r.skill == "matt-skills")
+            self.assertIsInstance(nav[parent + 1], skills_tui.HiddenSkillRow)
+
+    async def test_deselecting_collapses_the_sub_rows(self) -> None:
+        self.write_hidden("grill-with-docs")
+        app = self.app()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await self.select_matt_row(app, pilot)
+            self.assertEqual(len(self.sub_rows(app)), 1)
+            await pilot.press("space")  # focus stayed on matt-skills
+            await pilot.pause()
+            self.assertEqual(self.sub_rows(app), [])
+
+    async def test_space_on_a_sub_row_toggles_the_files_and_records(self) -> None:
+        skill_dir = self.write_hidden("grill-with-docs")
+        app = self.app()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await self.select_matt_row(app, pilot)
+            await pilot.press("down")  # from matt-skills onto its first sub-row
+            await pilot.press("space")
+            await pilot.pause()
+            self.assertFalse(install.skill_is_model_hidden(skill_dir))
+            self.assertEqual(
+                install.read_model_decisions([self.root]),
+                {"grill-with-docs": "enabled"},
+            )
+            await pilot.press("space")
+            await pilot.pause()
+            self.assertTrue(install.skill_is_model_hidden(skill_dir))
+            self.assertEqual(
+                install.read_model_decisions([self.root]),
+                {"grill-with-docs": "hidden"},
+            )
+
+    async def test_a_decided_skill_stays_reviewable(self) -> None:
+        """A recorded choice must be revisitable, or one wrong press is final."""
+        skill_dir = self.write_hidden("grill-with-docs")
+        install.set_model_invocation(skill_dir, visible=True)
+        install.record_model_decisions([self.root], {"grill-with-docs": "enabled"})
+        app = self.app()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await self.select_matt_row(app, pilot)
+            rows = self.sub_rows(app)
+            self.assertEqual([row.skill for row in rows], ["grill-with-docs"])
+            self.assertTrue(rows[0].visible_to_model)
+
+    async def test_selection_without_hidden_skills_adds_no_sub_rows(self) -> None:
+        app = self.app()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await self.select_matt_row(app, pilot)
+            self.assertEqual(self.sub_rows(app), [])
+
+    async def test_the_collapsed_row_advertises_its_hidden_count(self) -> None:
+        """Silence would read as "nothing more to decide here"."""
+        self.write_hidden("grill-with-docs")
+        app = self.app()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            row = next(row for row in app.rows() if row.skill == "matt-skills")
+            self.assertIn("1 hidden from the model", row.note)
+
+
 class GuidedTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.directory = tempfile.TemporaryDirectory()
         self.project = Path(self.directory.name) / "project"
         self.project.mkdir()
+        self.home = Path(self.directory.name) / "home"
+        self.home.mkdir()
 
     def tearDown(self) -> None:
         self.directory.cleanup()
 
     def app(self, guided=None) -> skills_tui.SkillsApp:
-        return skills_tui.SkillsApp(self.project, "project", ["claude"], "copy", guided)
+        return skills_tui.SkillsApp(
+            self.project, "project", ["claude"], "copy", guided, home=self.home
+        )
 
     async def test_a_first_run_starts_guided(self) -> None:
         app = self.app()
