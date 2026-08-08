@@ -19,8 +19,9 @@ A skill's state is painted in the colour of the *consequence* of selecting it,
 so the same hue carries from the state pill to the action column to the review
 step to the progress bar.
 
-The install itself runs through `install.install_one`, so backups, receipts,
-and root resolution stay defined in one place.
+The install itself runs through `install.install_one` — the
+global-instructions row through `install.install_global_instructions` — so
+backups, receipts, and root resolution stay defined in one place.
 """
 
 from __future__ import annotations
@@ -67,6 +68,11 @@ MEANING = {
 }
 VIEWS = ("all", "differs", "up to date")
 VIEW_STATES = {"differs": OUTDATED, "up to date": INSTALLED}
+GLOBAL = "global-instructions"
+GLOBAL_SUMMARY = (
+    "user-level AGENTS.md for every agent: ~/.agents/AGENTS.md + ~/.claude/CLAUDE.md"
+)
+GLOBAL_STATES = {"missing": AVAILABLE, "current": INSTALLED, "differs": OUTDATED}
 STEPS = ("Where to install", "Which skills", "Copy or link", "Review")
 SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 RECEIPT = ".dm1681-skills.json"
@@ -95,6 +101,11 @@ ConfirmReplace { align: center middle; }
 #preview { width: 70%%; height: 80%%; padding: 1 2; background: %(panel)s;
            border: round %(you)s; }
 PreviewScreen { align: center middle; }
+
+/* Nested under the external row that installed them, so indented and on the
+   screen background rather than the panel the parent rows sit on. */
+HiddenSkillRow { height: 3; padding: 0 2; margin: 0 0 1 3; background: %(bg)s; }
+HiddenSkillRow:focus { background: %(hi)s; }
 """ % {
     "bg": BG, "fg": FG, "panel": PANEL, "hi": HI, "replace": REPLACE, "you": YOU,
 }
@@ -156,12 +167,33 @@ def external_state(name: str, roots: Sequence[Path]) -> str:
     An external tool is installed by somebody else's CLI, so there is no source
     tree here to diff it against. Claiming OUTDATED would be a guess, and the
     dashboard's colour contract promises that peach means a replacement it can
-    actually describe.
+    actually describe. Presence is probed by the tool's marker directory, which
+    may differ from the row's name (matt-skills installs a dozen directories).
     """
     if not roots:
         return AVAILABLE
-    present = [(root / name).exists() or (root / name).is_symlink() for root in roots]
+    marker = install.external_tool(name).marker
+    present = [
+        (root / marker).exists() or (root / marker).is_symlink() for root in roots
+    ]
     return INSTALLED if all(present) else AVAILABLE
+
+
+def global_state(home: Path, mode: str) -> str:
+    """Worst state across the two managed instruction files.
+
+    Mode-sensitive like the underlying status: the pill answers "what happens
+    if you install with the mode currently chosen" — the colour contract's
+    promise — so flipping copy/link can honestly flip the pill.
+    """
+    states = [
+        GLOBAL_STATES[state]
+        for _, state in install.global_instruction_status(home, mode)
+    ]
+    for state in (OUTDATED, AVAILABLE):
+        if state in states:
+            return state
+    return INSTALLED
 
 
 def external_meaning(state: str) -> tuple:
@@ -184,6 +216,22 @@ def _without_frontmatter(text: str) -> str:
     return text[end + 4 :].lstrip() if end != -1 else text
 
 
+class RowScroll(VerticalScroll):
+    """The main list: arrow keys move row focus instead of scrolling.
+
+    VerticalScroll's own arrow bindings sit closer to the focused row than the
+    app's, so they swallow the keys whenever the list overflows — exactly when
+    navigation matters most. Rebinding them to the app's move action loses
+    nothing: focusing a row scrolls it into view, and the mouse wheel and
+    page keys still scroll.
+    """
+
+    BINDINGS = [
+        Binding("up", "app.move(-1)", "up", show=False),
+        Binding("down", "app.move(1)", "down", show=False),
+    ]
+
+
 class SkillRow(Static):
     """One skill: selection mark, name, state pill, advisory, action."""
 
@@ -196,6 +244,8 @@ class SkillRow(Static):
         repo_level: bool,
         selected: bool,
         external: bool = False,
+        note: str = "",
+        blurb: str = "",
     ):
         super().__init__()
         self.skill = name
@@ -203,6 +253,10 @@ class SkillRow(Static):
         self.repo_level = repo_level
         self.selected = selected
         self.external = external
+        self.note = note
+        # A row that is not a skill directory (the global-instructions row)
+        # supplies its own one-liner; a skill row looks its own up.
+        self.blurb = blurb
 
     def on_mount(self) -> None:
         self.redraw()
@@ -217,14 +271,16 @@ class SkillRow(Static):
         mark = "[%s]◆[/]" % YOU if self.selected else "[%s]◇[/]" % MUTE
         action = "[%s]→ %s[/]" % (colour, verb) if self.selected else ""
         advisory = "  [%s]repo-level only[/]" % ADVISE if self.repo_level else ""
-        summary = (
+        summary = self.blurb or (
             install.external_tool(self.skill).summary
             if self.external
             else install.skill_summary(self.skill)
         )
+        note = "  [%s]%s[/]" % (ADVISE, self.note) if self.note else ""
         self.update(
-            "%s [b]%-22s[/] %s%s  %s\n    [%s]%s[/]"
-            % (mark, self.skill, pill(label, BG, colour), advisory, action, MUTE, summary)
+            "%s [b]%-22s[/] %s%s  %s\n    [%s]%s[/]%s"
+            % (mark, self.skill, pill(label, BG, colour), advisory, action,
+               MUTE, summary, note)
         )
 
     def toggle(self) -> None:
@@ -321,8 +377,21 @@ class PreviewScreen(ModalScreen):
 
         An external tool has no SKILL.md in this checkout — its text ships with
         the package and only exists once installed — so the preview describes
-        where it comes from instead of reading a file that is not there.
+        where it comes from instead of reading a file that is not there. The
+        global-instructions row previews global/AGENTS.md, the text the
+        managed home files carry or point back to.
         """
+        if self.skill == GLOBAL:
+            return (
+                "# global-instructions\n\n%s\n\nInstalled as managed files — "
+                "pointers back to this checkout in `link` mode, the inlined "
+                "text in `copy` mode:\n\n- `~/.agents/AGENTS.md`\n"
+                "- `~/.claude/CLAUDE.md`\n\n---\n\n%s"
+                % (
+                    GLOBAL_SUMMARY,
+                    install.GLOBAL_SOURCE.read_text(encoding="utf-8"),
+                )
+            )
         entrypoint = install.SOURCE_ROOT / self.skill / "SKILL.md"
         if entrypoint.is_file():
             return _without_frontmatter(entrypoint.read_text(encoding="utf-8"))
@@ -336,6 +405,31 @@ class PreviewScreen(ModalScreen):
 
     def action_close(self) -> None:
         self.dismiss(None)
+
+
+class HiddenSkillRow(Static):
+    """One installed skill the model may or may not see, nested under the
+    external row whose install placed it."""
+
+    can_focus = True
+
+    def __init__(self, name: str, visible: bool, description: str) -> None:
+        super().__init__()
+        self.skill = name
+        self.visible_to_model = visible
+        self.description = description
+
+    def on_mount(self) -> None:
+        self.redraw()
+
+    def redraw(self) -> None:
+        colour = ADD if self.visible_to_model else MUTE
+        label = "VISIBLE TO MODEL" if self.visible_to_model else "HIDDEN"
+        self.styles.border_left = ("thick", colour)
+        self.update(
+            "[%s]└[/] [b]%-24s[/] %s\n      [%s]%s[/]"
+            % (MUTE, self.skill, pill(label, BG, colour), MUTE, self.description)
+        )
 
 
 class SkillsApp(App):
@@ -367,12 +461,16 @@ class SkillsApp(App):
         agents: Optional[Sequence[str]] = None,
         mode: str = "copy",
         guided: Optional[bool] = None,
+        home: Optional[Path] = None,
     ) -> None:
         super().__init__()
         self.project_dir = project_dir
         self.scope = scope
         self.agents = list(agents or [])
         self.mode = mode
+        # Injectable so tests never probe or write the real home; the
+        # global-instructions row reads and installs against this path.
+        self.home = (home or Path.home()).expanduser()
         self.bundled = install.available_skills()
         self.external = list(install.EXTERNAL_NAMES)
         self.selected = set()
@@ -389,7 +487,7 @@ class SkillsApp(App):
     def compose(self) -> ComposeResult:
         yield Static(id="head")
         yield Horizontal(
-            Static(id="side"), VerticalScroll(id="main"), id="body"
+            Static(id="side"), RowScroll(id="main"), id="body"
         )
         yield Static(id="foot")
         yield Static(id="status")
@@ -413,7 +511,7 @@ class SkillsApp(App):
 
     def roots(self) -> list:
         return install.resolve_roots(
-            self.agents, self.scope, Path.home(), self.project_dir, None
+            self.agents, self.scope, self.home, self.project_dir, None
         )
 
     def has_receipt(self) -> bool:
@@ -421,17 +519,18 @@ class SkillsApp(App):
         return any((root / RECEIPT).is_file() for root in self.roots())
 
     def target(self) -> Path:
-        return self.project_dir if self.scope == "project" else Path.home()
+        return self.project_dir if self.scope == "project" else self.home
 
     def states(self) -> dict:
         roots = self.roots()
         states = {name: skill_state(name, roots) for name in self.bundled}
         states.update({name: external_state(name, roots) for name in self.external})
+        states[GLOBAL] = global_state(self.home, self.mode)
         return states
 
     def visible(self) -> list:
         states = self.states()
-        listed = self.bundled + self.external
+        listed = self.bundled + self.external + [GLOBAL]
         if self.view == "all":
             return list(listed)
         wanted = VIEW_STATES[self.view]
@@ -458,14 +557,82 @@ class SkillsApp(App):
                 [name for name in self.external if name in visible],
                 True,
             ),
+            (
+                "GLOBAL INSTRUCTIONS",
+                "user-level AGENTS.md files; diffed and backed up like a skill",
+                [name for name in (GLOBAL,) if name in visible],
+                False,
+            ),
         ]
         return [group for group in groups if group[2]]
 
     def rows(self) -> list:
         return list(self._main.query(SkillRow))
 
+    def nav_rows(self) -> list:
+        """Every focusable row in visual order, expanded sub-rows included."""
+        return [
+            widget
+            for widget in self._main.query(Static)
+            if isinstance(widget, (SkillRow, HiddenSkillRow))
+        ]
+
     def choices(self) -> list:
         return list(self._main.query(ChoiceRow))
+
+    def hidden_note(self, reviewable: list, expanded: bool) -> str:
+        """The parent row's one-line pointer at its collapsed sub-rows."""
+        if not reviewable:
+            return ""
+        count = sum(1 for _, visible, _ in reviewable if not visible)
+        return "%s %d hidden from the model%s" % (
+            "▾" if expanded else "▸",
+            count,
+            "" if expanded else " — select to review",
+        )
+
+    def reviewable_under(self, name: str) -> list:
+        """Hidden-skill entries shown, collapsed, under one external row.
+
+        Only matt-skills installs skills carrying disable-model-invocation,
+        and a root scan cannot attribute an installed directory to the tool
+        that placed it, so the association is by name. Revisit if a second
+        external tool starts installing hidden skills.
+        """
+        if name != "matt-skills":
+            return []
+        return self.reviewable()
+
+    def reviewable(self) -> list:
+        """(name, visible, one-line description) for every reviewable skill.
+
+        Hidden skills plus previously decided ones, so a choice can always be
+        revisited; a recorded name whose files are gone is dropped rather than
+        shown as a ghost row.
+        """
+        roots = self.roots()
+        decisions = install.read_model_decisions(roots)
+        names = sorted(
+            {name for root in roots for name in install.hidden_skills(root)}
+            | set(decisions)
+        )
+        entries = []
+        for name in names:
+            dirs = [
+                root / name for root in roots if (root / name / "SKILL.md").is_file()
+            ]
+            if not dirs:
+                continue
+            visible = not any(install.skill_is_model_hidden(d) for d in dirs)
+            description = ""
+            for skill_dir in dirs:
+                description = install.frontmatter_value(
+                    skill_dir / "SKILL.md", "description"
+                )
+                if description:
+                    break
+            entries.append((name, visible, install.first_clause(description)))
+        return entries
 
     def guided(self) -> bool:
         return self.step > 0
@@ -483,6 +650,8 @@ class SkillsApp(App):
             for name in self.external
             if name in self.selected
         )
+        if GLOBAL in self.selected:
+            entries.append((GLOBAL, states[GLOBAL], MEANING[states[GLOBAL]][2], False))
         return entries
 
     # -- rendering ------------------------------------------------------
@@ -575,6 +744,20 @@ class SkillsApp(App):
         states = self.states()
         self._main.mount(self.section_header(title, detail))
         for name in names:
+            if name == GLOBAL:
+                self._main.mount(
+                    SkillRow(
+                        GLOBAL,
+                        states[name],
+                        False,
+                        name in self.selected,
+                        note="always machine-wide",
+                        blurb=GLOBAL_SUMMARY,
+                    )
+                )
+                continue
+            reviewable = self.reviewable_under(name) if external else []
+            expanded = bool(reviewable) and name in self.selected
             self._main.mount(
                 SkillRow(
                     name,
@@ -582,8 +765,12 @@ class SkillsApp(App):
                     False if external else not install.skill_global_default(name),
                     name in self.selected,
                     external,
+                    self.hidden_note(reviewable, expanded),
                 )
             )
+            if expanded:
+                for entry, visible, description in reviewable:
+                    self._main.mount(HiddenSkillRow(entry, visible, description))
 
     def main_dashboard(self) -> None:
         groups = self.sections()
@@ -642,6 +829,12 @@ class SkillsApp(App):
             list(self.external),
             True,
         )
+        self.mount_section(
+            "GLOBAL INSTRUCTIONS",
+            "user-level AGENTS.md files; diffed and backed up like a skill",
+            [GLOBAL],
+            False,
+        )
         narrow = [n for n in self.bundled if not install.skill_global_default(n)]
         if narrow and self.scope == "user":
             self._main.mount(
@@ -698,6 +891,28 @@ class SkillsApp(App):
                     "   [%s]needs %s on PATH; ignores copy/link — its installer "
                     "decides the shape[/]" % (ADVISE, tool.requires)
                 )
+                lines.append("")
+                continue
+            if name == GLOBAL:
+                # Per-file, not per-root: the two managed files live in fixed
+                # home locations, and each may differ independently.
+                for path, file_state in install.global_instruction_status(
+                    self.home, self.mode
+                ):
+                    if file_state == "current":
+                        lines.append(
+                            "   [%s]= %s already identical[/]" % (MUTE, path)
+                        )
+                        continue
+                    lines.append("   [%s]→[/] [%s]%s[/]" % (colour, WHERE, path))
+                    writes += 1
+                    if file_state == "differs":
+                        backups += 1
+                        lines.append(
+                            "   [%s]↺ old copy moved to %s[/]"
+                            % (REPLACE,
+                               path.parent.parent / ".skills-backups" / path.parent.name)
+                        )
                 lines.append("")
                 continue
             if verb == "skip":
@@ -774,24 +989,85 @@ class SkillsApp(App):
 
     def focused_row(self):
         node = self.focused
-        return node if isinstance(node, (SkillRow, ChoiceRow)) else None
+        return node if isinstance(node, (SkillRow, ChoiceRow, HiddenSkillRow)) else None
 
     def action_move(self, delta: int) -> None:
-        options = self.rows() or self.choices()
+        options = self.nav_rows() or self.choices()
         if not options:
             return
         current = self.focused_row()
         index = options.index(current) if current in options else 0
         options[(index + delta) % len(options)].focus()
 
+    def toggle_model_visibility(self, row: HiddenSkillRow) -> None:
+        """Flip one nested skill between hidden and model-visible.
+
+        Applies through install.set_model_invocation and records the choice,
+        so install_matt_skills re-applies it after an update.
+        """
+        roots = self.roots()
+        row.visible_to_model = not row.visible_to_model
+        for root in roots:
+            if (root / row.skill / "SKILL.md").is_file():
+                install.set_model_invocation(root / row.skill, row.visible_to_model)
+        install.record_model_decisions(
+            roots, {row.skill: "enabled" if row.visible_to_model else "hidden"}
+        )
+        row.redraw()
+        for parent in self.rows():
+            reviewable = (
+                self.reviewable_under(parent.skill)
+                if parent.external and parent.selected
+                else []
+            )
+            if reviewable:
+                parent.note = self.hidden_note(reviewable, expanded=True)
+                parent.redraw()
+        self.render_status(
+            "[%s]%s: %s[/]"
+            % (
+                ADD if row.visible_to_model else MUTE,
+                row.skill,
+                "visible to the model" if row.visible_to_model else "hidden",
+            )
+        )
+
+    def set_expansion(self, row: SkillRow) -> None:
+        """Mount or remove the sub-rows under one external row, in place.
+
+        Rebuilding the whole list would drop focus (the new widgets only
+        accept it after the next message-pump cycle), so only the sub-rows
+        and the parent's note change; every other widget stays put.
+        """
+        reviewable = self.reviewable_under(row.skill)
+        if not reviewable:
+            return
+        for sub in self._main.query(HiddenSkillRow):
+            sub.remove()
+        expanded = row.selected
+        row.note = self.hidden_note(reviewable, expanded)
+        row.redraw()
+        if expanded:
+            self._main.mount_all(
+                [
+                    HiddenSkillRow(entry, visible, description)
+                    for entry, visible, description in reviewable
+                ],
+                after=row,
+            )
+
     def action_toggle(self) -> None:
         row = self.focused_row()
-        if isinstance(row, SkillRow):
+        if isinstance(row, HiddenSkillRow):
+            self.toggle_model_visibility(row)
+        elif isinstance(row, SkillRow):
             row.toggle()
             if row.selected:
                 self.selected.add(row.skill)
             else:
                 self.selected.discard(row.skill)
+            if row.external:
+                self.set_expansion(row)
             self.render_status()
         elif isinstance(row, ChoiceRow):
             if self.step == 1:
@@ -815,6 +1091,9 @@ class SkillsApp(App):
                 self.selected.add(row.skill)
             else:
                 self.selected.discard(row.skill)
+        for row in rows:
+            if row.external:
+                self.set_expansion(row)
         self.render_status()
 
     def action_advance(self) -> None:
@@ -841,6 +1120,7 @@ class SkillsApp(App):
         self.render_side()
         self.render_main()
 
+
     def action_cycle_scope(self) -> None:
         if self.guided():
             return
@@ -852,6 +1132,18 @@ class SkillsApp(App):
             return
         self.mode = "link" if self.mode == "copy" else "copy"
         self.render_side()
+        # The global-instructions pill answers "what would this mode write",
+        # so it can flip with the mode. Repaint that row in place — a full
+        # render_main would steal focus back to the top — unless a filtered
+        # view means the flip changes which rows are listed at all.
+        if self.view == "all":
+            states = self.states()
+            for row in self.rows():
+                if row.skill == GLOBAL:
+                    row.state = states[GLOBAL]
+                    row.redraw()
+        else:
+            self.render_main()
 
     def action_toggle_guided(self) -> None:
         self.step = 0 if self.guided() else 1
@@ -881,16 +1173,19 @@ class SkillsApp(App):
     def start_install(self) -> None:
         names = [name for name in self.bundled if name in self.selected]
         outside = [name for name in self.external if name in self.selected]
-        if not names and not outside:
+        wants_global = GLOBAL in self.selected
+        if not names and not outside and not wants_global:
             self.render_status("[%s]select at least one skill first[/]" % ADVISE)
             return
         self._spinning = True
         self.installed_count = 0
         self.failures = 0
-        self.install_worker(names, outside, self.roots())
+        self.install_worker(names, outside, wants_global, self.roots())
 
     @work(thread=True, exclusive=True)
-    def install_worker(self, names: list, outside: list, roots: list) -> None:
+    def install_worker(
+        self, names: list, outside: list, wants_global: bool, roots: list
+    ) -> None:
         for root in roots:
             for name in names:
                 try:
@@ -903,12 +1198,19 @@ class SkillsApp(App):
                 self.call_from_thread(
                     install.write_receipt, root, names, self.mode, False
                 )
+        done = list(names)
+        if wants_global:
+            done.append(GLOBAL)
+            try:
+                install.install_global_instructions(self.home, self.mode, False)
+            except (install.InstallError, OSError) as exc:
+                self.call_from_thread(self.note_failure, GLOBAL, str(exc))
         for name in outside:
             try:
                 self.install_external(name)
             except (install.InstallError, OSError) as exc:
                 self.call_from_thread(self.note_failure, name, str(exc))
-        self.call_from_thread(self.finish, names + outside)
+        self.call_from_thread(self.finish, done + outside)
 
     def external_installers(self) -> dict:
         """name -> a no-argument call handing that tool to its own installer.
@@ -920,6 +1222,11 @@ class SkillsApp(App):
         return {
             "graphify": lambda: install.install_graphify(
                 self.agents, self.scope, self.project_dir, False, lambda _line: None
+            ),
+            # force=True because an external row already present offers
+            # "update", and install_one backs the old copy up before replacing.
+            "matt-skills": lambda: install.install_matt_skills(
+                self.agents, self.roots(), True, False, lambda _line: None
             ),
         }
 
@@ -946,10 +1253,20 @@ class SkillsApp(App):
                 % (FAIL, self.failures, MUTE, self.installed_count)
             )
         else:
+            roots = self.roots()
+            undecided = {
+                name for root in roots for name in install.hidden_skills(root)
+            } - set(install.read_model_decisions(roots))
+            hint = (
+                " [%s]· %d hidden from the model — select matt-skills to review[/]"
+                % (ADVISE, len(undecided))
+                if undecided
+                else ""
+            )
             self.render_status(
-                "[%s]✓ %d installed[/] [%s]· %s[/]"
+                "[%s]✓ %d installed[/] [%s]· %s[/]%s"
                 % (KEEP, self.installed_count, WHERE,
-                   " · ".join(str(root) for root in self.roots()))
+                   " · ".join(str(root) for root in self.roots()), hint)
             )
 
 

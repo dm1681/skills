@@ -7,6 +7,24 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Added
 
+- The dashboard lists `matt-skills` as an external tool row. Selecting it
+  unfolds the installed skills that ship `disable-model-invocation`, each
+  toggleable between hidden and model-visible; choices are recorded in
+  `.skills-model-invocation.json` and re-applied after an update, so a
+  refresh cannot silently re-hide a skill the user enabled. External-tool
+  presence is probed by a per-tool marker directory, because one install can
+  drop a dozen directories under names that differ from the row's.
+- A `GLOBAL INSTRUCTIONS` row in the dashboard, so the user-level
+  `~/.agents/AGENTS.md` + `~/.claude/CLAUDE.md` files are installable from
+  the TUI and not only via `--global-instructions`. The row is diffed and
+  backed up like a skill: its pill compares both managed files against what
+  the currently chosen copy/link mode would write — flipping the mode can
+  honestly flip the pill, because installing in the other mode really would
+  replace the files — replacement goes through the same confirm-and-backup
+  flow, and the review step lists each target file with its
+  `.skills-backups` destination. The write itself still runs through
+  `install.install_global_instructions`.
+
 - A cloud default that installs nothing. `install.sh --cloud-bootstrap`
   registers a user-scope `SessionStart` hook
   (`scripts/cloud-session-start.sh`) and stops, so a cloud environment's setup

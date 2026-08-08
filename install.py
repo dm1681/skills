@@ -60,13 +60,16 @@ class ExternalTool(NamedTuple):
     symlink, and its state is a byte comparison against `skills/<name>`. An
     external tool is somebody else's package with its own installer, so it
     honours `--scope` but never `--mode`, and the most this collection can say
-    about its state is whether a directory by that name is present.
+    about its state is whether its marker directory is present. The marker is
+    a separate field because an install may drop many skill directories under
+    names that differ from the row's (matt-skills installs a dozen).
     """
 
     name: str
     summary: str
     origin: str
     requires: str
+    marker: str
 
 
 EXTERNAL_TOOLS = (
@@ -75,6 +78,14 @@ EXTERNAL_TOOLS = (
         summary="Turn any input into a persistent, queryable knowledge graph",
         origin="graphifyy on PyPI, installed and registered by its own CLI",
         requires="uv",
+        marker="graphify",
+    ),
+    ExternalTool(
+        name="matt-skills",
+        summary="mattpocock/skills engineering workflows",
+        origin="mattpocock/skills on GitHub, staged and copied in by the skills CLI",
+        requires="npx",
+        marker="setup-matt-pocock-skills",
     ),
 )
 EXTERNAL_NAMES = tuple(tool.name for tool in EXTERNAL_TOOLS)
@@ -125,16 +136,13 @@ def available_skills() -> list[str]:
     )
 
 
-def skill_frontmatter_description(name: str) -> str:
-    """The `description:` from a skill's SKILL.md frontmatter, or "".
+def frontmatter_value(entrypoint: Path, key: str) -> str:
+    """The value of one `key:` in a SKILL.md's frontmatter, or "".
 
-    Every skill has one — it is what an agent matches on to decide whether to
-    load the skill — so it is the reliable fallback when a skill ships no agent
-    interface file. Deliberately naive about YAML: the frontmatter this repo
-    validates is one `key: value` per line, and taking a dependency to read
-    three lines would cost every scripted path its dependency-free promise.
+    Deliberately naive about YAML: the frontmatter this repo validates is one
+    `key: value` per line, and taking a dependency to read three lines would
+    cost every scripted path its dependency-free promise.
     """
-    entrypoint = SOURCE_ROOT / name / "SKILL.md"
     if not entrypoint.is_file():
         return ""
     lines = entrypoint.read_text(encoding="utf-8").splitlines()
@@ -143,10 +151,20 @@ def skill_frontmatter_description(name: str) -> str:
     for line in lines[1:]:
         if line.strip() == "---":
             break
-        key, separator, value = line.partition(":")
-        if key.strip() == "description" and separator:
+        candidate, separator, value = line.partition(":")
+        if candidate.strip() == key and separator:
             return value.strip().strip('"').strip("'")
     return ""
+
+
+def skill_frontmatter_description(name: str) -> str:
+    """The `description:` from a bundled skill's frontmatter, or "".
+
+    Every skill has one — it is what an agent matches on to decide whether to
+    load the skill — so it is the reliable fallback when a skill ships no agent
+    interface file.
+    """
+    return frontmatter_value(SOURCE_ROOT / name / "SKILL.md", "description")
 
 
 def skill_summary(name: str) -> str:
@@ -464,6 +482,121 @@ def install_matt_skills(
                 )
             for source in sources:
                 emit(install_one(source, destination_root, "copy", force, False))
+            # The copies just overwrote any frontmatter edits from an earlier
+            # review, so the recorded choices must be re-applied here or an
+            # update silently re-hides every skill the user enabled.
+            apply_model_decisions(destination_root, emit)
+
+
+MODEL_INVOCATION_KEY = "disable-model-invocation"
+MODEL_DECISIONS_FILE = ".skills-model-invocation.json"
+
+
+def skill_is_model_hidden(skill_dir: Path) -> bool:
+    """Whether this skill's frontmatter hides it from the model's skill list.
+
+    Upstream collections (mattpocock/skills hides 23 of its 51) set
+    `disable-model-invocation: true` to keep their descriptions out of every
+    session's context. The cost is that a harness which routes slash commands
+    through the model gets "that skill is not installed in this session" for
+    a skill that is sitting right there on disk.
+    """
+    value = frontmatter_value(skill_dir / "SKILL.md", MODEL_INVOCATION_KEY)
+    return value.lower() in ("true", "yes", "1")
+
+
+def hidden_skills(root: Path) -> list[str]:
+    """Installed skills in one root that are hidden from the model."""
+    if not root.is_dir():
+        return []
+    return sorted(
+        path.name
+        for path in root.iterdir()
+        if path.is_dir()
+        and (path / "SKILL.md").is_file()
+        and skill_is_model_hidden(path)
+    )
+
+
+def set_model_invocation(skill_dir: Path, visible: bool) -> bool:
+    """Toggle `disable-model-invocation` in an installed skill's frontmatter.
+
+    Returns whether the file changed, so a caller can report only real edits.
+    """
+    entrypoint = skill_dir / "SKILL.md"
+    if not entrypoint.is_file():
+        raise InstallError(f"not a skill directory: {skill_dir}")
+    lines = entrypoint.read_text(encoding="utf-8").splitlines()
+    if not lines or lines[0].strip() != "---":
+        raise InstallError(f"{entrypoint} has no frontmatter to edit")
+    closing = next(
+        (i for i, line in enumerate(lines[1:], start=1) if line.strip() == "---"),
+        None,
+    )
+    if closing is None:
+        raise InstallError(f"{entrypoint} has an unterminated frontmatter block")
+    block = [
+        line
+        for line in lines[1:closing]
+        if line.partition(":")[0].strip() != MODEL_INVOCATION_KEY
+    ]
+    if not visible:
+        block.append(f"{MODEL_INVOCATION_KEY}: true")
+    updated = lines[:1] + block + lines[closing:]
+    if updated == lines:
+        return False
+    entrypoint.write_text("\n".join(updated) + "\n", encoding="utf-8")
+    return True
+
+
+def read_model_decisions(roots: Iterable[Path]) -> dict:
+    """name -> "enabled" | "hidden", merged across the given roots."""
+    decisions: dict = {}
+    for root in roots:
+        record = root / MODEL_DECISIONS_FILE
+        if not record.is_file():
+            continue
+        try:
+            loaded = json.loads(record.read_text(encoding="utf-8"))
+        except ValueError:
+            continue
+        if isinstance(loaded, dict) and isinstance(loaded.get("decisions"), dict):
+            decisions.update(loaded["decisions"])
+    return decisions
+
+
+def record_model_decisions(roots: Iterable[Path], updates: Mapping[str, str]) -> None:
+    """Persist visibility choices beside each root's receipt.
+
+    A file per root rather than one global record, because a root is the unit
+    an external installer refreshes; whoever refreshes it can find the choices
+    that apply to it without knowing which other roots exist.
+    """
+    for root in roots:
+        if not root.is_dir():
+            continue
+        decisions = read_model_decisions([root])
+        decisions.update(updates)
+        (root / MODEL_DECISIONS_FILE).write_text(
+            json.dumps(
+                {"schema_version": 1, "decisions": decisions},
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+
+def apply_model_decisions(root: Path, emit: Callable[[str], None] = print) -> None:
+    """Re-apply this root's recorded visibility choices to the files on disk."""
+    for name, choice in sorted(read_model_decisions([root]).items()):
+        skill_dir = root / name
+        if not (skill_dir / "SKILL.md").is_file():
+            continue
+        if set_model_invocation(skill_dir, visible=(choice == "enabled")):
+            verb = "re-enabled for the model" if choice == "enabled" else "re-hidden"
+            emit(f"{verb}: {skill_dir}")
 
 
 def _same_file(left: Path, right: Path) -> bool:
@@ -635,14 +768,37 @@ def global_instruction_files(home: Path, mode: str) -> list[tuple[Path, str]]:
     return [(shared, header + shared_body), (claude, header + claude_body)]
 
 
-def _write_managed_file(path: Path, text: str, dry_run: bool) -> str:
-    exists = path.exists() or path.is_symlink()
-    if exists and not path.is_symlink() and path.is_file():
+def _managed_file_state(path: Path, text: str) -> str:
+    """'missing', 'current', or 'differs' for one managed instruction file."""
+    if not (path.exists() or path.is_symlink()):
+        return "missing"
+    if path.is_file() and not path.is_symlink():
         try:
             if path.read_text(encoding="utf-8") == text:
-                return f"unchanged  {path}"
+                return "current"
         except UnicodeDecodeError:
             pass
+    return "differs"
+
+
+def global_instruction_status(home: Path, mode: str) -> list[tuple[Path, str]]:
+    """(path, state) for each managed file, against what `mode` would write.
+
+    Mode-sensitive on purpose: a home holding link-style pointers reads as
+    `differs` when probed for copy mode, because installing in copy mode
+    really would replace those files. Callers should present the state as
+    the consequence of installing with `mode`, not as an absolute.
+    """
+    return [
+        (path, _managed_file_state(path, text))
+        for path, text in global_instruction_files(home, mode)
+    ]
+
+
+def _write_managed_file(path: Path, text: str, dry_run: bool) -> str:
+    if _managed_file_state(path, text) == "current":
+        return f"unchanged  {path}"
+    exists = path.exists() or path.is_symlink()
     backup = backup_path(path.parent, path.name) if exists else None
     if dry_run:
         detail = f"; backup {backup}" if backup else ""
@@ -765,7 +921,7 @@ def cloud_offer(home: Path, repo: Path = REPO_ROOT) -> Optional[str]:
         f"  {'graphify'.ljust(width)}  external, needs uv",
         f"      {external_tool('graphify').summary}",
         f"  {'matt-skills'.ljust(width)}  external, needs npx",
-        "      mattpocock/skills engineering workflows. Its `code-review` shares",
+        f"      {external_tool('matt-skills').summary}. Its `code-review` shares",
         "      a name with Claude's built-in and replaces it for the session.",
         "",
         "Commands:",
@@ -931,6 +1087,24 @@ def parser() -> argparse.ArgumentParser:
     )
     result.set_defaults(matt_skills=None)
     result.add_argument(
+        "--enable-skill",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help=(
+            "make an installed skill visible to the model by removing "
+            "disable-model-invocation from its frontmatter; recorded and "
+            "re-applied when --matt-skills updates the files"
+        ),
+    )
+    result.add_argument(
+        "--hide-skill",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="the reverse of --enable-skill: hide an installed skill from the model",
+    )
+    result.add_argument(
         "--global-instructions",
         dest="global_instructions",
         nargs="?",
@@ -1062,10 +1236,49 @@ def execute_install(args: argparse.Namespace, selected: list[str]) -> None:
             "Next: run /setup-matt-pocock-skills once inside the target "
             "repository to finish configuring the workflows."
         )
+        undecided = {
+            name for root in roots for name in hidden_skills(root)
+        } - set(read_model_decisions(roots))
+        if undecided:
+            print(
+                f"{len(undecided)} skill(s) installed hidden from the model's "
+                "skill list; select matt-skills in the dashboard to review "
+                "them, or enable one directly with --enable-skill NAME."
+            )
     if not args.dry_run:
         hint = launcher_hint()
         if hint:
             print(hint)
+
+
+def manage_model_invocation(args: argparse.Namespace) -> int:
+    """Handle --enable-skill / --hide-skill and exit.
+
+    These are the scripted counterparts to the dashboard's review screen. They
+    operate on *installed* skills — whatever collection they came from — so
+    they skip the bundled-skill validation entirely.
+    """
+    roots = stage_roots(args, args.scope)
+    overlap = sorted(set(args.enable_skill) & set(args.hide_skill))
+    if overlap:
+        raise InstallError(
+            f"both --enable-skill and --hide-skill given for: {', '.join(overlap)}"
+        )
+    for names, visible in ((args.enable_skill, True), (args.hide_skill, False)):
+        for name in names:
+            present = [
+                root / name for root in roots if (root / name / "SKILL.md").is_file()
+            ]
+            if not present:
+                raise InstallError(
+                    f"skill not installed in any selected root: {name}"
+                )
+            changed = [set_model_invocation(skill_dir, visible) for skill_dir in present]
+            record_model_decisions(roots, {name: "enabled" if visible else "hidden"})
+            state = "visible to the model" if visible else "hidden from the model"
+            already = "" if any(changed) else " (already was)"
+            print(f"{name}: {state}{already}")
+    return 0
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -1088,6 +1301,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             return 0
         if args.setup_path:
             return setup_path(args)
+        if args.enable_skill or args.hide_skill:
+            return manage_model_invocation(args)
         if should_open_dashboard(raw_args, args, sys.stdin, sys.stdout, os.environ):
             return open_dashboard(args)
         if not raw_args:

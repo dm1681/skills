@@ -110,5 +110,123 @@ class MattSkillsTests(unittest.TestCase):
         self.assertIsNone(unspecified.matt_skills)
 
 
+HIDDEN_SKILL = (
+    "---\n"
+    "name: {name}\n"
+    "description: Grill the plan. Use when stress-testing.\n"
+    "disable-model-invocation: true\n"
+    "---\n"
+    "# Body\n"
+)
+
+
+def write_skill(root: Path, name: str, hidden: bool = True) -> Path:
+    skill_dir = root / name
+    skill_dir.mkdir(parents=True)
+    text = HIDDEN_SKILL.format(name=name)
+    if not hidden:
+        text = text.replace("disable-model-invocation: true\n", "")
+    (skill_dir / "SKILL.md").write_text(text, encoding="utf-8")
+    return skill_dir
+
+
+class ModelInvocationTests(unittest.TestCase):
+    """Deciding which installed skills the model is allowed to see."""
+
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.root = Path(self.directory.name) / "skills"
+        self.root.mkdir()
+
+    def tearDown(self) -> None:
+        self.directory.cleanup()
+
+    def test_enabling_strips_only_the_flag_line(self) -> None:
+        skill_dir = write_skill(self.root, "grill-with-docs")
+        self.assertTrue(INSTALLER.set_model_invocation(skill_dir, visible=True))
+        text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+        self.assertNotIn("disable-model-invocation", text)
+        self.assertIn("description: Grill the plan", text)
+        self.assertIn("# Body", text)
+
+    def test_hiding_adds_the_flag_back(self) -> None:
+        skill_dir = write_skill(self.root, "grill-with-docs", hidden=False)
+        self.assertTrue(INSTALLER.set_model_invocation(skill_dir, visible=False))
+        self.assertTrue(INSTALLER.skill_is_model_hidden(skill_dir))
+
+    def test_toggling_to_the_current_state_reports_no_change(self) -> None:
+        skill_dir = write_skill(self.root, "grill-with-docs")
+        self.assertFalse(INSTALLER.set_model_invocation(skill_dir, visible=False))
+
+    def test_hidden_skills_lists_only_the_flagged_ones(self) -> None:
+        write_skill(self.root, "hidden-one")
+        write_skill(self.root, "visible-one", hidden=False)
+        self.assertEqual(INSTALLER.hidden_skills(self.root), ["hidden-one"])
+
+    def test_a_matt_update_reapplies_a_recorded_enable(self) -> None:
+        """The refresh overwrites the frontmatter edit; the record restores it."""
+        INSTALLER.record_model_decisions([self.root], {"grill-with-docs": "enabled"})
+
+        def fake_run(command: list, cwd: Path) -> None:
+            staged = cwd / ".claude" / "skills"
+            write_skill(staged, "setup-matt-pocock-skills")
+            write_skill(staged, "grill-with-docs")
+
+        with (
+            mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/npx"),
+            mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
+        ):
+            INSTALLER.install_matt_skills(
+                ["claude"], [self.root], force=True, dry_run=False,
+                emit=lambda _line: None,
+            )
+        self.assertFalse(
+            INSTALLER.skill_is_model_hidden(self.root / "grill-with-docs")
+        )
+        self.assertTrue(
+            INSTALLER.skill_is_model_hidden(self.root / "setup-matt-pocock-skills")
+        )
+
+    def test_the_enable_skill_flag_works_end_to_end(self) -> None:
+        write_skill(self.root, "grill-with-docs")
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            status = INSTALLER.main(
+                ["--enable-skill", "grill-with-docs", "--target", str(self.root)]
+            )
+        self.assertEqual(status, 0)
+        self.assertFalse(
+            INSTALLER.skill_is_model_hidden(self.root / "grill-with-docs")
+        )
+        self.assertIn("visible to the model", output.getvalue())
+        self.assertEqual(
+            INSTALLER.read_model_decisions([self.root]),
+            {"grill-with-docs": "enabled"},
+        )
+
+    def test_enabling_a_missing_skill_is_an_error(self) -> None:
+        errors = io.StringIO()
+        with contextlib.redirect_stderr(errors):
+            status = INSTALLER.main(
+                ["--enable-skill", "no-such", "--target", str(self.root)]
+            )
+        self.assertEqual(status, 2)
+        self.assertIn("not installed", errors.getvalue())
+
+    def test_conflicting_enable_and_hide_are_refused(self) -> None:
+        write_skill(self.root, "grill-with-docs")
+        errors = io.StringIO()
+        with contextlib.redirect_stderr(errors):
+            status = INSTALLER.main(
+                [
+                    "--enable-skill", "grill-with-docs",
+                    "--hide-skill", "grill-with-docs",
+                    "--target", str(self.root),
+                ]
+            )
+        self.assertEqual(status, 2)
+        self.assertIn("both --enable-skill and --hide-skill", errors.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
