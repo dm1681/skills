@@ -11,31 +11,30 @@ and read a verdict only in the way that surface actually reports one.
 - **Deterministic gate** — the checks branch protection actually requires,
   rather than whichever look important:
 
+  Ask GitHub which checks are required **for this PR** rather than
+  reconstructing it from configuration:
+
   ```bash
-  # Rulesets: paginate the collection, and fetch each one — the collection
-  # returns summaries, not the rules that name the checks. Keep only rulesets
-  # that are actively enforced and whose conditions match this base branch;
-  # a disabled, evaluate-only, or other-branch ruleset contributes checks
-  # that will never run here, and waiting on those hangs the round.
-  gh api --paginate "repos/<owner>/<repo>/rulesets" --jq '.[].id' \
-  | while read -r id; do
-      gh api "repos/<owner>/<repo>/rulesets/$id" --jq '
-        select(.enforcement=="active")
-        | select(.conditions.ref_name | .. | strings | test("<base>"))
-        | .rules[] | select(.type=="required_status_checks")'
-    done
-  # Legacy branch protection. URL-encode the base ref: a name like
-  # release/1.x otherwise splits into an extra path segment and the call
-  # returns no protection data rather than an error.
-  base=$(jq -rn --arg b "<base>" '$b|@uri')
-  gh api "repos/<owner>/<repo>/branches/$base/protection"
+  gh pr view <n> --json statusCheckRollup \
+    --jq '[.statusCheckRollup[] | select(.isRequired)
+           | {name: (.name // .context), state: (.conclusion // .state)}]'
   ```
 
-  Both are sources of required checks, and a repo may use either. Missing one
-  means missing the gate — and a missing gate reads as clean while a required
-  check is failing.
+  This is the authoritative answer and it is why the loop does not walk
+  rulesets by hand. GitHub resolves, on its own side, everything that made the
+  hand-rolled version wrong: `~DEFAULT_BRANCH` and `~ALL` and glob ref
+  patterns, include-versus-exclude conditions, disabled and evaluate-only
+  rulesets, required *workflows* as well as required status checks, paginated
+  ruleset collections, and base refs like `release/1.x` that need encoding.
 
-  Derive it from that configuration alone, whichever app or workflow produces
+  An empty result means no required checks are configured — not that the query
+  failed. Say which it was: gate on the repo's documented CI check and record
+  in the report that nothing is enforced, rather than reporting a gate that
+  does not exist. (`isRequired` is null on every check in a repository with no
+  protection, which is indistinguishable from an unsupported field; treat both
+  as "nothing enforced" and state the assumption.)
+
+  Derive the gate from that answer alone, whichever app or workflow produces
   each check. Model reviewers are *usually* comment-only, but one can also
   produce a required check — and then a clean comment from it is not a
   substitute for that check concluding successfully. Excluding a check because
@@ -156,8 +155,13 @@ gh api -X POST repos/<owner>/<repo>/pulls/<n>/comments/<comment-id>/replies \
   -f body="Fixed in <sha> — <what changed>"
 ```
 
-Treat a review **for the current head** with no inline comments and an
-approving or neutral body as that surface's clean verdict.
+A review for the current head with no inline comments is *not* clean on that
+basis alone. Codex posts a neutral review whether it found nothing, hit an
+error, ran out of budget, or raised a body-only concern, so read the body and
+classify it explicitly: an approval or a recognised no-findings marker is
+clean; anything reporting an error or limitation is a **failed** round, not a
+verdict. Absence of inline comments is absence of evidence — the whole reason
+this skill exists (trap 4).
 
 ## CodeRabbit
 
