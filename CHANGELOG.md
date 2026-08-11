@@ -7,6 +7,17 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Added
 
+- A `review-loop` skill that drives a pull request through repeated automated
+  review rounds until every active review surface reports no findings. The
+  loop's whole job is telling a clean verdict apart from a review that stalled
+  mid-run or was skipped in fifteen seconds — three states that show the same
+  green check — so it classifies each round on a verdict the reviewer posted
+  rather than on CI status, carries a prior verdict forward when the diff
+  fingerprint is unchanged, and stops at a round cap without ever merging.
+  Surfaces, the deterministic gate, and the local verification command are
+  discovered per repository; `references/traps.md` records the eight failure
+  modes that produce a green check while reviewing nothing.
+
 - The dashboard lists `matt-skills` as an external tool row. Selecting it
   unfolds the installed skills that ship `disable-model-invocation`, each
   toggleable between hidden and model-visible; choices are recorded in
