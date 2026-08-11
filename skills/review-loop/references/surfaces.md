@@ -12,9 +12,22 @@ and read a verdict only in the way that surface actually reports one.
   rather than whichever look important:
 
   ```bash
-  gh api repos/<owner>/<repo>/rulesets
-  gh api repos/<owner>/<repo>/branches/<base>/protection
+  # Rulesets: the collection returns summaries, so fetch each one for the
+  # rules that actually name the required checks.
+  gh api "repos/<owner>/<repo>/rulesets" --jq '.[].id' | while read -r id; do
+    gh api "repos/<owner>/<repo>/rulesets/$id" \
+      --jq '.rules[] | select(.type=="required_status_checks")'
+  done
+  # Legacy branch protection. URL-encode the base ref: a name like
+  # release/1.x otherwise splits into an extra path segment and the call
+  # returns no protection data rather than an error.
+  base=$(jq -rn --arg b "<base>" '$b|@uri')
+  gh api "repos/<owner>/<repo>/branches/$base/protection"
   ```
+
+  Both are sources of required checks, and a repo may use either. Missing one
+  means missing the gate — and a missing gate reads as clean while a required
+  check is failing.
 
   Derive it from that configuration alone, whichever app or workflow produces
   each check. Model reviewers are *usually* comment-only, but one can also

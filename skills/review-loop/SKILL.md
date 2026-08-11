@@ -44,9 +44,8 @@ git fetch origin "pull/<n>/head"
 ```
 
 Fixing findings later needs a **writable branch**, not just the head object:
-`gh pr checkout <n>`, and record the remote and ref to push to. A fork's head
-is not on `origin`, and a bare `git push` from whatever branch was checked out
-can update something unrelated.
+`gh pr checkout <n>`, and record the remote and ref to push to. A bare `git
+push` from whatever branch was checked out can update something unrelated.
 
 Confirm the branch is current with its base. A stale branch silently disables
 some reviewers (trap 1) — check this before spending a round.
@@ -123,8 +122,9 @@ cause before re-triggering, capping retries at two per cause.
 1. Present the findings to the user, grouped by surface, before changing code.
 2. Apply the fixes on the checked-out PR branch.
 3. Run the local gate — a round spent discovering a broken fix is wasted.
-4. Push to the recorded remote and ref, then re-resolve the head SHA: the push
-   moved it, and every later query must anchor to the new one.
+4. Commit, then push to the recorded remote and ref, then re-resolve the head
+   SHA. `git push` publishes commits, not working-tree edits: skip the commit
+   and the PR head never moves while the loop believes it did.
 5. Only now reply in-thread, citing the pushed SHA — replying earlier records
    a resolution the PR head does not yet contain. Then step 2.
 

@@ -34,9 +34,12 @@ finished comment, check green.
 **Detection** — a tracking comment with unchecked boxes and no matching
 `✅ Review finished` for that head SHA.
 
-**Recovery** — re-trigger with `gh pr close <n> && gh pr reopen <n>`. The
-durable fix belongs in the reviewer's workflow: run sub-agents synchronously so
-the turn does not end while work is outstanding.
+**Recovery** — re-trigger using *this surface's* rerun, recorded in
+[surfaces.md](surfaces.md). Close/reopen fires `reopened`, which a
+`synchronize`-only workflow ignores, so reaching for it by reflex spends a
+retry and produces another verdict-less round. The durable fix belongs in the
+reviewer's workflow: run sub-agents synchronously so the turn does not end
+while work is outstanding.
 
 ## 3. Permission denials exhaust the turn budget
 
@@ -64,14 +67,24 @@ comment, no review, no check summary.
 Merging the base branch — often forced by trap 1 — produces a new head SHA
 whose substantive diff is unchanged. A naive loop pays for a full re-review.
 
-**Detection** — the diff fingerprint matches the previously reviewed head:
+**Detection** — the **full** fingerprint matches the previously reviewed head:
+both the patch hash and the base revision it was reviewed against.
 
 ```bash
-git diff origin/<base>...<head> | git hash-object --stdin
+git diff "origin/<base>...<head-sha>" | git hash-object --stdin
+git rev-parse "origin/<base>"
 ```
 
-**Recovery** — carry the prior verdict forward and record the round as
+**Recovery** — carry forward the **model-review verdicts only**, and only when
+both halves match and that prior verdict was explicit. Record the round as
 `unchanged` in the ledger instead of counting it as a fresh round.
+
+Three ways the shortcut turns into a false clean, so none of them is optional:
+a moved base is a different integration even over identical patch bytes; a
+rewritten commit keeps the patch identical while changing metadata a DCO or
+signed-commit check reads, so **the deterministic gate always re-runs for the
+current head**; and carrying an unresolved or stalled round forward
+manufactures a verdict nobody issued.
 
 ## 6. Drafts still trigger reviews
 
