@@ -24,8 +24,8 @@ clean: the failure modes that produce a green check while reviewing nothing.
 ## Discover the setup, do not assume it
 
 Four inputs vary per repository: the active **surfaces**, the **deterministic
-gate** (whatever branch protection actually requires — model reviewers gate
-nothing), the repo's **local gate** command, and the **round cap** (default
+gate** (whatever branch protection requires, whichever app produces it), the
+repo's **local gate** command, and the **round cap** (default
 5). Take each from an argument when given, otherwise resolve it and state what
 you resolved. [references/surfaces.md](references/surfaces.md) covers how,
 including the common case of a repo with no model reviewer at all.
@@ -72,14 +72,14 @@ gh pr close <n> && gh pr reopen <n>
 
 Check each surface's configured events first: one listening only to
 `synchronize` ignores `reopened`, so close/reopen starts nothing and burns a
-retry. See [references/surfaces.md](references/surfaces.md) for the per-surface
-rerun.
+retry. See [references/surfaces.md](references/surfaces.md) for each rerun.
 
-Recompute the fingerprint first. Carry a prior verdict forward only when
-**both halves match** — same patch hash *and* same base revision — and only
-when that prior verdict was explicit. A moved base is a different integration,
-and carrying forward an unresolved or stalled round manufactures a clean
-verdict nobody issued (trap 5).
+Recompute the fingerprint first. Carry forward only **model-review** verdicts,
+and only when patch hash and base revision both match and that prior verdict
+was explicit. The gate always re-runs for the current head: a rewritten commit
+can keep the patch identical while changing the metadata a DCO or signed-commit
+check reads. A moved base is a different integration, and carrying an
+unresolved round forward manufactures a verdict nobody issued (trap 5).
 
 ### 3. Wait for the round
 
@@ -88,14 +88,15 @@ Wait in two phases, because they finish at different times. `gh pr checks
 afterwards — reading the surfaces the moment it returns is what fakes a stall.
 
 ```bash
-timeout 30m gh pr checks <n> --watch     # phase 1: the deterministic gate
+gh pr checks <n> --watch          # phase 1: the deterministic gate
 ```
 
 Then wait on each active surface for a verdict against the current head SHA,
 under an explicit per-surface timeout. A surface is stalled only once its
-timeout expires with no verdict; say which timeout you used. Bound both
-phases — an unbounded watcher on a wedged run hangs the loop with no ledger
-entry and nothing for a human to take over from.
+timeout expires with no verdict; say which timeout you used. Bound both phases
+using the runner's own process timeout or a deadline loop — `timeout(1)` is
+absent on a stock macOS — since an unbounded watcher on a wedged run hangs the
+loop with no ledger entry for a human to take over from.
 
 Retry a `gh` call that fails with a TLS or certificate error rather than
 treating it as a hard failure (trap 7).
@@ -110,9 +111,8 @@ treating it as a hard failure (trap 7).
 | **skipped** | Run succeeded in seconds having read nothing | Diagnose, correct, re-trigger |
 | **failed** | The reviewer's own run errored, or a wait timed out, or the round cannot be classified at all | Report it as unresolved and hand back |
 
-A passing gate is necessary for **clean**, never sufficient. A failing gate is
-a finding like any other: route it through step 5 rather than reporting clean
-around a PR that cannot merge.
+A passing gate is necessary for **clean**, never sufficient; a failing gate is
+a finding like any other, routed through step 5.
 
 `stalled` and `skipped` both show a green check, so each needs its own
 detection signal — see [references/traps.md](references/traps.md). Correct the
