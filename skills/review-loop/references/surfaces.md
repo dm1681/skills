@@ -9,18 +9,45 @@ and read a verdict only in the way that surface actually reports one.
 ```bash
 ls .github/workflows/                                   # which reviewers are wired up
 gh pr list --state merged --limit 5 --json number       # then, per PR:
-gh api repos/<owner>/<repo>/issues/<n>/comments --jq '.[].user.login' | sort -u
-gh api repos/<owner>/<repo>/pulls/<n>/reviews  --jq '.[].user.login' | sort -u
+gh api --paginate repos/<owner>/<repo>/issues/<n>/comments --jq '.[].user.login' | sort -u
+gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews  --jq '.[].user.login' | sort -u
 ```
 
-Bot logins end in `[bot]`. A workflow file present but never commenting on
-recent PRs is not an active surface — treat it as inactive and say so, rather
-than waiting on a verdict that will never arrive.
+**Paginate every query whose result feeds a verdict.** `gh api` fetches all
+pages only under `--paginate`; without it a `VERDICT:` comment past the first
+page is invisible and the round classifies as stalled when it was clean.
 
-For each active surface, establish three things before the first round: how it
-announces that it started, how it reports a verdict, and how to reply to a
-finding in-thread. A surface missing the first two cannot be classified — see
-"Surfaces with no explicit verdict" below.
+Bot logins end in `[bot]`. A workflow file present but never commenting on
+recent PRs is *probably* inactive — but a reviewer added or enabled since
+those PRs merged has had no chance to comment yet. Before excluding a
+configured surface, check the current PR for its activity and its workflow's
+triggers; exclude it only when both come up empty, and say that you did.
+
+Past bot activity is the signal because app installation is not readable with
+an ordinary token: `repos/<owner>/<repo>/installation` answers `401` without an
+app JWT, and `/user/installations` answers `403` unless the token was issued
+for a GitHub App. Codex and CodeRabbit are apps, so their presence can only be
+inferred from what they have commented on. Claude Code Review is a workflow
+file, so it is readable directly — and `gh api repos/<owner>/<repo>/actions/secrets
+--jq '.secrets[].name'` confirms its API key exists, given repo admin.
+
+When discovery finds no model reviewer at all, report that and fall back to
+the deterministic gate rather than reporting a clean verdict nobody issued.
+Installing one is out of scope here: a workflow file can be written into a
+repo, but Codex and CodeRabbit are GitHub Apps a human must authorize through
+GitHub's UI, so no agent can provision them end to end.
+
+For each active surface, establish four things before the first round: how it
+announces that it started, how it reports a verdict, how to reply to a finding
+in-thread, and **how to rerun it**. A surface missing the first two cannot be
+classified — see "Surfaces with no explicit verdict" below.
+
+The rerun matters because `gh pr close && gh pr reopen` is not universal: it
+fires the `reopened` event, so a workflow subscribing only to `synchronize`
+ignores it, and a GitHub App reruns on its own triggers. Read the workflow's
+`on:` block, or the app's documented command comment, and record the rerun
+that surface actually answers to. Falling back to close/reopen for a surface
+that ignores it produces another verdict-less round and burns a retry.
 
 ## Claude Code Review
 
@@ -37,7 +64,7 @@ per round:
   `VERDICT: CLEAN` or `VERDICT: FINDINGS (<count>)`.
 
 ```bash
-gh api repos/<owner>/<repo>/issues/<n>/comments \
+gh api --paginate repos/<owner>/<repo>/issues/<n>/comments \
   --jq '.[] | select(.user.login=="claude[bot]") | .body'
 ```
 
@@ -53,10 +80,24 @@ Reply to a finding by commenting on the PR, quoting the finding.
 priority (P1/P2/…). Read the review body for the summary and the inline
 comments for the findings:
 
+Both endpoints return **every round's** reviews and comments, so filter to the
+current head before classifying anything. A review carries `commit_id`; each
+inline comment carries `original_commit_id` and the `pull_request_review_id`
+of the review it belongs to.
+
 ```bash
-gh api repos/<owner>/<repo>/pulls/<n>/reviews
-gh api repos/<owner>/<repo>/pulls/<n>/comments
+head=$(gh pr view <n> --json headRefOid --jq .headRefOid)
+# the current head's most recent review, and its id
+gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews \
+  --jq "[.[] | select(.commit_id==\"$head\")] | last"
+# only the comments belonging to that review
+gh api --paginate repos/<owner>/<repo>/pulls/<n>/comments \
+  --jq ".[] | select(.pull_request_review_id==<review-id>)"
 ```
+
+Skipping that filter fails in both directions: a prior round's neutral review
+gets reused as a clean verdict while the current review is still pending, and
+stale inline findings make a genuinely clean current review look dirty.
 
 Reply in-thread on the comment that raised the finding:
 
@@ -65,15 +106,23 @@ gh api -X POST repos/<owner>/<repo>/pulls/<n>/comments/<comment-id>/replies \
   -f body="Fixed in <sha> — <what changed>"
 ```
 
-Treat a review with no inline comments and an approving or neutral body as
-that surface's clean verdict.
+Treat a review **for the current head** with no inline comments and an
+approving or neutral body as that surface's clean verdict.
 
 ## CodeRabbit
 
-On the free plan CodeRabbit posts a walkthrough summary only — never
-line-level findings — and enforces an hourly review limit. It is
-informational: read it for context, never wait on it for a verdict, and never
-count its silence as either clean or stalled.
+`coderabbitai[bot]` posts a walkthrough summary, and — depending on plan and
+configuration — line-level inline comments badged by severity
+(Major/Minor/Trivial). Read both; treat the inline comments as findings.
+
+Do not assume the summary-only shape: an earlier draft of this file asserted
+CodeRabbit "never" posts line-level findings on the free plan, and CodeRabbit
+posted eighteen of them on the PR that added the file. Check what it actually
+posted on this repo rather than trusting a plan-shaped rule.
+
+It enforces an hourly review limit, so it can genuinely have nothing to say
+for a round. That makes its silence uninformative: never count it as clean,
+and never let it alone hold up a verdict.
 
 ## Deterministic CI
 
