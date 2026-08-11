@@ -85,12 +85,14 @@ Wait in two phases, because they finish at different times. `gh pr checks
 afterwards — reading the surfaces the moment it returns is what fakes a stall.
 
 ```bash
-until gh pr checks <n> >/dev/null 2>&1; do :; done   # suite registered yet?
-gh pr checks <n> --watch                             # phase 1: the gate
+until [ "$(gh pr view <n> --json statusCheckRollup --jq length)" -gt 0 ]
+do sleep 10; done                 # wait for the suite to exist
+gh pr checks <n> --watch          # phase 1: the gate
 ```
 
-Poll for the suite first: straight after a push `--watch` can exit `no checks
-reported` instead of waiting, handing a healthy round back as failed.
+Poll for **existence, not success**: after a push `--watch` can exit `no
+checks reported` instead of waiting, and `gh pr checks` also exits non-zero
+when a check *fails*, so polling its exit status spins forever on a red gate.
 
 Then wait on each active surface for a verdict against the current head, under
 an explicit per-surface timeout; say which timeout you used. Bound both phases
@@ -122,7 +124,9 @@ cause before re-triggering, capping retries at two per cause.
 
 1. Present the findings to the user, grouped by surface, before changing code.
 2. Apply the fixes on the checked-out PR branch.
-3. Run the local gate — a round spent discovering a broken fix is wasted.
+3. Run the local gate — a round spent discovering a broken fix is wasted. On
+   a PR from an untrusted fork this executes that fork's code (test scripts,
+   build hooks): ask the user before running it, or gate only in CI.
 4. Commit, then push to the recorded remote and ref, then re-resolve the head
    SHA. `git push` publishes commits, not working-tree edits: skip the commit
    and the PR head never moves while the loop believes it did.
@@ -140,11 +144,7 @@ round cap the same way — hitting it means reviewer and fixer disagree.
 
 ## Round ledger
 
-Print this after every round, so a human can read the state and take over:
-
-| Round | Head SHA | Fingerprint | Surface verdicts | Outcome | Action |
-| --- | --- | --- | --- | --- | --- |
-| 1 | `a06e93d` | `4f2c…` | codex: 1×P1 · gate: pass | findings | fixed, replied, pushed |
-| 2 | `682396c` | `4f2c…` | — | unchanged | prior verdict carried |
-
-This is the durable state the loop would otherwise rediscover every session.
+Print a table after every round so a human can read the state and take over —
+round, head SHA, fingerprint, per-surface verdict, outcome, action taken. This
+is the durable state the loop would otherwise rediscover every session: which
+round is in flight, what was reviewed, which surface still owes a verdict.

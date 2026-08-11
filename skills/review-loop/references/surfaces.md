@@ -15,9 +15,7 @@ and read a verdict only in the way that surface actually reports one.
   reconstructing it from configuration:
 
   ```bash
-  gh pr view <n> --json statusCheckRollup \
-    --jq '[.statusCheckRollup[] | select(.isRequired)
-           | {name: (.name // .context), state: (.conclusion // .state)}]'
+  gh pr checks <n> --required
   ```
 
   This is the authoritative answer and it is why the loop does not walk
@@ -27,12 +25,10 @@ and read a verdict only in the way that surface actually reports one.
   rulesets, required *workflows* as well as required status checks, paginated
   ruleset collections, and base refs like `release/1.x` that need encoding.
 
-  An empty result means no required checks are configured — not that the query
+  `no required checks reported` means nothing is enforced — not that the query
   failed. Say which it was: gate on the repo's documented CI check and record
   in the report that nothing is enforced, rather than reporting a gate that
-  does not exist. (`isRequired` is null on every check in a repository with no
-  protection, which is indistinguishable from an unsupported field; treat both
-  as "nothing enforced" and state the assumption.)
+  does not exist.
 
   Derive the gate from that answer alone, whichever app or workflow produces
   each check. Model reviewers are *usually* comment-only, but one can also
