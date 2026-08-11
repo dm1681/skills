@@ -16,7 +16,11 @@ and read a verdict only in the way that surface actually reports one.
   gh api repos/<owner>/<repo>/branches/<base>/protection
   ```
 
-  Model reviewers are comment-only and gate nothing.
+  Derive it from that configuration alone, whichever app or workflow produces
+  each check. Model reviewers are *usually* comment-only, but one can also
+  produce a required check — and then a clean comment from it is not a
+  substitute for that check concluding successfully. Excluding a check because
+  its producer also comments removes a real merge gate.
 - **Local gate** — the verification command the repo tells contributors to run
   before pushing (`AGENTS.md`, `CLAUDE.md`, `package.json` scripts, `Makefile`).
 - **Round cap** — how many rounds before stopping and handing back. Default 5.
