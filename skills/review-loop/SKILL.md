@@ -17,9 +17,8 @@ Classify every round on a signal the reviewer explicitly posted — never on
 silence, never on the check's colour. A round you cannot classify is failed.
 
 Read [references/surfaces.md](references/surfaces.md) in pre-flight: finding
-the active surfaces, reading each one's verdict, replying in-thread, rerunning
-it. Read [references/traps.md](references/traps.md) whenever a round is not
-clean: the failure modes that produce a green check while reviewing nothing.
+surfaces, reading each verdict, replying in-thread, rerunning. Read
+[references/traps.md](references/traps.md) whenever a round is not clean.
 
 ## Discover the setup, do not assume it
 
@@ -50,9 +49,8 @@ push` from whatever branch was checked out can update something unrelated.
 Confirm the branch is current with its base. A stale branch silently disables
 some reviewers (trap 1) — check this before spending a round.
 
-Record the **diff fingerprint** — the patch hash *and* the base revision it
-was reviewed against, since the same patch over a moved base is a different
-integration:
+Record the **diff fingerprint** — patch hash *and* base revision, since the
+same patch over a moved base is a different integration:
 
 ```bash
 git diff "origin/<base>...<head-sha>" | git hash-object --stdin
@@ -87,15 +85,18 @@ Wait in two phases, because they finish at different times. `gh pr checks
 afterwards — reading the surfaces the moment it returns is what fakes a stall.
 
 ```bash
-gh pr checks <n> --watch          # phase 1: the deterministic gate
+until gh pr checks <n> >/dev/null 2>&1; do :; done   # suite registered yet?
+gh pr checks <n> --watch                             # phase 1: the gate
 ```
 
-Then wait on each active surface for a verdict against the current head SHA,
-under an explicit per-surface timeout. A surface is stalled only once its
-timeout expires with no verdict; say which timeout you used. Bound both phases
-using the runner's own process timeout or a deadline loop — `timeout(1)` is
-absent on a stock macOS — since an unbounded watcher on a wedged run hangs the
-loop with no ledger entry for a human to take over from.
+Poll for the suite first: straight after a push `--watch` can exit `no checks
+reported` instead of waiting, handing a healthy round back as failed.
+
+Then wait on each active surface for a verdict against the current head, under
+an explicit per-surface timeout; say which timeout you used. Bound both phases
+with the runner's process timeout or a deadline loop — `timeout(1)` is absent
+on a stock macOS — since an unbounded watcher on a wedged run hangs the loop
+with no ledger entry for a human to take over from.
 
 Retry a `gh` call that fails with a TLS or certificate error rather than
 treating it as a hard failure (trap 7).
@@ -106,9 +107,9 @@ treating it as a hard failure (trap 7).
 | --- | --- | --- |
 | **clean** | The gate passed **and** every active surface reported against the current head with no findings | Step 6 |
 | **findings** | The gate failed, or a surface reported actionable findings | Step 5 |
-| **stalled** | A surface's timeout expired with no verdict for the current head SHA — tracking comment half-ticked or absent | Diagnose, correct, re-trigger |
+| **stalled** | A surface's timeout expired with no verdict, and it did start — tracking comment half-ticked, or a run that began and never finished | Diagnose, correct, re-trigger |
 | **skipped** | Run succeeded in seconds having read nothing | Diagnose, correct, re-trigger |
-| **failed** | The reviewer's own run errored, or a wait timed out, or the round cannot be classified at all | Report it as unresolved and hand back |
+| **failed** | The reviewer's run errored outright, or a surface never started before its timeout, or the round cannot be classified | Report it as unresolved and hand back |
 
 A passing gate is necessary for **clean**, never sufficient; a failing gate is
 a finding like any other, routed through step 5.
@@ -134,9 +135,8 @@ the user and let them decide rather than silently declining it.
 ### 6. Report and stop
 
 Report rounds run, findings addressed, the verdict per surface, and any round
-carried forward. Leave the PR open and say a human must approve and merge it.
-Stop at the round cap the same way — hitting it usually means the reviewer and
-the fixer disagree, which is a human's call.
+carried forward. Leave the PR open; a human approves and merges. Stop at the
+round cap the same way — hitting it means reviewer and fixer disagree.
 
 ## Round ledger
 
