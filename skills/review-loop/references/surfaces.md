@@ -12,12 +12,18 @@ and read a verdict only in the way that surface actually reports one.
   rather than whichever look important:
 
   ```bash
-  # Rulesets: the collection returns summaries, so fetch each one for the
-  # rules that actually name the required checks.
-  gh api "repos/<owner>/<repo>/rulesets" --jq '.[].id' | while read -r id; do
-    gh api "repos/<owner>/<repo>/rulesets/$id" \
-      --jq '.rules[] | select(.type=="required_status_checks")'
-  done
+  # Rulesets: paginate the collection, and fetch each one — the collection
+  # returns summaries, not the rules that name the checks. Keep only rulesets
+  # that are actively enforced and whose conditions match this base branch;
+  # a disabled, evaluate-only, or other-branch ruleset contributes checks
+  # that will never run here, and waiting on those hangs the round.
+  gh api --paginate "repos/<owner>/<repo>/rulesets" --jq '.[].id' \
+  | while read -r id; do
+      gh api "repos/<owner>/<repo>/rulesets/$id" --jq '
+        select(.enforcement=="active")
+        | select(.conditions.ref_name | .. | strings | test("<base>"))
+        | .rules[] | select(.type=="required_status_checks")'
+    done
   # Legacy branch protection. URL-encode the base ref: a name like
   # release/1.x otherwise splits into an extra path segment and the call
   # returns no protection data rather than an error.
@@ -183,8 +189,9 @@ which never reported.
 gh pr checks <n>
 ```
 
-This is the gate that actually matters; model reviewers are comment-only and
-gate nothing. Prefer a check known to be deterministic. Before reporting a
+This is the gate that actually matters, and its membership comes from the
+required-check configuration above — including any check a model reviewer
+produces. Prefer a check known to be deterministic. Before reporting a
 failing check as a regression, confirm it fails only on this branch — some
 suites fail identically on an untouched base (trap 8):
 
