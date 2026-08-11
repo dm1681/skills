@@ -37,9 +37,8 @@ otherwise resolve it and state what you resolved.
 - **Round cap** — how many rounds before stopping and handing back. Default 5.
 
 Many repositories have no model reviewer at all. When discovery finds none,
-say so and offer the choice rather than waiting on a surface that will never
-report: run against the deterministic gate alone, or stop and provision a
-reviewer first. This skill drives a pipeline that already exists.
+say so and offer the choice: run against the deterministic gate alone, or stop
+and provision a reviewer first — this skill drives an existing pipeline.
 
 ## Workflow
 
@@ -125,7 +124,8 @@ cause before re-triggering, capping retries at two per cause.
 3. Reply in-thread on the surface that raised each finding, so the reviewer
    and the next human reader can see how it was addressed.
 4. Run the local gate — a round spent discovering a broken fix is wasted.
-5. Push — which starts the next round at step 2.
+5. Push, then re-resolve the head SHA: the push moved it, and every later
+   fingerprint and verdict query must anchor to the new one. Then step 2.
 
 Route findings; do not adjudicate them. When a finding looks wrong, say so to
 the user and let them decide rather than silently declining it.
