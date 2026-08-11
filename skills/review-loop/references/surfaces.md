@@ -120,9 +120,18 @@ CodeRabbit "never" posts line-level findings on the free plan, and CodeRabbit
 posted eighteen of them on the PR that added the file. Check what it actually
 posted on this repo rather than trusting a plan-shaped rule.
 
-It enforces an hourly review limit, so it can genuinely have nothing to say
-for a round. That makes its silence uninformative: never count it as clean,
-and never let it alone hold up a verdict.
+Scope its findings to the current head exactly as for Codex: select the review
+whose `commit_id` matches, then read only the comments carrying that review's
+`pull_request_review_id`. Reading every inline comment instead keeps findings
+from earlier heads alive and the loop dirty forever.
+
+It enforces an hourly review limit, and reports hitting it as a **passing
+check reading `Review rate limited`** — observed on the PR that added this
+file. That is not a clean verdict: the surface did not review this head.
+Record the round as **unresolved** for CodeRabbit rather than letting it
+satisfy the clean predicate, and either wait the limit out and re-trigger, or
+finish with an explicitly reduced-confidence verdict that names the surface
+which never reported.
 
 ## Deterministic CI
 
