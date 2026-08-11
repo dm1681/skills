@@ -12,8 +12,9 @@ All notable changes to this repository are documented here. Versions follow
   loop's whole job is telling a clean verdict apart from a review that stalled
   mid-run or was skipped in fifteen seconds — three states that show the same
   green check — so it classifies each round on a verdict the reviewer posted
-  rather than on CI status, carries a prior verdict forward when the diff
-  fingerprint is unchanged, and stops at a round cap without ever merging.
+  rather than on CI status, carries a prior verdict forward only when the
+  patch hash, the base revision, and an explicit prior verdict all agree, and
+  stops at a round cap without ever merging.
   Surfaces, the deterministic gate, and the local verification command are
   discovered per repository; `references/traps.md` records the eight failure
   modes that produce a green check while reviewing nothing.

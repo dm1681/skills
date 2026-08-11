@@ -4,6 +4,28 @@ A **surface** is one reviewer that reports on a PR. Which surfaces exist
 varies per repository, so discover them rather than assuming the set below,
 and read a verdict only in the way that surface actually reports one.
 
+## What to discover
+
+- **Surfaces** — which reviewers actually comment on this repo's PRs, and per
+  surface the four facts below.
+- **Deterministic gate** — the checks branch protection actually requires,
+  rather than whichever look important:
+
+  ```bash
+  gh api repos/<owner>/<repo>/rulesets
+  gh api repos/<owner>/<repo>/branches/<base>/protection
+  ```
+
+  Model reviewers are comment-only and gate nothing.
+- **Local gate** — the verification command the repo tells contributors to run
+  before pushing (`AGENTS.md`, `CLAUDE.md`, `package.json` scripts, `Makefile`).
+- **Round cap** — how many rounds before stopping and handing back. Default 5.
+
+Many repositories have no model reviewer at all. When discovery finds none,
+say so and offer the choice rather than waiting on a surface that will never
+report: run the loop against the deterministic gate alone, or stop and
+provision a reviewer first. This skill drives a pipeline that already exists.
+
 ## Discovering the active surfaces
 
 ```bash
@@ -85,11 +107,16 @@ current head before classifying anything. A review carries `commit_id`; each
 inline comment carries `original_commit_id` and the `pull_request_review_id`
 of the review it belongs to.
 
+Filter on **both** the head and the bot. Selecting the newest review for the
+head alone picks up whatever a human or another bot submitted after this
+surface did, and reads that stranger's approval as this surface's verdict.
+
 ```bash
 head=$(gh pr view <n> --json headRefOid --jq .headRefOid)
-# the current head's most recent review, and its id
+bot=chatgpt-codex-connector[bot]
+# this surface's most recent review for this head, and its id
 gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews \
-  --jq "[.[] | select(.commit_id==\"$head\")] | last"
+  --jq "[.[] | select(.commit_id==\"$head\" and .user.login==\"$bot\")] | last"
 # only the comments belonging to that review
 gh api --paginate repos/<owner>/<repo>/pulls/<n>/comments \
   --jq ".[] | select(.pull_request_review_id==<review-id>)"
