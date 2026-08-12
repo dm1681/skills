@@ -71,11 +71,9 @@ inferred from what they have commented on. Claude Code Review is a workflow
 file, so it is readable directly — and `gh api repos/<owner>/<repo>/actions/secrets
 --jq '.secrets[].name'` confirms its API key exists, given repo admin.
 
-When discovery finds no model reviewer at all, report that and fall back to
-the deterministic gate rather than reporting a clean verdict nobody issued.
-Installing one is out of scope here: a workflow file can be written into a
-repo, but Codex and CodeRabbit are GitHub Apps a human must authorize through
-GitHub's UI, so no agent can provision them end to end.
+Installing a missing reviewer is out of scope here: a workflow file can be
+written into a repo, but Codex and CodeRabbit are GitHub Apps a human must
+authorize through GitHub's UI, so no agent can provision them end to end.
 
 For each active surface, establish four things before the first round: how it
 announces that it started, how it reports a verdict, how to reply to a finding
@@ -94,9 +92,9 @@ that ignores it produces another verdict-less round and burns a retry.
 `anthropics/claude-code-action`, posting as `claude[bot]`. Three comment kinds
 per round:
 
-- `🔍 Review started — ... head <sha>` — posted before the diff is read. This
-  implements the announce-before-reviewing convention in this repo's
-  `AGENTS.md`; its absence means the round never really began.
+- `🔍 Review started — ... head <sha>` — posted before the diff is read, where
+  the workflow implements an announce-before-reviewing convention. Its absence
+  means the round never really began.
 - A tracking comment (`**Claude finished** ...`) carrying a phase checklist —
   the live in-progress surface. Unchecked boxes with no finished comment mean
   the round died mid-review (trap 2).
@@ -118,7 +116,7 @@ Reply to a finding by commenting on the PR, quoting the finding.
 
 `chatgpt-codex-connector[bot]` posts a PR review plus inline comments badged by
 priority (P1/P2/…). Read the review body for the summary and the inline
-comments for the findings:
+comments for the findings.
 
 Both endpoints return **every round's** reviews and comments, so filter to the
 current head before classifying anything. A review carries `commit_id`; each
@@ -131,7 +129,7 @@ surface did, and reads that stranger's approval as this surface's verdict.
 
 ```bash
 head=$(gh pr view <n> --json headRefOid --jq .headRefOid)
-bot=chatgpt-codex-connector[bot]
+bot='chatgpt-codex-connector[bot]'   # quote it: brackets are shell globs
 # this surface's most recent review for this head, and its id
 gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews \
   --jq "[.[] | select(.commit_id==\"$head\" and .user.login==\"$bot\")] | last"
@@ -185,15 +183,10 @@ which never reported.
 
 ## Deterministic CI
 
-```bash
-gh pr checks <n>
-```
-
-This is the gate that actually matters, and its membership comes from the
-required-check configuration above — including any check a model reviewer
-produces. Prefer a check known to be deterministic. Before reporting a
-failing check as a regression, confirm it fails only on this branch — some
-suites fail identically on an untouched base (trap 8):
+Membership is defined once, under "What to discover" above. This section only
+covers reading it. Before reporting a failing check as a regression, confirm
+it fails only on this branch — some suites fail identically on an untouched
+base (trap 8):
 
 ```bash
 gh run list --branch <base> --workflow <gate> --limit 5
@@ -208,4 +201,5 @@ from a broken one (trap 4). Options, best first:
 2. Fall back to the run's own success plus a non-trivial duration, and report
    the reduced confidence in the final summary.
 
-Never infer clean from silence without saying that is what you did.
+When you do fall back, state in the report that the verdict was inferred and
+from what — so the reduced confidence travels with the result.

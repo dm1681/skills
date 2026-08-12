@@ -1,9 +1,11 @@
 # Traps
 
-Every trap here produces a **green check while nothing useful happened**.
-Together they are why a round's outcome has to be read from a posted verdict
-rather than from CI status. Each was found by losing a full round to it on
-`dm1681/Olympus` PRs #72 and #73 (2026-08-11).
+Traps 1–8 each produce a **green check while nothing useful happened**, which
+is why a round's outcome has to be read from a posted verdict rather than from
+CI status. Traps 9 and 10 are different: they break the loop's own recovery
+and waiting machinery. All of them were found by losing a real round to them —
+1–8 while driving two pull requests by hand, 9 and 10 while reviewing this
+skill.
 
 ## 1. Workflow-file mismatch silently disables the review
 
@@ -111,3 +113,34 @@ without an A/B run against base.
 
 **Recovery** — gate on a check known to be deterministic, or compare the
 failure against a recent base-branch run before reporting it as a regression.
+
+## 9. A failed reopen leaves the PR closed
+
+`gh pr close <n> && gh pr reopen <n>` is two calls. When the first succeeds
+and the second fails — permissions, or the transient error in trap 7 — the
+loop has closed a pull request and moved on. This is the worst state the
+procedure can produce, and it produces it while trying to recover.
+
+**Detection** — after any re-trigger:
+
+```bash
+gh pr view <n> --json state --jq .state     # expect OPEN
+```
+
+**Recovery** — retry the reopen. If it still fails, stop the loop and report
+the PR as closed and needing a human. Never leave a closed PR behind an
+unreported round.
+
+## 10. Polling `gh pr checks` on exit status spins forever
+
+`gh pr checks` exits non-zero both when no checks are reported *and* when a
+check has failed, so `until gh pr checks <n>; do ...; done` never terminates
+on a red gate — and, written without a sleep, spins as a busy loop.
+
+**Recovery** — poll for the suite's *existence* instead, then hand off to the
+watcher:
+
+```bash
+until [ "$(gh pr view <n> --json statusCheckRollup --jq length)" -gt 0 ]
+do sleep 10; done
+```

@@ -1,6 +1,6 @@
 ---
 name: review-loop
-description: Drive a pull request through repeated automated review rounds until every active review surface reports no findings, distinguishing a clean verdict from a review that stalled or was silently skipped. Use when driving a PR to a clean review verdict, re-triggering a review that died mid-run or reported success without reviewing anything, or routing reviewer findings into fixes and in-thread replies.
+description: Drive a pull request through repeated review rounds until every review surface reports no findings. Use when driving a PR to a clean review verdict, re-triggering a review that died mid-run or reported success without reviewing anything, or routing reviewer findings into fixes and in-thread replies.
 ---
 
 # Review loop
@@ -65,11 +65,13 @@ is nothing to push — after a re-trigger, or when correcting a trap — the
 
 ```bash
 gh pr close <n> && gh pr reopen <n>
+gh pr view <n> --json state --jq .state      # must be OPEN before continuing
 ```
 
-Check each surface's configured events first: one listening only to
-`synchronize` ignores `reopened`, so close/reopen starts nothing and burns a
-retry. See [references/surfaces.md](references/surfaces.md) for each rerun.
+Confirm it reopened (trap 9), and check each surface's configured events
+first: one listening only to `synchronize` ignores `reopened`, so close/reopen
+starts nothing. See [references/surfaces.md](references/surfaces.md) for each
+surface's rerun.
 
 Recompute the fingerprint first. Carry forward only **model-review** verdicts,
 and only when patch hash and base revision both match and that prior verdict
@@ -90,9 +92,7 @@ do sleep 10; done                 # wait for the suite to exist
 gh pr checks <n> --watch          # phase 1: the gate
 ```
 
-Poll for **existence, not success**: after a push `--watch` can exit `no
-checks reported` instead of waiting, and `gh pr checks` also exits non-zero
-when a check *fails*, so polling its exit status spins forever on a red gate.
+Poll for **existence, not success** (trap 10).
 
 Then wait on each active surface for a verdict against the current head, under
 an explicit per-surface timeout; say which timeout you used. Bound both phases
@@ -133,8 +133,7 @@ cause before re-triggering, capping retries at two per cause.
 5. Only now reply in-thread, citing the pushed SHA — replying earlier records
    a resolution the PR head does not yet contain. Then step 2.
 
-Route findings; do not adjudicate them. When a finding looks wrong, say so to
-the user and let them decide rather than silently declining it.
+Route findings; when one looks wrong, say so and let the user decide.
 
 ### 6. Report and stop
 
@@ -145,6 +144,7 @@ round cap the same way — hitting it means reviewer and fixer disagree.
 ## Round ledger
 
 Print a table after every round so a human can read the state and take over —
-round, head SHA, fingerprint, per-surface verdict, outcome, action taken. This
+round, head SHA, fingerprint, per-surface verdict, outcome, action taken, and
+the cause and count of any retry, since the two-per-cause cap needs it. This
 is the durable state the loop would otherwise rediscover every session: which
 round is in flight, what was reviewed, which surface still owes a verdict.
