@@ -16,18 +16,16 @@ that died halfway through, and one the runner skipped in fifteen seconds.
 Classify every round on a signal the reviewer explicitly posted — never on
 silence, never on the check's colour. A round you cannot classify is failed.
 
-Read [references/surfaces.md](references/surfaces.md) in pre-flight: finding
-surfaces, reading each verdict, replying in-thread, rerunning. Read
-[references/traps.md](references/traps.md) whenever a round is not clean.
-
 ## Discover the setup, do not assume it
 
 Four inputs vary per repository: the active **surfaces**, the **deterministic
 gate** (whatever branch protection requires, whichever app produces it), the
-repo's **local gate** command, and the **round cap** (default
-5). Take each from an argument when given, otherwise resolve it and state what
-you resolved. [references/surfaces.md](references/surfaces.md) covers how,
-including the common case of a repo with no model reviewer at all.
+repo's **local gate** command, and the **round cap** (default 5). Take each
+from an argument when given, otherwise resolve it and state what you resolved.
+Read [references/surfaces.md](references/surfaces.md) in pre-flight for how —
+finding surfaces, reading verdicts, replying, rerunning, and the common case
+of a repo with no model reviewer at all. Read
+[references/traps.md](references/traps.md) whenever a round is not clean.
 
 ## Workflow
 
@@ -50,12 +48,8 @@ Confirm the branch is current with its base. A stale branch silently disables
 some reviewers (trap 1) — check this before spending a round.
 
 Record the **diff fingerprint** — patch hash *and* base revision, since the
-same patch over a moved base is a different integration:
-
-```bash
-git diff "origin/<base>...<head-sha>" | git hash-object --stdin
-git rev-parse "origin/<base>"
-```
+same patch over a moved base is a different integration. Trap 5 has both
+commands and the three ways the shortcut turns into a false clean.
 
 ### 2. Trigger a round
 
@@ -99,6 +93,12 @@ an explicit per-surface timeout; say which timeout you used. Bound both phases
 with the runner's process timeout or a deadline loop — `timeout(1)` is absent
 on a stock macOS — since an unbounded watcher on a wedged run hangs the loop
 with no ledger entry for a human to take over from.
+
+Read the state with the bundled script, not re-derived rules:
+
+```bash
+python3 <skill-root>/scripts/round_status.py --pr <n> --surface '<bot-login>'
+```
 
 Retry a `gh` call that fails with a TLS or certificate error rather than
 treating it as a hard failure (trap 7).
