@@ -7,6 +7,23 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Added
 
+- An `llm-wiki` skill: build and maintain a persistent, agent-written markdown
+  wiki over a growing collection of sources, adapted from Andrej Karpathy's
+  gist of the same name. Three layers (immutable `raw/`, agent-owned `wiki/`,
+  an `AGENTS.md` schema the two co-evolve) and three operations (ingest,
+  query, lint) documented in `references/`. What separates it from retrieval
+  is that an ingest *revises* the pages a new source touches rather than only
+  appending a summary, and records contradictions on both sides instead of
+  silently resolving them — so the entrypoint states that as the rule rather
+  than leaving it implied. The bundled `scripts/wiki_lint.py` covers only the
+  judgment-free half of a lint pass (broken links, orphans, index drift,
+  un-ingested sources, malformed log entries) and says so in its output, because
+  a script that guessed at contradictions would be trusted for a job it cannot
+  do. `tests/test_llm_wiki.py` pins each check against a fixture wiki and pins
+  what the repo validator cannot see: every `references/*.md` is reachable
+  from `SKILL.md`, and the log-entry prefix the conventions document matches
+  the one the linter enforces.
+
 - The dashboard lists `matt-skills` as an external tool row. Selecting it
   unfolds the installed skills that ship `disable-model-invocation`, each
   toggleable between hidden and model-visible; choices are recorded in

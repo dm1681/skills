@@ -8,9 +8,40 @@ self-contained under [`skills/`](skills/).
 
 | Skill | Purpose |
 | --- | --- |
+| `llm-wiki` | Build and maintain a persistent, agent-written markdown wiki over a growing collection of sources. |
 | `semantic-pr-review` | Explain a pull request as a source-verified semantic hierarchy and interactive flowchart. |
 | `viz-driven-dev` | Build the plot, overlay, or video that would show a feature's effect before implementing it, then regenerate it from real output. |
 | `wow-addon-dev` | Build, debug, package, and publish retail World of Warcraft addons under the taint and secret-value fences. |
+
+## LLM wiki
+
+`llm-wiki` builds a knowledge base that compounds instead of being re-derived
+on every question. Sources stay immutable under `raw/`; the agent owns `wiki/`
+entirely and maintains it across sessions; an `AGENTS.md` schema at the wiki
+root carries the conventions forward so a later session behaves like a
+maintainer rather than a fresh chatbot.
+
+The operation that distinguishes it from retrieval is ingest: a new source is
+not only summarized but used to *revise* every existing page it touches, with
+contradictions recorded on both sides rather than silently resolved. Queries
+are answered from the wiki with citations back to sources, and good answers
+are filed back as pages.
+
+The judgment-free half of a lint pass is scripted, so the agent's attention
+goes to contradictions and staleness:
+
+```sh
+python3 <skill-root>/scripts/wiki_lint.py <wiki-root> --strict
+```
+
+It reports broken links, orphan pages, index drift, sources sitting in `raw/`
+that were never ingested, and log entries that break the greppable
+`## [YYYY-MM-DD] <op> | <title>` prefix. It deliberately does not guess at
+contradictions.
+
+The pattern is adapted from Andrej Karpathy's
+[LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
+gist.
 
 ## Semantic PR review
 
