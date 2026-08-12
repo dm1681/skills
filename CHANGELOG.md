@@ -16,8 +16,12 @@ All notable changes to this repository are documented here. Versions follow
   patch hash, the base revision, and an explicit prior verdict all agree, and
   stops at a round cap without ever merging.
   Surfaces, the deterministic gate, and the local verification command are
-  discovered per repository; `references/traps.md` records the eight failure
-  modes that produce a green check while reviewing nothing.
+  discovered per repository. `references/traps.md` records ten traps — eight
+  that produce a green check while reviewing nothing, plus two that break the
+  loop's own recovery and waiting machinery — and `scripts/round_status.py`
+  applies the verdict-correlation rules so each round does not re-derive
+  them: matching a review to both the current head and the surface that wrote
+  it, and reading findings by review id rather than by head.
 
 - The dashboard lists `matt-skills` as an external tool row. Selecting it
   unfolds the installed skills that ship `disable-model-invocation`, each
