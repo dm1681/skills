@@ -271,7 +271,7 @@ class InstallerTests(unittest.TestCase):
                 f"https://github.com/mattpocock/skills.git {install.MATT_SKILLS_REF}",
                 result.stdout,
             )
-            self.assertIn("git checkout --quiet --detach FETCH_HEAD", result.stdout)
+            self.assertIn("git -c core.autocrlf=false -c core.eol=lf checkout --quiet --detach FETCH_HEAD", result.stdout)
 
     def test_matt_skills_dry_run_honours_a_requested_ref(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

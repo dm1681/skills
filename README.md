@@ -299,7 +299,7 @@ temporary checkout,
 ```sh
 git init --quiet
 git fetch --quiet --depth 1 https://github.com/mattpocock/skills.git v1.2.3
-git checkout --quiet --detach FETCH_HEAD
+git -c core.autocrlf=false -c core.eol=lf checkout --quiet --detach FETCH_HEAD
 ```
 
 then copies every skill it finds into the exact selected roots, including the

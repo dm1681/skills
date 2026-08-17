@@ -25,13 +25,18 @@ The effective commands have this form:
 ```sh
 git init --quiet
 git fetch --quiet --depth 1 https://github.com/mattpocock/skills.git v1.2.3
-git checkout --quiet --detach FETCH_HEAD
+git -c core.autocrlf=false -c core.eol=lf checkout --quiet --detach FETCH_HEAD
 ```
 
 `git fetch <url> <ref>` rather than `git clone --branch <ref>`, because clone's
 `--branch` takes a tag or a branch and refuses a commit SHA. Every install
 prints the ref and the commit it resolved to, so `--matt-ref main` still leaves
 a record of what actually arrived.
+
+Checkout overrides line-ending conversion because Git for Windows enables
+`core.autocrlf` by default. Without the override the same commit installs
+different bytes there than everywhere else, and the shell script one upstream
+skill ships arrives with a `#!/bin/bash\r` shebang that no POSIX shell can run.
 
 Git is the only requirement; there is no Node.js dependency. `--dry-run` prints
 the exact commands and final destinations without network access. Custom
@@ -46,9 +51,16 @@ the commit behind it and the default install stops if upstream has force-moved
 the tag since — update the two together. Override the ref per run:
 
 ```sh
-./install.sh --agent all --matt-skills --matt-ref main       # track upstream
-./install.sh --agent all --matt-skills --matt-ref v1.2.2     # an older release
-./install.sh --agent all --matt-skills --matt-ref 9c9f36c    # an exact commit
+# Track upstream.
+./install.sh --agent all --matt-skills --matt-ref main
+
+# An older release.
+./install.sh --agent all --matt-skills --matt-ref v1.2.2
+
+# An exact commit, named in full: the remote resolves the argument as a
+# refspec, and an abbreviated SHA is not one.
+./install.sh --agent all --matt-skills \
+  --matt-ref 9c9f36ccd3995266cd675468af71639c8dde1ec5
 ```
 
 A named ref is checked against no second pin — it *is* the revision the caller
@@ -59,8 +71,10 @@ Updating the pin is a commit somebody reviews, and the diff behind it is
 readable before it lands:
 
 ```sh
-git clone https://github.com/mattpocock/skills.git
-git -C skills diff v1.2.3..v1.3.0 -- skills/
+# Not into ./skills: that is this repository's own bundled-skills directory,
+# and git refuses a non-empty destination.
+git clone https://github.com/mattpocock/skills.git /tmp/mattpocock-skills
+git -C /tmp/mattpocock-skills diff v1.2.3..v1.3.0 -- skills/
 ```
 
 ## What gets installed
@@ -75,7 +89,9 @@ upstream costs nothing here. Two exceptions:
   Upstream retires skills there instead of deleting them, and a retirement
   should not arrive as a fresh install.
 - Two categories claiming one name stops the install rather than letting one
-  silently win. Nothing collides today.
+  silently win. The comparison is case-insensitive, because `Foo` and `foo` are
+  two directories upstream but one destination on Windows and on a stock macOS
+  filesystem. Nothing collides today.
 
 Every selected root receives the same files. The skills carry no agent-specific
 content — upstream's CLI wrote byte-identical trees to each agent it was given —

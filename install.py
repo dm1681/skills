@@ -397,12 +397,30 @@ def matt_skills_fetch_commands(
     `fetch <url> <ref>` rather than `clone --branch <ref>`, because clone's
     --branch accepts a tag or a branch and refuses a commit SHA. Naming a ref
     exists so an install can be pinned, and a moved tag pins nothing, so the
-    one form that takes all three is the form worth having.
+    one form that takes all three is the form worth having. A commit has to be
+    named in full: the remote resolves the positional argument as a refspec,
+    and an abbreviated SHA is not one.
+
+    Checkout overrides line-ending conversion because Git for Windows enables
+    `core.autocrlf` by default, which would rewrite every checked-out file to
+    CRLF — the same commit would then install different bytes on Windows than
+    everywhere else, and the shell script one upstream skill ships would land
+    with a `#!/bin/bash\r` shebang that no POSIX shell can run.
     """
     return [
         [executable, "init", "--quiet"],
         [executable, "fetch", "--quiet", "--depth", "1", MATT_SKILLS_REPO, ref],
-        [executable, "checkout", "--quiet", "--detach", "FETCH_HEAD"],
+        [
+            executable,
+            "-c",
+            "core.autocrlf=false",
+            "-c",
+            "core.eol=lf",
+            "checkout",
+            "--quiet",
+            "--detach",
+            "FETCH_HEAD",
+        ],
     ]
 
 
@@ -456,7 +474,11 @@ def matt_skill_sources(checkout: Path) -> list[Path]:
     — its own CLI included — installs them flat as `<name>/`. Discovery walks
     for `SKILL.md` rather than hard-coding those two levels, so a reorganization
     upstream costs nothing here; the price of flattening is that two categories
-    could one day claim one name, which is a stop rather than a coin toss.
+    could one day claim one name, which is a stop rather than a coin toss. That
+    claim is compared case-insensitively, because `Foo` and `foo` are two
+    directories in the checkout but one destination on Windows and on a stock
+    macOS filesystem — the collision has to be caught before the second copy
+    quietly replaces the first.
     """
     root = checkout / "skills"
     if not root.is_dir():
@@ -473,13 +495,13 @@ def matt_skill_sources(checkout: Path) -> list[Path]:
         # outermost one names an installable skill.
         if _has_ancestor_skill(skill_dir, root):
             continue
-        claimed = sources.get(skill_dir.name)
+        claimed = sources.get(skill_dir.name.casefold())
         if claimed is not None:
             raise InstallError(
                 f"{MATT_SKILLS_SOURCE} has two skills named {skill_dir.name}: "
                 f"{claimed.relative_to(checkout)} and {relative}"
             )
-        sources[skill_dir.name] = skill_dir
+        sources[skill_dir.name.casefold()] = skill_dir
     return [sources[name] for name in sorted(sources)]
 
 

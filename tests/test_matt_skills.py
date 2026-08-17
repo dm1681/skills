@@ -40,10 +40,30 @@ class MattSkillsTests(unittest.TestCase):
                     "https://github.com/mattpocock/skills.git",
                     "v9.9.9",
                 ],
-                ["git", "checkout", "--quiet", "--detach", "FETCH_HEAD"],
+                [
+                    "git",
+                    "-c",
+                    "core.autocrlf=false",
+                    "-c",
+                    "core.eol=lf",
+                    "checkout",
+                    "--quiet",
+                    "--detach",
+                    "FETCH_HEAD",
+                ],
             ],
             INSTALLER.matt_skills_fetch_commands("v9.9.9"),
         )
+
+    def test_checkout_keeps_upstream_line_endings(self) -> None:
+        """Git for Windows enables core.autocrlf, which would rewrite every file.
+
+        The same commit has to install the same bytes everywhere, and one
+        upstream skill ships a shell script whose shebang a CRLF rewrite breaks.
+        """
+        checkout = INSTALLER.matt_skills_fetch_commands()[-1]
+        self.assertIn("core.autocrlf=false", checkout)
+        self.assertIn("core.eol=lf", checkout)
 
     def test_the_default_ref_is_pinned_rather_than_a_moving_branch(self) -> None:
         self.assertEqual(
@@ -112,6 +132,14 @@ class MattSkillsTests(unittest.TestCase):
             checkout = Path(directory)
             write_upstream(checkout, "engineering/tdd", "productivity/tdd")
             with self.assertRaisesRegex(INSTALLER.InstallError, "two skills named tdd"):
+                INSTALLER.matt_skill_sources(checkout)
+
+    def test_names_differing_only_in_case_are_one_destination(self) -> None:
+        """Windows and stock macOS would resolve both to the same directory."""
+        with tempfile.TemporaryDirectory() as directory:
+            checkout = Path(directory)
+            write_upstream(checkout, "engineering/Foo", "productivity/foo")
+            with self.assertRaisesRegex(INSTALLER.InstallError, "two skills named"):
                 INSTALLER.matt_skill_sources(checkout)
 
     def test_a_checkout_without_skills_is_actionable(self) -> None:
@@ -236,7 +264,8 @@ class MattSkillsTests(unittest.TestCase):
             "would run  git init --quiet\n"
             "would run  git fetch --quiet --depth 1 "
             "https://github.com/mattpocock/skills.git v1.0.0\n"
-            "would run  git checkout --quiet --detach FETCH_HEAD\n"
+            "would run  git -c core.autocrlf=false -c core.eol=lf "
+            "checkout --quiet --detach FETCH_HEAD\n"
             f"would copy all discovered Matt Pocock skills -> {ROOT / '.agents' / 'skills'}\n"
             f"would copy all discovered Matt Pocock skills -> {ROOT / '.claude' / 'skills'}\n",
             output.getvalue(),
