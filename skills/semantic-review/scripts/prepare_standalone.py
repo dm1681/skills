@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare a host-rendered PR explorer page for safe editor deep links."""
+"""Prepare a host-rendered changeset explorer page for safe editor deep links."""
 
 from __future__ import annotations
 
@@ -72,7 +72,10 @@ def main() -> int:
     )
     parser.add_argument(
         "--title",
-        help="Optional document title, such as 'PR 54 Planning Explorer'",
+        help=(
+            "Optional document title naming the changeset, such as "
+            "'PR 54 Planning Explorer' or 'main...feature Planning Explorer'"
+        ),
     )
     args = parser.parse_args()
 

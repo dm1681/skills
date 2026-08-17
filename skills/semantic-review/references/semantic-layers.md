@@ -2,7 +2,7 @@
 
 ## Choose layers by responsibility
 
-Start with this taxonomy, then merge, split, or omit categories to match the PR:
+Start with this taxonomy, then merge, split, or omit categories to match the changeset:
 
 1. **Caller or orchestration** — decides when work runs and assembles current context.
 2. **Boundary contract** — typed request, response, event, schema, or validation boundary.
@@ -25,7 +25,7 @@ For each layer, produce a record with:
 | Receives | What exact input enters? |
 | Sends | What exact output leaves? |
 | Connection | Who calls it, and who consumes it? |
-| Change | What does this PR alter? |
+| Change | What does this changeset alter? |
 | Tradeoff | What coupling, debt, or risk remains? |
 | Evidence | Which source lines, tests, and docs prove it? |
 
@@ -43,13 +43,13 @@ Explicitly recognize:
 
 ## Evidence rules
 
-- Use the PR head SHA for GitHub links.
+- Use the analyzed snapshot SHA for GitHub links.
 - Cite implementation lines for runtime behavior.
 - Cite tests for protected outcomes and failure behavior.
 - Cite interface documents for declared ownership.
 - Mark Graphify-inferred relationships as leads until verified in source.
 - Do not infer “mode selects implementation” merely from similarly named files; locate the actual mapping or router.
-- Do not treat a passing CI check as proof that an open or blocked PR is ready to merge.
+- When the changeset is a pull request, do not treat a passing CI check as proof that an open or blocked PR is ready to merge.
 
 ## Final mental model
 
@@ -57,4 +57,4 @@ Write one compact sentence in this shape:
 
 `Owner of policy → stable boundary → replaceable implementation seam → engine-specific work → normalized result → owner of next decision`
 
-Then explain where the PR moved responsibilities relative to the old design.
+Then explain where the changeset moved responsibilities relative to the old design.

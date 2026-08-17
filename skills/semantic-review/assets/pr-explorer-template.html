@@ -183,7 +183,7 @@
       white-space: normal;
     }
 
-    /* Marks the PR's footprint in every view. Shape rather than color, so
+    /* Marks the changeset's footprint in every view. Shape rather than color, so
        a node reads as changed without a second color channel. */
     #__PR_EXPLORER_ROOT_ID__
       .prx-node[data-change-status]:not([data-change-status="context"])::after {
@@ -463,7 +463,7 @@
     }
   </style>
 
-  <section class="card prx-overview" data-pr-summary aria-label="PR orientation">
+  <section class="card prx-overview" data-pr-summary aria-label="Changeset orientation">
     <span class="viz-badge" data-role="pr-label"></span>
     <span class="viz-badge" data-role="pr-snapshot"></span>
     <h2 data-role="goal"></h2>
@@ -478,14 +478,14 @@
   <div class="prx-scope-row">
     <div class="prx-controls viz-controls" role="group" aria-label="Choose change scope">
       <button type="button" class="btn btn-primary" data-view-choice="full" aria-pressed="true">Full request path</button>
-      <button type="button" class="btn" data-view-choice="delta" aria-pressed="false">PR delta</button>
+      <button type="button" class="btn" data-view-choice="delta" aria-pressed="false">Change delta</button>
     </div>
     <div class="prx-change-legend text-small" data-change-legend aria-label="Change status legend">
-      <span class="prx-change-key" data-kind="delta">PR delta</span>
+      <span class="prx-change-key" data-kind="delta">Change delta</span>
       <span class="prx-change-key" data-kind="context">Context</span>
     </div>
   </div>
-  <p class="text-small text-muted" data-role="view-note" aria-live="polite">Full request path shows PR changes together with unchanged or externally owned context.</p>
+  <p class="text-small text-muted" data-role="view-note" aria-live="polite">Full request path shows the changeset together with unchanged or externally owned context.</p>
 
   <div class="prx-toolbar">
     <div class="prx-step-controls">
@@ -498,7 +498,7 @@
   <p class="text-small text-muted">Hover or keyboard-focus a branch to emphasize its complete path, hover arrows for transferred objects, and select a node for source-backed details.</p>
   <div class="prx-legend text-small" data-role="legend" aria-label="System color legend"></div>
 
-  <div class="prx-flow" role="group" aria-label="PR runtime flowchart">
+  <div class="prx-flow" role="group" aria-label="Changeset runtime flowchart">
     <div class="prx-sequence" data-role="shared-before"></div>
     <div class="prx-fanout" aria-label="Execution branches fan out"></div>
     <section class="prx-branches" data-role="branches" aria-label="Execution branches"></section>
@@ -516,7 +516,7 @@
       <strong>Architectural role</strong><span data-role="detail-role"></span>
       <strong>Connection</strong><span data-role="detail-connection"></span>
       <strong>Why it matters</strong><span data-role="detail-tradeoff"></span>
-      <strong>PR status</strong><span data-role="detail-status"></span>
+      <strong>Change status</strong><span data-role="detail-status"></span>
     </div>
     <div class="prx-source-links" data-role="detail-sources" aria-label="Relevant code"></div>
   </section>
@@ -966,8 +966,8 @@
         });
         roles("view-note").textContent =
           view === "delta"
-            ? "PR delta emphasizes changed nodes and path segments; context remains dimmed so the handoffs stay understandable."
-            : "Full request path shows PR changes together with unchanged or externally owned context.";
+            ? "Change delta emphasizes changed nodes and path segments; context remains dimmed so the handoffs stay understandable."
+            : "Full request path shows the changeset together with unchanged or externally owned context.";
       }
 
       function buildNotices() {
@@ -999,13 +999,19 @@
       }
 
       function buildSummary() {
-        roles("pr-label").textContent = `PR ${model.pr.number} · central goal`;
+        // `pr.number` is a pull request number, or any other changeset
+        // label (ref range, snapshot, working tree). Only a bare number gets
+        // the `PR ` prefix; every other label is already self-describing.
+        const changeset = /^\d+$/.test(String(model.pr.number))
+          ? `PR ${model.pr.number}`
+          : String(model.pr.number);
+        roles("pr-label").textContent = `${changeset} · central goal`;
         // The badge names the commit the excerpts actually came from. For a
-        // deletion-only PR that is the pre-image, so both are shown rather
+        // deletion-only changeset that is the pre-image, so both are shown rather
         // than quietly labelling pre-image bytes with the head SHA.
         roles("pr-snapshot").textContent = model.pr.evidence_sha
           ? `Analyzed snapshot · ${model.pr.evidence_sha.slice(0, 7)}`
-            + ` (pre-image) · PR head ${model.pr.head_sha.slice(0, 7)}`
+            + ` (pre-image) · head ${model.pr.head_sha.slice(0, 7)}`
           : `Analyzed snapshot · ${model.pr.head_sha.slice(0, 7)}`;
         roles("goal").textContent = model.summary.goal;
         renderCodeAware(roles("old-to-new"), model.summary.old_to_new);

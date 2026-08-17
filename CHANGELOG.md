@@ -152,6 +152,25 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Changed
 
+- `semantic-pr-review` is now `semantic-review`, and its scope covers any
+  changeset rather than pull requests alone: a GitHub PR, a branch or ref
+  comparison, a commit range, or the staged and unstaged work in a checkout.
+  A PR is one input among several, so step 1 resolves the exact *changeset*
+  and records whichever immutable anchor exists — head SHA, endpoint SHA, or
+  snapshot SHA — and says so plainly when uncommitted bytes have none. The
+  entrypoint, references, agent interface, explorer template, and bundled
+  scripts follow: the explorer's snapshot block stays keyed `pr` and accepts a
+  changeset label (`main...feature`, `snapshot 9f2c1ab`) where a PR puts its
+  number, the delta view is labelled `Change delta`, and strict standalone
+  validation accepts any changeset identifier in the page title instead of
+  requiring `PR <number>`. Two limits are documented rather than papered over:
+  excerpts are materialized from Git blobs, so reviewing uncommitted work
+  verified needs a snapshot commit or worktree, and immutable web links still
+  need a GitHub-reachable origin. Anyone who installed the skill under the old
+  name should reinstall (`./install.sh --skill semantic-review`) and remove the
+  stale `semantic-pr-review` directory — `skills uninstall semantic-pr-review`
+  where a receipt records it — because nothing renames an installed copy in
+  place.
 - `--matt-skills` fetches `mattpocock/skills` with git instead of shelling out
   to `npx skills@latest`. The upstream CLI only copied files — a checkout and
   its staged output are byte-identical — so the transport swap changes nothing

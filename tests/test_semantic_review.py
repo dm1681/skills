@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL_ROOT = ROOT / "skills" / "semantic-pr-review"
+SKILL_ROOT = ROOT / "skills" / "semantic-review"
 SCRIPTS = SKILL_ROOT / "scripts"
 REFERENCES = (
     "semantic-layers",
@@ -126,7 +126,7 @@ def _edge(source: str, destination: str, change_status: str) -> dict[str, object
 
 
 def _model(head_sha: str) -> dict[str, object]:
-    """Return a minimal but complete explorer model for the fixture PR."""
+    """Return a minimal but complete explorer model for the fixture changeset."""
     return {
         "pr": {"number": 1, "repository": "owner/repository", "head_sha": head_sha},
         "summary": {
@@ -172,15 +172,15 @@ def _model(head_sha: str) -> dict[str, object]:
     }
 
 
-class SemanticPrReviewPackagingTests(unittest.TestCase):
+class SemanticReviewPackagingTests(unittest.TestCase):
     def test_skill_metadata_matches_its_directory_and_agent_interface(self) -> None:
         entrypoint = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("name: semantic-pr-review", entrypoint)
+        self.assertIn("name: semantic-review", entrypoint)
         self.assertIn("description:", entrypoint)
         interface = (SKILL_ROOT / "agents" / "openai.yaml").read_text(encoding="utf-8")
         self.assertIn("display_name:", interface)
         self.assertIn("short_description:", interface)
-        self.assertIn("$semantic-pr-review", interface)
+        self.assertIn("$semantic-review", interface)
 
     def test_entrypoint_routes_every_bundled_reference_and_script(self) -> None:
         entrypoint = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
@@ -240,6 +240,25 @@ class SemanticPrReviewPackagingTests(unittest.TestCase):
             verify._cursor_target("/repo/api.py").as_posix(),
         )
 
+    def test_standalone_title_accepts_any_changeset_anchor(self) -> None:
+        """A pull request is one input; a range or snapshot anchors too."""
+        verify = _load_script("verify_pr_explorer")
+        for heading in (
+            "PR 1 Dispatch Explorer",
+            "main...feature Dispatch Explorer",
+            "Snapshot 9f2c1ab Dispatch Explorer",
+            "Working tree Dispatch Explorer",
+        ):
+            with self.subTest(title=heading):
+                self.assertTrue(
+                    verify._title_identifies_changeset(f"<title>{heading}</title>")
+                )
+        for heading in ("Dispatch Explorer", "Deadbeef Explorer"):
+            with self.subTest(title=heading):
+                self.assertFalse(
+                    verify._title_identifies_changeset(f"<title>{heading}</title>")
+                )
+
     def test_template_keeps_the_placeholders_the_scaffold_replaces(self) -> None:
         template = (SKILL_ROOT / "assets" / "pr-explorer-template.html").read_text(
             encoding="utf-8"
@@ -249,7 +268,7 @@ class SemanticPrReviewPackagingTests(unittest.TestCase):
 
 
 @unittest.skipIf(shutil.which("git") is None, "requires Git for snapshot fixtures")
-class SemanticPrReviewPipelineTests(unittest.TestCase):
+class SemanticReviewPipelineTests(unittest.TestCase):
     def fixture(self, directory: str) -> tuple[Path, str]:
         """Create a one-commit repository and return its path and head SHA."""
         repository = Path(directory) / "repository"
@@ -321,6 +340,49 @@ class SemanticPrReviewPipelineTests(unittest.TestCase):
                 f"https://github.com/owner/repository/blob/{head_sha}/selection.py",
                 rendered,
             )
+
+    def test_a_ref_range_changeset_builds_and_verifies_like_a_pull_request(self) -> None:
+        """The snapshot block stays keyed `pr` but names any changeset."""
+        with tempfile.TemporaryDirectory() as directory:
+            repository, head_sha = self.fixture(directory)
+            model = _model(head_sha)
+            model["pr"]["number"] = "main...feature"
+            data = Path(directory) / "changeset-model.json"
+            data.write_text(json.dumps(model), encoding="utf-8")
+            fragment = Path(directory) / "fragment.html"
+            page = Path(directory) / "page.html"
+            self.run_script(
+                "scaffold_pr_explorer.py",
+                "--data",
+                str(data),
+                "--output",
+                str(fragment),
+                "--repo-root",
+                str(repository),
+                "--source-ref",
+                head_sha,
+            )
+            self.run_script(
+                "render_standalone.py",
+                "--fragment",
+                str(fragment),
+                "--output",
+                str(page),
+                "--title",
+                "main...feature Dispatch Explorer",
+            )
+            result = self.run_script(
+                "verify_pr_explorer.py",
+                str(fragment),
+                "--standalone",
+                str(page),
+                "--source-repo",
+                str(repository),
+                "--source-ref",
+                head_sha,
+                "--strict",
+            )
+            self.assertIn("OK", result.stdout)
 
     def test_strict_verification_rejects_a_hand_edited_preview(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

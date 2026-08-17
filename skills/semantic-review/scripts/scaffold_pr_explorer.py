@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a PR explorer fragment from a source-verified JSON model."""
+"""Build a changeset explorer fragment from a source-verified JSON model."""
 
 from __future__ import annotations
 
@@ -167,8 +167,8 @@ def _editor_link_refusal(cursor_root: Path, source_sha: str) -> str | None:
 def _analysis_sha(model: dict[str, Any]) -> str | None:
     """Return the commit every excerpt and link must resolve against.
 
-    This is normally the PR head. A deletion-only PR has no evidence at its
-    head, so ``pr.evidence_sha`` may name the pre-image instead; the page
+    This is normally the changeset head. A deletion-only changeset has no
+    evidence at its head, so ``pr.evidence_sha`` may name the pre-image instead; the page
     still reports both, so the anchor is never silently swapped.
     """
     pr = model.get("pr", {})
@@ -552,7 +552,7 @@ def _render(
 
 
 def main() -> int:
-    """Validate a model and render a reusable PR explorer fragment."""
+    """Validate a model and render a reusable changeset explorer fragment."""
     skill_root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", required=True, type=Path)
@@ -574,7 +574,7 @@ def main() -> int:
         "--repo-root",
         required=True,
         type=Path,
-        help="Git repository containing the analyzed PR snapshot",
+        help="Git repository containing the analyzed changeset snapshot",
     )
     parser.add_argument(
         "--source-ref",
@@ -605,7 +605,7 @@ def main() -> int:
 
     raw_model = json.loads(args.data.read_text(encoding="utf-8"))
     pr = raw_model.get("pr", {})
-    # A deletion-only PR has no evidence at its head, so the analyzed snapshot
+    # A deletion-only changeset has no evidence at its head, so the snapshot
     # may legitimately be the pre-image. evidence_sha states that explicitly
     # instead of overloading head_sha to mean something it does not.
     source_ref = args.source_ref or pr.get("evidence_sha") or pr.get("head_sha")

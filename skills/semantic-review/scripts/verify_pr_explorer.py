@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a source-linked interactive PR explorer."""
+"""Validate a source-linked interactive changeset explorer."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ def _check_fragment(text: str) -> list[str]:
             errors.append(f"fragment contains forbidden network API: {forbidden}")
 
     if "data-p54-node" not in text and "data-pr-node" not in text:
-        errors.append("fragment has no interactive PR flow nodes")
+        errors.append("fragment has no interactive changeset flow nodes")
     if "detail-sources" not in text:
         errors.append("fragment has no selected-node source-link area")
 
@@ -317,7 +317,7 @@ def _check_quality_contract(text: str) -> list[str]:
 
     markers = {
         "orientation block": "data-pr-summary",
-        "analyzed PR snapshot": 'data-role="pr-snapshot"',
+        "analyzed snapshot": 'data-role="pr-snapshot"',
         "change-status legend": "data-change-legend",
         "execution branches": "data-pr-branch",
         "branch convergence": "data-pr-convergence",
@@ -334,7 +334,7 @@ def _check_quality_contract(text: str) -> list[str]:
         "tooltip source link": "prx-tooltip-source",
     }
     marker_aliases = {
-        "analyzed PR snapshot": ("Analyzed snapshot",),
+        "analyzed snapshot": ("Analyzed snapshot",),
         "change-status legend": ("p54-change-legend",),
         "execution branches": ("dataset.prBranch", "p54-lane"),
         "runtime edge records": ("dataset.prEdge", "p54-edge"),
@@ -405,7 +405,7 @@ def _check_quality_contract(text: str) -> list[str]:
 
     # The explorer is dark-only: one palette means an excerpt reads the same
     # for every reader, whatever their OS is set to. Scoped to stylesheets so
-    # a PR that legitimately discusses theming in prose still validates.
+    # a changeset that legitimately discusses theming in prose still validates.
     stylesheets = "\n".join(
         re.findall(r"<style[^>]*>(.*?)</style>", text, re.DOTALL | re.IGNORECASE)
     )
@@ -423,7 +423,7 @@ def _check_quality_contract(text: str) -> list[str]:
 
     summary = model.get("summary", {})
     if not model.get("pr", {}).get("head_sha"):
-        errors.append("embedded PR metadata is missing head_sha")
+        errors.append("embedded snapshot metadata is missing head_sha")
     for field in (
         "goal",
         "old_to_new",
@@ -516,6 +516,30 @@ def _check_quality_contract(text: str) -> list[str]:
     return errors
 
 
+def _title_identifies_changeset(text: str) -> bool:
+    """Return whether the standalone title names the reviewed changeset.
+
+    A pull request is identified by its number, but the same explorer also
+    describes a ref comparison, a commit range, or a snapshot of working-tree
+    changes, so any unambiguous changeset anchor counts.
+    """
+    title = re.search(r"<title>([^<]*)</title>", text, re.IGNORECASE)
+    if title is None:
+        return False
+    heading = title.group(1)
+    return bool(
+        # a pull request number
+        re.search(r"\bPR\s+\d+", heading, re.IGNORECASE)
+        # an abbreviated or full commit SHA; the digit keeps an ordinary
+        # a-f word such as "deadbeef" from passing as an anchor
+        or re.search(r"\b(?=[0-9a-f]{7,40}\b)[0-9a-f]*\d[0-9a-f]*\b", heading, re.IGNORECASE)
+        # a ref comparison or commit range, such as main...feature
+        or re.search(r"\S\.{2,3}\S", heading)
+        # an explicitly uncommitted changeset
+        or re.search(r"working tree|staged|uncommitted", heading, re.IGNORECASE)
+    )
+
+
 def _check_standalone(
     text: str,
     fragment_has_cursor: bool,
@@ -524,8 +548,11 @@ def _check_standalone(
     """Return validation errors for a rendered standalone page."""
     errors: list[str] = []
 
-    if strict and not re.search(r"<title>[^<]*PR\s+\d+", text, re.IGNORECASE):
-        errors.append("strict standalone title does not identify the PR")
+    if strict and not _title_identifies_changeset(text):
+        errors.append(
+            "strict standalone title does not identify the changeset "
+            "(PR number, ref range, snapshot SHA, or working tree)"
+        )
 
     csp_match = re.search(
         r'<meta[^>]+http-equiv="Content-Security-Policy"'
@@ -594,7 +621,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--source-ref",
-        help="Optional ref; defaults to the embedded PR head SHA",
+        help="Optional ref; defaults to the embedded analyzed SHA",
     )
     parser.add_argument(
         "--strict",
@@ -636,7 +663,7 @@ def main() -> int:
             print(f"ERROR: {error}")
         return 1
 
-    print("PR explorer validation: OK")
+    print("Explorer validation: OK")
     return 0
 
 

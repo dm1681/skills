@@ -1,4 +1,4 @@
-# Interactive PR Flowchart
+# Interactive Changeset Flowchart
 
 ## Composition
 
@@ -14,7 +14,7 @@ Begin with one orientation block containing:
 
 For each branch, show the full runtime path: dispatch, adapter, translated request or configuration, execution engine, mode-specific result, and shared convergence. Align comparable semantic stages across lanes.
 
-Keep these controls only when supported by the PR:
+Keep these controls only when supported by the changeset:
 
 - Previous and Next path navigation
 - clickable flow nodes
@@ -44,7 +44,7 @@ Use each node's `code_preview` record to render:
 
 Keep excerpts exact, contiguous, and small enough to comprehend without scrolling. Prefer 4–10 lines; the scaffold rejects more than 12, and rejects any line over 110 characters. Keep lines concise; select a narrower source region instead of introducing horizontal scrolling or arbitrary identifier breaks. Define the range in the raw model and derive the displayed label and code directly from the Git blob; never maintain those values separately.
 
-Use Catppuccin Mocha for the code surface. The explorer is dark-only: ship one palette so an excerpt reads the same for every reader, and do not add `light-dark()` or a `prefers-color-scheme` block. Tokenize at least comments, strings, keywords, built-ins, types, functions, variables, properties, numbers, operators, punctuation, and decorators when the language supports them. Support common PR languages (`python`, `javascript`, `typescript`, `json`, `toml`, `yaml`, `markdown`, `shell`) and use a conservative generic tokenizer for other languages.
+Use Catppuccin Mocha for the code surface. The explorer is dark-only: ship one palette so an excerpt reads the same for every reader, and do not add `light-dark()` or a `prefers-color-scheme` block. Tokenize at least comments, strings, keywords, built-ins, types, functions, variables, properties, numbers, operators, punctuation, and decorators when the language supports them. Support common source languages (`python`, `javascript`, `typescript`, `json`, `toml`, `yaml`, `markdown`, `shell`) and use a conservative generic tokenizer for other languages.
 
 Implement highlighting locally in the fragment. Do not depend on a network-loaded highlighter for core readability.
 
@@ -76,7 +76,7 @@ Use a separate cross-cutting rail for tests, import rules, and documentation. La
 
 Give every node and runtime edge a `change_status` of `added`, `modified`, `removed`, or `context`. Display node status with text or shape in addition to color, and distinguish changed and contextual path segments with line treatment or emphasis as well as color.
 
-When a small diff needs substantial neighboring context, provide separate `PR delta` and `Full request path` controls plus a visible status legend. The full path may retain context nodes in a secondary state; the delta view must preserve enough boundary information to explain the change. Show the analyzed immutable head SHA near the orientation block.
+When a small diff needs substantial neighboring context, provide separate `Change delta` and `Full request path` controls plus a visible status legend. The full path may retain context nodes in a secondary state; the delta view must preserve enough boundary information to explain the change. Show the analyzed immutable SHA near the orientation block.
 
 ## Link strategy
 
@@ -122,7 +122,7 @@ Create a self-contained standalone page without relying on a host renderer. Use 
 python3 <skill-root>/scripts/render_standalone.py \
   --fragment /absolute/path/to/pr-fragment.html \
   --output /absolute/path/to/page.html \
-  --title "PR <number> <scope> Explorer"
+  --title "PR <number> <scope> Explorer"   # or "<changeset> <scope> Explorer"
 ```
 
 The bundled renderer creates a self-contained sandboxed wrapper, embeds `assets/pr-explorer-base.css` inside the framed document, and applies restrictive outer and inner policies that still permit the explorer's local inline style and script. This keeps the page compatible with both ordinary browsers and embedded artifact viewers. Source links open a new browsing context. When adapting a sandboxed page produced by another renderer, run `scripts/prepare_standalone.py`; it preserves existing permissions and adds the popup permissions required by editor deep links.
@@ -137,7 +137,7 @@ The bundled renderer creates a self-contained sandboxed wrapper, embeds `assets/
 - Use theme variables instead of hard-coded colors. The palette is dark-only; never branch on the reader's color scheme.
 - Make inactive branches visibly secondary without relying on color alone.
 - Render the selected node as visibly selected. Setting `aria-pressed` alone leaves stepping with Previous and Next invisible to everyone looking at the chart. Prefer an outline over a wider border so selecting a node cannot reflow its lane.
-- Mark the nodes the PR changed in every view, not only in the delta view. A legend that describes an encoding the current view does not apply is worse than no legend. Use a shape, such as a corner delta, so the mark does not depend on a second color channel.
+- Mark the nodes the changeset changed in every view, not only in the delta view. A legend that describes an encoding the current view does not apply is worse than no legend. Use a shape, such as a corner delta, so the mark does not depend on a second color channel.
 - Surface a degraded build on the page. The person reading an explorer is rarely the operator who generated it and never sees the console, so omitted source links, skipped previews, or any other silent downgrade must be stated in the page itself along with what the reader gets instead.
 - Do not load runtime data or make network requests from the fragment.
 - Assign stable colors to owners, systems, or execution branches and reuse them on lane headers, edges, trace state, and the legend. Keep shared boundaries neutral.
@@ -155,7 +155,7 @@ Keep the editable fragment in the current session's artifact or output directory
 
 1. Render a self-contained standalone page.
 2. Save it under the closest architecture or developer-documentation directory.
-3. Prefer `pr-<number>-<scope>-explorer.html` unless repository conventions specify otherwise.
+3. Prefer `pr-<number>-<scope>-explorer.html` for a pull request and `<changeset>-<scope>-explorer.html` otherwise, unless repository conventions specify otherwise.
 4. Add a link to the nearest documentation index.
 5. Re-run standalone validation against the repository copy.
 
@@ -173,7 +173,7 @@ Assert that:
 8. hover previews are supplementary and essential details remain visible on click
 9. every runtime edge exposes at least one transfer object or explicitly states that none exists
 10. every real branch reaches the shared convergence node
-11. the orientation block, analyzed head SHA, node/edge change-status encoding, and status legend are present
+11. the orientation block, analyzed SHA, node/edge change-status encoding, and status legend are present
 12. long code identifiers do not clip, overflow, or break at arbitrary characters
 13. every node has a source-backed `code_preview` whose source index resolves
 14. node tooltips remain open while entered, code can be selected, and the linked file/range opens the configured target without replacing the chart
@@ -181,5 +181,5 @@ Assert that:
 16. every displayed excerpt, label, immutable URL, and optional Cursor target verifies against the same analyzed snapshot (`pr.evidence_sha` when set, otherwise `pr.head_sha`)
 17. the standalone page populates its orientation title and applies non-default computed styles to its primary controls
 18. Previous, Next, and node selection visibly change which node is highlighted, compared as computed style rather than as an ARIA attribute alone
-19. nodes the PR changed are distinguishable from context nodes in the default full-path view, not only after switching to the delta view
+19. nodes the changeset changed are distinguishable from context nodes in the default full-path view, not only after switching to the delta view
 20. a build that omitted editor links states so on the page, and every affected node still offers its immutable GitHub link

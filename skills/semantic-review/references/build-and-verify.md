@@ -1,6 +1,6 @@
 # Build and Verify
 
-Commands and the verification procedure for the explorer artifacts. Resolve `<skill-root>` to the directory containing `SKILL.md`. Invoke whichever interpreter name this machine has: `python3` on most Unix-like systems, `python` on Windows, where a bare `python3` usually resolves to a Microsoft Store stub that exits without running anything. Every bundled script targets Python 3.9+ and imports only the standard library.
+Commands and the verification procedure for the explorer artifacts. They are the same for every changeset; only the analyzed SHA differs. Resolve `<skill-root>` to the directory containing `SKILL.md`. Invoke whichever interpreter name this machine has: `python3` on most Unix-like systems, `python` on Windows, where a bare `python3` usually resolves to a Microsoft Store stub that exits without running anything. Every bundled script targets Python 3.9+ and imports only the standard library.
 
 ## Build
 
@@ -28,7 +28,7 @@ Create the standalone page with the bundled renderer, `scripts/render_standalone
 python3 <skill-root>/scripts/verify_pr_explorer.py /absolute/path/to/fragment.html \
   --standalone /absolute/path/to/page.html \
   --source-repo /absolute/path/to/repository \
-  --source-ref <exact-head-sha> \
+  --source-ref <exact-analyzed-sha> \
   --strict
 ```
 

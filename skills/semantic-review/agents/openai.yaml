@@ -1,0 +1,4 @@
+interface:
+  display_name: "Semantic Review"
+  short_description: "Build portable, snapshot-verified change flows"
+  default_prompt: "Use $semantic-review to pull this changeset — pull request, ref range, or working tree — pin its analyzed snapshot, explain every semantic layer, and use the bundled scripts to build a self-contained interactive flowchart whose handoffs and source excerpts verify against that exact snapshot."
