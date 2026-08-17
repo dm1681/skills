@@ -89,11 +89,14 @@ All notable changes to this repository are documented here. Versions follow
   requirement for that path. The revision is pinned by `MATT_SKILLS_REF` rather
   than always taking `main`, so two installs a week apart match, an update is a
   reviewed commit, and `git diff` between two refs shows what an update would
-  change. The new `--matt-ref` takes a tag, a branch, or a commit SHA
-  (`--matt-ref main` restores the old track-upstream behavior), and every
-  install prints the ref and the commit it resolved to. Discovery walks the
-  checkout for `SKILL.md` instead of assuming upstream's directory depth,
-  skips `skills/deprecated/`, and stops on a name claimed by two categories.
+  change. `MATT_SKILLS_COMMIT` records the commit behind that tag, so a
+  force-moved tag upstream stops the install instead of silently changing what
+  lands. The new `--matt-ref` takes a tag, a branch, or a commit SHA
+  (`--matt-ref main` restores the old track-upstream behavior) and refuses an
+  empty value rather than falling back to the pin; every install prints the ref
+  and the commit it resolved to. Discovery walks the checkout for `SKILL.md`
+  instead of assuming upstream's directory depth, skips the top-level
+  `skills/deprecated/` category, and stops on a name claimed by two categories.
   The per-agent staging mapping is gone: the skills carry no agent-specific
   content, so every selected root gets the same files.
 - `semantic-pr-review`'s entrypoint dropped from 212 to about 120 lines. Build

@@ -41,13 +41,19 @@ installer's control.
 ## Which revision gets installed
 
 `MATT_SKILLS_REF` in `install.py` pins the default, so two installs a week apart
-are the same install. Override it per run:
+are the same install. A tag is a movable label, so `MATT_SKILLS_COMMIT` records
+the commit behind it and the default install stops if upstream has force-moved
+the tag since — update the two together. Override the ref per run:
 
 ```sh
 ./install.sh --agent all --matt-skills --matt-ref main       # track upstream
 ./install.sh --agent all --matt-skills --matt-ref v1.2.2     # an older release
 ./install.sh --agent all --matt-skills --matt-ref 9c9f36c    # an exact commit
 ```
+
+A named ref is checked against no second pin — it *is* the revision the caller
+chose. An empty one (`--matt-ref "$REF"` with `REF` unset) is refused rather
+than quietly falling back to the default.
 
 Updating the pin is a commit somebody reviews, and the diff behind it is
 readable before it lands:
@@ -64,8 +70,10 @@ including upstream's own CLI, installs them flat as `<name>/`. Discovery walks
 the checkout for `SKILL.md` rather than assuming that depth, so a reorganization
 upstream costs nothing here. Two exceptions:
 
-- `skills/deprecated/` is skipped. Upstream retires skills there instead of
-  deleting them, and a retirement should not arrive as a fresh install.
+- `skills/deprecated/` is skipped — matched on the first path component only, so
+  a skill that merely has `deprecated` deeper in its path still installs.
+  Upstream retires skills there instead of deleting them, and a retirement
+  should not arrive as a fresh install.
 - Two categories claiming one name stops the install rather than letting one
   silently win. Nothing collides today.
 

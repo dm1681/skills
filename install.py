@@ -47,10 +47,16 @@ MATT_SKILLS_REPO = "https://github.com/mattpocock/skills.git"
 # Pinned on purpose. The upstream CLI always took `main`, which made two installs
 # a week apart silently different; a ref in the file makes an update a commit
 # somebody reviewed, and `git diff` between two refs shows exactly what changed.
+# The tag is what a human reads and the commit is what actually pins: a tag can
+# be force-moved upstream, so the default install verifies that it still points
+# where this repository says it does. Update the two together.
 MATT_SKILLS_REF = "v1.2.3"
-# Upstream retires skills into this directory rather than deleting them. Nothing
-# lives there today, so skipping it changes no install; it only keeps a future
-# retirement from arriving as a fresh install.
+MATT_SKILLS_COMMIT = "6acc160e4e0cd062dbbbd7a1b26ae92855edf07e"
+# Upstream retires skills into `skills/deprecated/` rather than deleting them.
+# Nothing lives there today, so skipping it changes no install; it only keeps a
+# future retirement from arriving as a fresh install. Matched against the first
+# path component only, so a skill that merely has `deprecated` deeper in its
+# path still installs.
 MATT_SKILLS_SKIP = ("deprecated",)
 
 
@@ -411,20 +417,36 @@ def require_git() -> str:
 
 
 def matt_skills_head(checkout: Path, executable: str = "git") -> str:
-    """The commit a checkout landed on, or "" when git cannot say.
+    """The full commit a checkout landed on, or "" when git cannot say.
 
-    Provenance for the line printed after an install: with `--matt-ref main` the
-    ref alone does not identify what arrived, and this is the only record of it.
-    Failure here is not worth aborting a completed fetch over.
+    Two jobs: verifying that the pinned tag still points where this repository
+    says it does, and provenance for the line printed after an install, since
+    with `--matt-ref main` the ref alone does not identify what arrived.
     """
     result = subprocess.run(
-        [executable, "rev-parse", "--short", "HEAD"],
+        [executable, "rev-parse", "HEAD"],
         cwd=checkout,
         check=False,
         text=True,
         capture_output=True,
     )
     return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def _has_ancestor_skill(skill_dir: Path, root: Path) -> bool:
+    """Whether a directory sits inside another skill, up to but excluding root.
+
+    Asked of the filesystem rather than of whatever a caller has collected so
+    far, because path order is not ancestor-first: `tdd/SKILL.md` sorts before
+    `tdd/references/tdd/SKILL.md` on POSIX and after it on Windows, where paths
+    compare as one case-folded string rather than component by component.
+    """
+    for parent in skill_dir.parents:
+        if parent == root:
+            break
+        if (parent / "SKILL.md").is_file():
+            return True
+    return False
 
 
 def matt_skill_sources(checkout: Path) -> list[Path]:
@@ -442,21 +464,14 @@ def matt_skill_sources(checkout: Path) -> list[Path]:
             f"{MATT_SKILLS_SOURCE} checkout has no skills/ directory: {checkout}"
         )
     sources: dict[str, Path] = {}
-    # Shallowest first, so a skill is always seen before anything nested inside
-    # it. Plain path order does not guarantee that: it puts `tdd/SKILL.md`
-    # before `tdd/references/tdd/SKILL.md` on POSIX and after it on Windows,
-    # where paths compare as one case-folded string rather than by component.
-    walked = sorted(
-        root.rglob("SKILL.md"), key=lambda path: (len(path.parts), path.parts)
-    )
-    for entrypoint in walked:
+    for entrypoint in sorted(root.rglob("SKILL.md")):
         skill_dir = entrypoint.parent
         relative = skill_dir.relative_to(root)
-        if any(part in MATT_SKILLS_SKIP for part in relative.parts):
+        if relative.parts and relative.parts[0] in MATT_SKILLS_SKIP:
             continue
         # A skill may ship further SKILL.md files under references/; only the
         # outermost one names an installable skill.
-        if any(parent in sources.values() for parent in skill_dir.parents):
+        if _has_ancestor_skill(skill_dir, root):
             continue
         claimed = sources.get(skill_dir.name)
         if claimed is not None:
@@ -485,7 +500,12 @@ def install_matt_skills(
     installing somewhere the caller did not ask for.
     """
     expand_agents(agents)
-    reference = ref or MATT_SKILLS_REF
+    if ref is not None and not ref.strip():
+        # `--matt-ref "$REF"` with an unset REF asked for a revision and named
+        # none. Falling back to the pin would install something the caller did
+        # not choose, which is the failure this flag exists to prevent.
+        raise InstallError("--matt-ref was given an empty value; name a revision")
+    reference = MATT_SKILLS_REF if ref is None else ref.strip()
     if dry_run:
         for command in matt_skills_fetch_commands(reference):
             emit(f"would run  {shlex.join(command)}")
@@ -498,14 +518,33 @@ def install_matt_skills(
         checkout = Path(directory)
         for command in matt_skills_fetch_commands(reference, git):
             _run(command, checkout)
+        head = matt_skills_head(checkout, git)
+        if reference == MATT_SKILLS_REF:
+            # A tag is a movable label. Checking it against the commit recorded
+            # here is what makes the default install reproducible; without it, a
+            # force-moved tag upstream changes what installs with no change in
+            # this repository for anyone to review.
+            if not head:
+                raise InstallError(
+                    f"could not read the commit behind {MATT_SKILLS_SOURCE} "
+                    f"{MATT_SKILLS_REF}, so the pin cannot be verified"
+                )
+            if head != MATT_SKILLS_COMMIT:
+                raise InstallError(
+                    f"{MATT_SKILLS_SOURCE} {MATT_SKILLS_REF} now points at "
+                    f"{head[:7]}, not the pinned {MATT_SKILLS_COMMIT[:7]}. The "
+                    "tag moved upstream: review the difference and update "
+                    "MATT_SKILLS_COMMIT, or name a revision with --matt-ref"
+                )
         sources = matt_skill_sources(checkout)
         if not any(source.name == "setup-matt-pocock-skills" for source in sources):
             raise InstallError(
                 f"{MATT_SKILLS_SOURCE} at {reference} did not include "
                 "setup-matt-pocock-skills"
             )
-        head = matt_skills_head(checkout, git)
-        emit(f"{MATT_SKILLS_SOURCE} @ {reference}" + (f" ({head})" if head else ""))
+        emit(
+            f"{MATT_SKILLS_SOURCE} @ {reference}" + (f" ({head[:7]})" if head else "")
+        )
         for destination_root in roots:
             for source in sources:
                 emit(install_one(source, destination_root, "copy", force, False))

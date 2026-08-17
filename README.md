@@ -306,7 +306,8 @@ then copies every skill it finds into the exact selected roots, including the
 preferred user-scoped `~/.agents/skills` directory, under the same conflict
 backup policy used for bundled skills. The pin is a constant in `install.py`, so
 updating is a reviewed commit and `git diff v1.2.3..v1.3.0 -- skills/` shows what
-an update would change. Track upstream instead with `--matt-ref main`, or pin an
+an update would change. The commit behind the tag is pinned alongside it, so a
+default install stops rather than proceeding if upstream force-moves the tag. Track upstream instead with `--matt-ref main`, or pin an
 exact commit by passing its SHA. After installation, run
 `/setup-matt-pocock-skills` once inside the target repository. See
 [`docs/matt-pocock-skills.md`](docs/matt-pocock-skills.md) for what is installed

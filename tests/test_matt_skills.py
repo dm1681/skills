@@ -51,6 +51,10 @@ class MattSkillsTests(unittest.TestCase):
         )
         self.assertNotEqual(INSTALLER.MATT_SKILLS_REF, "main")
 
+    def test_the_pinned_tag_is_backed_by_a_full_commit(self) -> None:
+        """A tag can be force-moved; the commit beside it is what actually pins."""
+        self.assertRegex(INSTALLER.MATT_SKILLS_COMMIT, r"^[0-9a-f]{40}$")
+
     def test_sources_are_flattened_across_upstream_categories(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             checkout = Path(directory)
@@ -66,6 +70,16 @@ class MattSkillsTests(unittest.TestCase):
             write_upstream(checkout, "engineering/tdd", "deprecated/old-one")
             self.assertEqual(
                 ["tdd"],
+                [source.name for source in INSTALLER.matt_skill_sources(checkout)],
+            )
+
+    def test_only_the_top_level_deprecated_category_is_skipped(self) -> None:
+        """`skills/deprecated/` is the retirement shelf; deeper names are not."""
+        with tempfile.TemporaryDirectory() as directory:
+            checkout = Path(directory)
+            write_upstream(checkout, "engineering/deprecated/still-shipped")
+            self.assertEqual(
+                ["still-shipped"],
                 [source.name for source in INSTALLER.matt_skill_sources(checkout)],
             )
 
@@ -116,7 +130,9 @@ class MattSkillsTests(unittest.TestCase):
 
             with (
                 mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
-                mock.patch.object(INSTALLER, "matt_skills_head", return_value="abc1234"),
+                mock.patch.object(
+                    INSTALLER, "matt_skills_head", return_value=INSTALLER.MATT_SKILLS_COMMIT
+                ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run) as run,
             ):
                 INSTALLER.install_matt_skills(
@@ -144,7 +160,9 @@ class MattSkillsTests(unittest.TestCase):
 
             with (
                 mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
-                mock.patch.object(INSTALLER, "matt_skills_head", return_value=""),
+                mock.patch.object(
+                    INSTALLER, "matt_skills_head", return_value=INSTALLER.MATT_SKILLS_COMMIT
+                ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
                 INSTALLER.install_matt_skills(
@@ -166,6 +184,11 @@ class MattSkillsTests(unittest.TestCase):
 
             with (
                 mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
+                mock.patch.object(
+                    INSTALLER,
+                    "matt_skills_head",
+                    return_value=INSTALLER.MATT_SKILLS_COMMIT,
+                ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
                 with self.assertRaisesRegex(
@@ -230,6 +253,85 @@ class MattSkillsTests(unittest.TestCase):
                 ["claude"], [ROOT], force=False, dry_run=True, ref=None
             )
         self.assertIn(INSTALLER.MATT_SKILLS_REF, output.getvalue())
+
+    def test_an_empty_ref_is_refused_rather_than_defaulted(self) -> None:
+        with self.assertRaisesRegex(INSTALLER.InstallError, "empty value"):
+            INSTALLER.install_matt_skills(
+                ["claude"], [ROOT], force=False, dry_run=True, ref="  "
+            )
+
+    def test_a_moved_tag_stops_the_default_install(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory).resolve() / "skills"
+
+            def fake_run(command: list[str], cwd: Path) -> None:
+                if command[1] == "fetch":
+                    write_upstream(cwd, "engineering/setup-matt-pocock-skills")
+
+            with (
+                mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
+                mock.patch.object(INSTALLER, "matt_skills_head", return_value="f" * 40),
+                mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
+            ):
+                with self.assertRaisesRegex(INSTALLER.InstallError, "tag moved"):
+                    INSTALLER.install_matt_skills(
+                        ["claude"],
+                        [destination],
+                        force=False,
+                        dry_run=False,
+                        emit=lambda _: None,
+                    )
+            self.assertFalse(destination.exists())
+
+    def test_a_named_ref_is_installed_without_the_pin_check(self) -> None:
+        """--matt-ref names a revision; there is no second pin to hold it to."""
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory).resolve() / "skills"
+
+            def fake_run(command: list[str], cwd: Path) -> None:
+                if command[1] == "fetch":
+                    write_upstream(cwd, "engineering/setup-matt-pocock-skills")
+
+            with (
+                mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
+                mock.patch.object(INSTALLER, "matt_skills_head", return_value="f" * 40),
+                mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
+            ):
+                INSTALLER.install_matt_skills(
+                    ["claude"],
+                    [destination],
+                    force=False,
+                    dry_run=False,
+                    emit=lambda _: None,
+                    ref="main",
+                )
+            self.assertTrue(
+                (destination / "setup-matt-pocock-skills" / "SKILL.md").is_file()
+            )
+
+    def test_an_unverifiable_pin_stops_the_default_install(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory).resolve() / "skills"
+
+            def fake_run(command: list[str], cwd: Path) -> None:
+                if command[1] == "fetch":
+                    write_upstream(cwd, "engineering/setup-matt-pocock-skills")
+
+            with (
+                mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
+                mock.patch.object(INSTALLER, "matt_skills_head", return_value=""),
+                mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
+            ):
+                with self.assertRaisesRegex(
+                    INSTALLER.InstallError, "pin cannot be verified"
+                ):
+                    INSTALLER.install_matt_skills(
+                        ["claude"],
+                        [destination],
+                        force=False,
+                        dry_run=False,
+                        emit=lambda _: None,
+                    )
 
     def test_a_ref_without_the_opt_in_is_refused(self) -> None:
         errors = io.StringIO()
@@ -313,7 +415,9 @@ class ModelInvocationTests(unittest.TestCase):
 
         with (
             mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
-            mock.patch.object(INSTALLER, "matt_skills_head", return_value=""),
+            mock.patch.object(
+                    INSTALLER, "matt_skills_head", return_value=INSTALLER.MATT_SKILLS_COMMIT
+                ),
             mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
         ):
             INSTALLER.install_matt_skills(
