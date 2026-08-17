@@ -100,7 +100,13 @@ All notable changes to this repository are documented here. Versions follow
   inherited through `init.templateDir` or `core.hooksPath` runs before the copy
   and can edit files the commit check would still call correct — and the
   install confirms the checkout still matches the commit before copying
-  anything. Discovery walks the checkout for `SKILL.md`
+  anything. That confirmation is asked twice: `git status`, and a raw-byte
+  comparison against the blobs the commit records, because a `.gitattributes`
+  in the fetched revision can set `eol`, outrank the config the checkout
+  passes, and leave a rewritten tree that git still reports as clean. The
+  fetch also runs with `GIT_TERMINAL_PROMPT=0` and `GIT_ASKPASS=echo`, so a
+  `401` fails immediately instead of waiting on a password nobody is there to
+  type. Discovery walks the checkout for `SKILL.md`
   instead of assuming upstream's directory depth, skips the top-level
   `skills/deprecated/` category, and stops on a name claimed by two categories.
   The per-agent staging mapping is gone: the skills carry no agent-specific
