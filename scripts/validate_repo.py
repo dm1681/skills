@@ -117,7 +117,12 @@ def validate() -> list[str]:
                 except SyntaxError as exc:
                     errors.append(f"invalid Python in {path.relative_to(ROOT)}: {exc}")
 
-    for path in (ROOT / "install.py", ROOT / "scripts" / "validate_repo.py"):
+    for path in (
+        ROOT / "install.py",
+        ROOT / "skills_cli.py",
+        ROOT / "inventory.py",
+        ROOT / "scripts" / "validate_repo.py",
+    ):
         try:
             ast.parse(
                 path.read_text(encoding="utf-8"),

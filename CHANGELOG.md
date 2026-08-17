@@ -7,6 +7,61 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Added
 
+- Uninstall, everywhere install already is: `skills uninstall NAME` / `--all`
+  / `--global-instructions` / `--shims` / `--external NAME`, `skills status`
+  for what is installed and where, `skills manage` for the dashboard's new
+  manage pane, and `./install.sh --uninstall` / `--status` for a machine with
+  no `skills` command yet. Removal is the mirror of install and reuses its
+  backup policy: a skill directory is moved into `.skills-backups/` rather
+  than deleted, and only an original this collection *recorded* displacing is
+  put back — an unrecorded backup is named in the message and left alone,
+  because it is just as likely an older copy of our own skill.
+  `--restore-from PATH` restores one explicitly, `--no-restore` keeps it aside
+  and names the path it left there, `--no-backup` deletes outright and says
+  the content is gone, and `--unrecorded` is required before
+  a directory no receipt records will be touched. A managed instruction file
+  the user has since rewritten is left alone and said so; the two files always
+  go together, because one imports the other. `graphify` is never removed
+  here — the two commands that do remove it are printed instead.
+- The install receipt is now a ledger (`schema_version: 2`). Its v1 keys mean
+  exactly what they meant, so every existing reader still works; the new
+  `entries` map records, per installed thing, who installed it (`origin`) and
+  what was moved aside to make room, including whether that backup predates
+  this collection (`backups[].foreign`). A v1 receipt is upgraded on read
+  without rewriting the file, and an entry whose directory has since vanished
+  is deliberately kept: it is the only evidence the directory went missing.
+- A root registry at `~/.dm1681-skills-roots.json`, recording install
+  *locations* only. Without it a project or `--target` root cannot be found
+  again short of walking the filesystem, so `skills status` sweeps them
+  without being told where they are.
+- A manage pane in the dashboard, opened with `U` and applied with `X`. It
+  lists installed skills, managed instruction files, launcher shims, and
+  external tools with what a removal would restore, and asks before writing.
+  The pane deletes nothing itself: every removal goes through an `install.*`
+  primitive, pinned by a test that reads the module's source.
+- Inconsistency detection, in the new `inventory.py`: `skills doctor` reports
+  a broken link, a directory with no `SKILL.md`, one skill installed twice
+  with different contents, a copy that differs from this checkout, a link into
+  *another* checkout, a copy/link shape that disagrees with the receipt, a
+  receipt naming a directory that is gone, and a receipt that will not parse.
+  `--fix` applies the first offered resolution (optionally only for named
+  kinds), `--json` prints the same report for a script, `--prune` forgets
+  recorded roots that no longer exist, and the command exits 3 while anything
+  is still inconsistent. `./install.sh --doctor` is the same report on a
+  machine with no `skills` command yet. Hiding a skill from the model is not
+  reported as a divergence, and a skill this checkout has no source for is
+  only reported when the same name diverges between two roots. A placement no
+  receipt records is never offered as an `uninstall` — that is `--unrecorded`'s
+  business, and the fix could only fail — so the offer names
+  `skills uninstall NAME --unrecorded` instead.
+- The manage pane lists those findings above the inventory, with `C` to cycle
+  which fix a finding will get, `↵` to open its diff, and one confirmation
+  covering both the writes and the removals a run would make. A finding is
+  yellow, a reinstall peach, keeping it green, a removal pink.
+- `skills status` and `skills doctor` share one discovery block, so they sweep
+  identically: `--project-dir` is repeatable, `--root DIR` names a root
+  outright, and `--no-registry` looks only where it is told.
+
 - The dashboard lists `matt-skills` as an external tool row. Selecting it
   unfolds the installed skills that ship `disable-model-invocation`, each
   toggleable between hidden and model-visible; choices are recorded in
@@ -111,6 +166,16 @@ All notable changes to this repository are documented here. Versions follow
   `skills/deprecated/` category, and stops on a name claimed by two categories.
   The per-agent staging mapping is gone: the skills carry no agent-specific
   content, so every selected root gets the same files.
+- `skills_tui.RECEIPT` now aliases `install.RECEIPT_NAME` instead of repeating
+  the literal.
+- The colour contract gains pink for a removal. Widening peach would have made
+  one hue mean two things: peach promises the old copy is backed up *and*
+  something replaces it, and a removal only makes the first half of that
+  promise. Red still means only that an operation failed. A *finding* is
+  yellow — advisory, not a failure — and each offered fix takes the colour of
+  its consequence.
+- `skills status --project-dir` is now repeatable, and gained `--root` and
+  `--no-registry`, matching the block `skills doctor` uses.
 - `semantic-pr-review`'s entrypoint dropped from 212 to about 120 lines. Build
   commands and the browser verification procedure moved to a new
   `references/build-and-verify.md`, and prose that duplicated the other
