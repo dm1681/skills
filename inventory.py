@@ -122,6 +122,11 @@ class Placement(NamedTuple):
         return self.item.mode
 
     @property
+    def recorded(self) -> bool:
+        """Whether a receipt says this collection put it here."""
+        return self.item.recorded
+
+    @property
     def present(self) -> bool:
         """Whether anything is actually on disk.
 
@@ -632,16 +637,32 @@ def _keep(label: str) -> Resolution:
 
 
 def _uninstall_each(placements: Sequence[Placement]) -> list:
-    """One `uninstall the copy in <root>` resolution per placement."""
-    return [
-        Resolution(
-            UNINSTALL,
-            "uninstall the copy in %s" % placement.root,
-            REMOVE,
-            (Fix(UNINSTALL, placement.root, placement.name, "copy"),),
+    """One resolution per placement: uninstall it, or say why we will not.
+
+    `apply_fix` never passes allow_unrecorded — an unrecorded directory is
+    `--unrecorded`'s business — so offering `uninstall` for one would hand the
+    user a fix that can only raise. Naming the command that does remove it is
+    the honest answer, and it costs the reader nothing to see it here.
+    """
+    offered = []
+    for placement in placements:
+        if placement.recorded:
+            offered.append(
+                Resolution(
+                    UNINSTALL,
+                    "uninstall the copy in %s" % placement.root,
+                    REMOVE,
+                    (Fix(UNINSTALL, placement.root, placement.name, "copy"),),
+                )
+            )
+            continue
+        offered.append(
+            _keep(
+                "leave %s; no receipt records it, so remove it with "
+                "`skills uninstall %s --unrecorded`" % (placement.path, placement.name)
+            )
         )
-        for placement in placements
-    ]
+    return offered
 
 
 def resolutions_for(

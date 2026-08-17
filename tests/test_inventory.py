@@ -243,11 +243,26 @@ class DetectionTests(Fixture):
             (stray / "SKILL.md").write_text(body, encoding="utf-8")
         found = self.findings()
         self.assertEqual([inventory.DUPLICATE_DIVERGED], [f.kind for f in found])
-        # Never offered a reinstall: there is no source here to reinstall from.
+        # Never offered a reinstall: there is no source here to reinstall from,
+        # and never an uninstall either, because no receipt records these two,
+        # so apply_fix would refuse them. The offer names --unrecorded instead.
         self.assertEqual(
-            {inventory.UNINSTALL, inventory.KEEP},
+            {inventory.KEEP},
             {resolution.action for resolution in found[0].resolutions},
         )
+        self.assertIn("--unrecorded", found[0].resolutions[0].label)
+
+    def test_every_offered_fix_for_an_unrecorded_duplicate_can_be_applied(self) -> None:
+        """The default fix has to be applicable; a suggestion that only raises
+        is worse than no suggestion."""
+        for root, body in ((self.user_root(), "one\n"), (self.project_root(), "two\n")):
+            stray = root / "not-in-this-checkout"
+            stray.mkdir(parents=True)
+            (stray / "SKILL.md").write_text(body, encoding="utf-8")
+        for resolution in self.findings()[0].resolutions:
+            self.assertEqual([], inventory.apply_resolution(resolution, False))
+        self.assertTrue((self.user_root() / "not-in-this-checkout").is_dir())
+        self.assertTrue((self.project_root() / "not-in-this-checkout").is_dir())
 
     def test_only_a_model_visibility_edit_is_not_a_divergence(self) -> None:
         installed = self.install_skill(self.user_root())

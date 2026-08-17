@@ -272,6 +272,39 @@ class RemovalTests(Fixture):
         self.assertFalse((self.root / SKILL).exists())
         self.assertTrue((stray / "SKILL.md").is_file())
 
+    def test_no_restore_names_the_backup_it_leaves_behind(self) -> None:
+        self.foreign_skill(body="mine\n")
+        self.install()
+        left, _note = install.restorable_backup(self.root, SKILL)
+        message = install.uninstall_one(SKILL, self.root, False, restore=False)
+        self.assertIn(f"left at {left.path} (--no-restore)", message)
+        self.assertEqual(
+            "mine\n", (left.path / "SKILL.md").read_text(encoding="utf-8")
+        )
+
+    def test_no_restore_with_nothing_to_restore_says_that_instead(self) -> None:
+        """The generic --no-restore line would claim a recoverable original
+        that restorable_backup has just said does not exist."""
+        self.install()
+        message = install.uninstall_one(SKILL, self.root, False, restore=False)
+        self.assertIn("no pre-install original was recorded", message)
+        self.assertNotIn(".skills-backups (--no-restore)", message)
+
+    def test_no_backup_says_the_content_is_gone(self) -> None:
+        self.install()
+        self.install(OTHER)
+        planned = install.uninstall_one(
+            OTHER, self.root, True, restore=False, keep_backup=False
+        )
+        self.assertIn("no backup kept", planned)
+        message = install.uninstall_one(
+            SKILL, self.root, False, restore=False, keep_backup=False
+        )
+        self.assertIn("deleted; no backup kept", message)
+        self.assertFalse(
+            (self.home / ".claude" / ".skills-backups" / "skills").exists()
+        )
+
     def test_restore_from_names_a_backup_explicitly(self) -> None:
         self.install()
         stray = (

@@ -16,8 +16,9 @@ All notable changes to this repository are documented here. Versions follow
   than deleted, and only an original this collection *recorded* displacing is
   put back — an unrecorded backup is named in the message and left alone,
   because it is just as likely an older copy of our own skill.
-  `--restore-from PATH` restores one explicitly, `--no-restore` keeps it
-  aside, `--no-backup` deletes outright, and `--unrecorded` is required before
+  `--restore-from PATH` restores one explicitly, `--no-restore` keeps it aside
+  and names the path it left there, `--no-backup` deletes outright and says
+  the content is gone, and `--unrecorded` is required before
   a directory no receipt records will be touched. A managed instruction file
   the user has since rewritten is left alone and said so; the two files always
   go together, because one imports the other. `graphify` is never removed
@@ -49,7 +50,10 @@ All notable changes to this repository are documented here. Versions follow
   is still inconsistent. `./install.sh --doctor` is the same report on a
   machine with no `skills` command yet. Hiding a skill from the model is not
   reported as a divergence, and a skill this checkout has no source for is
-  only reported when the same name diverges between two roots.
+  only reported when the same name diverges between two roots. A placement no
+  receipt records is never offered as an `uninstall` — that is `--unrecorded`'s
+  business, and the fix could only fail — so the offer names
+  `skills uninstall NAME --unrecorded` instead.
 - The manage pane lists those findings above the inventory, with `C` to cycle
   which fix a finding will get, `↵` to open its diff, and one confirmation
   covering both the writes and the removals a run would make. A finding is

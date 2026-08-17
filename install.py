@@ -1530,6 +1530,18 @@ def format_status(items: Sequence[Installed]) -> str:
 # -- removal ----------------------------------------------------------------
 
 
+def _declined_restore_note(chosen: Optional[Backup], note: str) -> str:
+    """What --no-restore actually did, rather than what it usually does.
+
+    Only a run that found something to restore leaves anything behind, so
+    naming .skills-backups unconditionally would promise a recoverable
+    original even when restorable_backup's answer was that there is none.
+    """
+    if chosen is None:
+        return note
+    return f"left at {chosen.path} (--no-restore)"
+
+
 def uninstall_one(
     name: str,
     root: Path,
@@ -1564,7 +1576,7 @@ def uninstall_one(
             raise InstallError(f"backup to restore does not exist: {source}")
         chosen, note = Backup(source, "", None), "restored from --restore-from"
     if not restore:
-        chosen, note = None, "left in .skills-backups (--no-restore)"
+        chosen, note = None, _declined_restore_note(chosen, note)
 
     is_link = destination.is_symlink()
     backup = backup_path(root, name) if (keep_backup and not is_link) else None
@@ -1572,6 +1584,8 @@ def uninstall_one(
         message = f"would remove {destination}"
         if backup is not None:
             message += f"; back up to {backup}"
+        elif not is_link:
+            message += "; no backup kept"
         message += f"; restore {chosen.path}" if chosen is not None else f"; {note}"
         return message
 
@@ -1595,6 +1609,8 @@ def uninstall_one(
         parts.append("(link; nothing to back up)")
     elif backup is not None:
         parts.append(f"(backup: {backup})")
+    else:
+        parts.append("(deleted; no backup kept)")
     if chosen is not None:
         parts.append(f"(restored: {chosen.path})")
     else:
@@ -1630,12 +1646,14 @@ def uninstall_managed_file(
     # becomes a restore candidate.
     chosen, note = restorable_backup(receipt_root, str(path), "managed-file")
     if not restore:
-        chosen, note = None, "left in .skills-backups (--no-restore)"
+        chosen, note = None, _declined_restore_note(chosen, note)
     backup = backup_path(path.parent, path.name) if keep_backup else None
     if dry_run:
         message = f"would remove {path}"
         if backup is not None:
             message += f"; back up to {backup}"
+        else:
+            message += "; no backup kept"
         message += f"; restore {chosen.path}" if chosen is not None else f"; {note}"
         return message
 
@@ -1651,6 +1669,8 @@ def uninstall_managed_file(
     parts = [f"removed    {path}"]
     if backup is not None:
         parts.append(f"(backup: {backup})")
+    else:
+        parts.append("(deleted; no backup kept)")
     if chosen is not None:
         parts.append(f"(restored: {chosen.path})")
     else:

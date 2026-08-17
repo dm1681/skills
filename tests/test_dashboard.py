@@ -896,6 +896,24 @@ class ManagePaneTests(unittest.IsolatedAsyncioTestCase):
                 ["none"], [entry[1] for entry in app._removal_entries()]
             )
 
+    async def test_applying_an_explained_tool_removes_nothing_and_counts_nothing(
+        self,
+    ) -> None:
+        """'✓ 1 removed' over an untouched directory is a lie about the run."""
+        (self.claude_root() / "graphify").mkdir(parents=True)
+        app = self.app(pane="manage")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            row = next(r for r in app.manage_rows() if r.item.kind == "external")
+            row.selected = True
+            await pilot.press("x")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            self.assertEqual(0, app.removed_count)
+            self.assertEqual(1, app.explained_count)
+            self.assertEqual(0, app.failures)
+        self.assertTrue((self.claude_root() / "graphify").is_dir())
+
     async def test_the_view_and_mode_and_install_keys_are_inert_in_the_manage_pane(self) -> None:
         self.install_first()
         app = self.app(pane="manage")
