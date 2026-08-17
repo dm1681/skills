@@ -28,7 +28,13 @@ git fetch --quiet --depth 1 https://github.com/mattpocock/skills.git v1.2.3
 git -c core.hooksPath=.git/no-hooks -c core.autocrlf=false -c core.eol=lf \
   checkout --quiet --detach FETCH_HEAD
 git status --porcelain   # must be empty before anything is copied
+git ls-tree -r FETCH_HEAD -- skills/   # every blob compared against
+git hash-object --no-filters …         # the bytes actually on disk
 ```
+
+The fetch runs with `GIT_TERMINAL_PROMPT=0` and `GIT_ASKPASS=echo`, so a `401`
+— a proxy in the way, a repository URL pointing somewhere private — fails in a
+second instead of waiting on a password nobody is there to type.
 
 `git fetch <url> <ref>` rather than `git clone --branch <ref>`, because clone's
 `--branch` takes a tag or a branch and refuses a commit SHA. Every install
@@ -48,6 +54,15 @@ affect. A `post-checkout` hook would otherwise run before the copy and edit
 files that the commit check still calls correct. Since a hook is not the only
 thing that can rewrite a working tree, the install then asks git whether the
 checkout still matches the commit, and stops without copying if it does not.
+
+That question is asked twice, because `git status` alone cannot answer it. A
+`.gitattributes` in the fetched revision can set `eol`, which outranks the
+config the checkout passes; git rewrites the files on the way out and then
+calls the result clean, because it applies the same attribute on the way back
+in. So the install also hashes the bytes as they sit on disk, with filters
+off, against the blobs the commit records. Nothing upstream sets such an
+attribute today — the check exists so the day it does is a stop with a
+readable message rather than a silently different install.
 
 Git is the only requirement; there is no Node.js dependency. `--dry-run` prints
 the exact commands and final destinations without network access. Custom
