@@ -85,7 +85,7 @@ What it offers:
 | one skill, this repo only | `install.sh --skill NAME --scope project` |
 | user-level instructions | `install.sh --global-instructions` |
 | graphify (needs `uv`) | `install.sh --graphify` |
-| mattpocock/skills (needs `npx`) | `install.sh --matt-skills` |
+| mattpocock/skills (needs `git`) | `install.sh --matt-skills` |
 
 Two things the offer is careful about:
 

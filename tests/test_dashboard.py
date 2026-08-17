@@ -71,8 +71,14 @@ class EntryPointTests(unittest.TestCase):
         )
 
     def test_scripted_only_options_are_refused_by_the_dashboard(self) -> None:
-        for flag in ("--graphify", "--matt-skills", "--target", "--global-instructions"):
-            arguments = [flag, "x"] if flag == "--target" else [flag]
+        for flag in (
+            "--graphify",
+            "--matt-skills",
+            "--matt-ref",
+            "--target",
+            "--global-instructions",
+        ):
+            arguments = [flag, "x"] if flag in ("--target", "--matt-ref") else [flag]
             args = install.parser().parse_args(["--interactive", *arguments])
             with self.assertRaises(install.InstallError) as caught:
                 install.open_dashboard(args)
