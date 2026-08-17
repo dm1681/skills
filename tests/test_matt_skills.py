@@ -289,7 +289,11 @@ class MattSkillsTests(unittest.TestCase):
             for root in roots:
                 self.assertEqual(
                     ["setup-matt-pocock-skills", "teach"],
-                    sorted(path.name for path in root.iterdir()),
+                    sorted(
+                        path.name
+                        for path in root.iterdir()
+                        if path.name != INSTALLER.RECEIPT_NAME
+                    ),
                 )
 
     def test_an_upstream_layout_change_is_reported_not_half_installed(self) -> None:
