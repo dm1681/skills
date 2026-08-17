@@ -7,6 +7,38 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Added
 
+- Uninstall, everywhere install already is: `skills uninstall NAME` / `--all`
+  / `--global-instructions` / `--shims` / `--external NAME`, `skills status`
+  for what is installed and where, `skills manage` for the dashboard's new
+  manage pane, and `./install.sh --uninstall` / `--status` for a machine with
+  no `skills` command yet. Removal is the mirror of install and reuses its
+  backup policy: a skill directory is moved into `.skills-backups/` rather
+  than deleted, and only an original this collection *recorded* displacing is
+  put back — an unrecorded backup is named in the message and left alone,
+  because it is just as likely an older copy of our own skill.
+  `--restore-from PATH` restores one explicitly, `--no-restore` keeps it
+  aside, `--no-backup` deletes outright, and `--unrecorded` is required before
+  a directory no receipt records will be touched. A managed instruction file
+  the user has since rewritten is left alone and said so; the two files always
+  go together, because one imports the other. `graphify` is never removed
+  here — the two commands that do remove it are printed instead.
+- The install receipt is now a ledger (`schema_version: 2`). Its v1 keys mean
+  exactly what they meant, so every existing reader still works; the new
+  `entries` map records, per installed thing, who installed it (`origin`) and
+  what was moved aside to make room, including whether that backup predates
+  this collection (`backups[].foreign`). A v1 receipt is upgraded on read
+  without rewriting the file, and an entry whose directory has since vanished
+  is deliberately kept: it is the only evidence the directory went missing.
+- A root registry at `~/.dm1681-skills-roots.json`, recording install
+  *locations* only. Without it a project or `--target` root cannot be found
+  again short of walking the filesystem, so `skills status` sweeps them
+  without being told where they are.
+- A manage pane in the dashboard, opened with `U` and applied with `X`. It
+  lists installed skills, managed instruction files, launcher shims, and
+  external tools with what a removal would restore, and asks before writing.
+  The pane deletes nothing itself: every removal goes through an `install.*`
+  primitive, pinned by a test that reads the module's source.
+
 - The dashboard lists `matt-skills` as an external tool row. Selecting it
   unfolds the installed skills that ship `disable-model-invocation`, each
   toggleable between hidden and model-visible; choices are recorded in
@@ -82,6 +114,12 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Changed
 
+- `skills_tui.RECEIPT` now aliases `install.RECEIPT_NAME` instead of repeating
+  the literal.
+- The colour contract gains pink for a removal. Widening peach would have made
+  one hue mean two things: peach promises the old copy is backed up *and*
+  something replaces it, and a removal only makes the first half of that
+  promise. Red still means only that an operation failed.
 - `semantic-pr-review`'s entrypoint dropped from 212 to about 120 lines. Build
   commands and the browser verification procedure moved to a new
   `references/build-and-verify.md`, and prose that duplicated the other

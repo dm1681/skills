@@ -31,10 +31,26 @@ wrappers) installs them locally, `skills_tui.py` is the interactive dashboard,
   installed as copy or link) from `EXTERNAL TOOLS` (placed by their own CLI;
   they honour `--scope` but not `--mode`). Register a new external tool in
   `install.EXTERNAL_TOOLS` and wire it in `SkillsApp.external_installers`; a
-  test pins the two together.
+  test pins the two together. `SkillsApp.external_uninstallers` is pinned to
+  the same registry the same way.
 - `skills setup-path` cannot run on a machine that has no `skills` command
   yet; bootstrap with `./install.sh --setup-path`, which delegates to the
-  same code.
+  same code. Shim and PATH *removal* mirrors shim writing: the mechanics live
+  in `skills_cli.py`, and `install.remove_shims` delegates to them exactly as
+  `install.setup_path` does.
+- The install receipt is the ledger, not a log (`schema_version: 2`). Its v1
+  keys are unchanged; `entries` is the durable inventory, keyed by skill name
+  or absolute path, carrying `origin` (who installed it) and
+  `backups[].foreign` (whether what we moved aside predates this collection).
+  `install_one` and `_write_managed_file` are what record it, and an entry is
+  only ever dropped by `forget_entry` — a record whose files are gone is
+  evidence, not garbage.
+- Uninstall and discovery live in `install.py` (`uninstall_one`, `discover`,
+  `restorable_backup`), with the TUI and CLI as thin callers; a test reads
+  `skills_tui.py`'s source to pin that the dashboard deletes nothing itself.
+- `~/.dm1681-skills-roots.json` indexes install *locations* only. It is the
+  only way a project or `--target` root is found again, so anything that
+  installs must call `install.record_root`.
 
 ## Cloud sessions and new repos
 

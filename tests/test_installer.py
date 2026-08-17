@@ -306,6 +306,19 @@ class InstallerTests(unittest.TestCase):
             receipt = json.loads((root / ".dm1681-skills.json").read_text())
             self.assertEqual(BUNDLED, receipt["skills"])
 
+    def test_the_receipt_still_carries_the_v1_keys(self) -> None:
+        """The ledger was added to the receipt, not written over it: every v1
+        reader — including the dashboard's first-run check — still works."""
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            self.run_installer("--home", str(home), "--skill", EXPLAINER_SKILL)
+            root = home / ".agents" / "skills"
+            receipt = json.loads((root / ".dm1681-skills.json").read_text())
+            self.assertEqual(2, receipt["schema_version"])
+            for key in ("version", "skills", "mode", "installed_at", "collection"):
+                self.assertIn(key, receipt)
+            self.assertEqual([EXPLAINER_SKILL], receipt["skills"])
+
     def test_selecting_one_skill_leaves_the_others_uninstalled(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
