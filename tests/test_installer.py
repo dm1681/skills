@@ -319,6 +319,19 @@ class InstallerTests(unittest.TestCase):
             receipt = json.loads((root / ".dm1681-skills.json").read_text())
             self.assertEqual(BUNDLED, receipt["skills"])
 
+    def test_the_receipt_still_carries_the_v1_keys(self) -> None:
+        """The ledger was added to the receipt, not written over it: every v1
+        reader — including the dashboard's first-run check — still works."""
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            self.run_installer("--home", str(home), "--skill", EXPLAINER_SKILL)
+            root = home / ".agents" / "skills"
+            receipt = json.loads((root / ".dm1681-skills.json").read_text())
+            self.assertEqual(2, receipt["schema_version"])
+            for key in ("version", "skills", "mode", "installed_at", "collection"):
+                self.assertIn(key, receipt)
+            self.assertEqual([EXPLAINER_SKILL], receipt["skills"])
+
     def test_selecting_one_skill_leaves_the_others_uninstalled(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
@@ -328,6 +341,33 @@ class InstallerTests(unittest.TestCase):
             self.assertFalse((root / SKILL).exists())
             receipt = json.loads((root / ".dm1681-skills.json").read_text())
             self.assertEqual([EXPLAINER_SKILL], receipt["skills"])
+
+    def test_doctor_flag_reports_a_diverged_install(self) -> None:
+        """The bootstrap path: a machine with no `skills` command can still ask."""
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            self.run_installer("--home", str(home), "--skill", EXPLAINER_SKILL)
+            root = home / ".agents" / "skills"
+            entrypoint = root / EXPLAINER_SKILL / "SKILL.md"
+            entrypoint.write_text(
+                entrypoint.read_text(encoding="utf-8") + "\nlocal edit\n",
+                encoding="utf-8",
+            )
+            result = self.run_installer(
+                "--home", str(home), "--project-dir", str(home), "--doctor", expected=3
+            )
+            self.assertIn(EXPLAINER_SKILL, result.stdout)
+            self.assertIn(str(root), result.stdout)
+            self.assertIn("diverged-from-source", result.stdout)
+
+    def test_doctor_flag_is_silent_on_a_clean_home(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            self.run_installer("--home", str(home), "--skill", EXPLAINER_SKILL)
+            result = self.run_installer(
+                "--home", str(home), "--project-dir", str(home), "--doctor"
+            )
+            self.assertIn("no inconsistencies", result.stdout)
 
 
 if __name__ == "__main__":

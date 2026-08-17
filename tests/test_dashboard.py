@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
 from textual.widgets import Static  # noqa: E402
 
 import install  # noqa: E402
+import inventory  # noqa: E402
 import skills_tui  # noqa: E402
 
 BUNDLED = sorted(
@@ -218,6 +219,50 @@ class ColourContractTests(unittest.TestCase):
     def test_a_gradient_interpolates_between_its_endpoints(self) -> None:
         self.assertEqual(skills_tui.blend("#000000", "#ffffff", 0.5), "#808080")
         self.assertIn(skills_tui.YOU, skills_tui.gradient("ab", skills_tui.YOU, skills_tui.ADD))
+
+    def test_removal_has_its_own_hue(self) -> None:
+        """Peach promises a backup *and* a replacement; a removal only makes
+        the first half of that promise, so it cannot borrow the hue."""
+        state_colours = {colour for colour, _, _ in skills_tui.MEANING.values()}
+        self.assertNotIn(skills_tui.REMOVE, state_colours)
+        allowed = {skills_tui.REMOVE, skills_tui.ADVISE}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            install.install_one(install.SOURCE_ROOT / FIRST, root, "copy", False, False)
+            (root / "unrecorded").mkdir()
+            (root / "unrecorded" / "SKILL.md").write_text("x", encoding="utf-8")
+            for item in install.discover_skills([root]):
+                colour, _label, _verb = skills_tui.manage_meaning(item)
+                self.assertIn(colour, allowed)
+
+    def test_the_receipt_constant_comes_from_install(self) -> None:
+        self.assertIs(skills_tui.RECEIPT, install.RECEIPT_NAME)
+
+    def test_resolution_colours_match_their_consequence(self) -> None:
+        """A fix is painted by what it does, not by which finding offered it."""
+        expected = {
+            inventory.REINSTALL: skills_tui.REPLACE,
+            inventory.RELINK: skills_tui.REPLACE,
+            inventory.KEEP: skills_tui.KEEP,
+            inventory.UNINSTALL: skills_tui.REMOVE,
+            inventory.FORGET: skills_tui.REMOVE,
+        }
+        self.assertEqual(
+            expected,
+            {action: colour for action, (colour, _, _) in skills_tui.RESOLUTIONS.items()},
+        )
+        painted = {colour for colour, _, _ in skills_tui.RESOLUTIONS.values()}
+        self.assertNotIn(skills_tui.FAIL, painted)
+        self.assertNotIn(skills_tui.YOU, painted)
+        # A finding itself is advisory, never a failure.
+        self.assertEqual(skills_tui.ADVISE, skills_tui.FINDING_COLOUR)
+
+    def test_the_dashboard_never_deletes_anything_itself(self) -> None:
+        """Every removal goes through an install.* primitive, so the rules stay
+        in one place — pinned by reading the source, like the tool registry."""
+        source = (ROOT / "skills_tui.py").read_text(encoding="utf-8")
+        for forbidden in ("rmtree", "shutil.move", ".unlink("):
+            self.assertNotIn(forbidden, source)
 
 
 class DashboardTests(unittest.IsolatedAsyncioTestCase):
@@ -700,6 +745,376 @@ class ReviewHiddenTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             row = next(row for row in app.rows() if row.skill == "matt-skills")
             self.assertIn("1 hidden from the model", row.note)
+
+
+class ManagePaneTests(unittest.IsolatedAsyncioTestCase):
+    """The second pane: what is installed, and what removing it would do."""
+
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.project = Path(self.directory.name) / "project"
+        self.project.mkdir()
+        self.home = Path(self.directory.name) / "home"
+        self.home.mkdir()
+
+    def tearDown(self) -> None:
+        self.directory.cleanup()
+
+    def app(self, pane="skills") -> skills_tui.SkillsApp:
+        return skills_tui.SkillsApp(
+            self.project, "project", ["claude"], "copy", False,
+            home=self.home, pane=pane,
+        )
+
+    def claude_root(self) -> Path:
+        return self.project / ".claude" / "skills"
+
+    def install_first(self) -> None:
+        install.install_one(
+            install.SOURCE_ROOT / FIRST, self.claude_root(), "copy", False, False
+        )
+
+    async def test_u_opens_the_manage_pane(self) -> None:
+        app = self.app()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("u")
+            await pilot.pause()
+            self.assertEqual("manage", app.pane)
+            self.assertFalse(app.guided())
+
+    async def test_u_returns_to_the_skill_list(self) -> None:
+        app = self.app()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("u")
+            await pilot.press("u")
+            await pilot.pause()
+            self.assertEqual("skills", app.pane)
+            self.assertEqual([row.skill for row in app.rows()][0], BUNDLED[0])
+
+    async def test_manage_lists_installed_skills_and_managed_files(self) -> None:
+        self.install_first()
+        install.install_global_instructions(self.home, "link", False)
+        app = self.app(pane="manage")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            kinds = [row.item.kind for row in app.manage_rows()]
+            self.assertEqual(["skill", "managed-file", "managed-file"], kinds)
+            self.assertEqual(FIRST, app.manage_rows()[0].item.name)
+            titles = [title for title, _detail, _items in app.manage_sections()]
+            self.assertEqual(["INSTALLED SKILLS", "GLOBAL INSTRUCTIONS"], titles)
+
+    async def test_an_empty_machine_says_so(self) -> None:
+        app = self.app(pane="manage")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            self.assertEqual([], app.manage_rows())
+            text = " ".join(str(widget.content) for widget in app._main.query(Static))
+            self.assertIn("Nothing from this collection is installed", text)
+
+    async def test_x_asks_before_removing(self) -> None:
+        self.install_first()
+        app = self.app(pane="manage")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("space")
+            await pilot.press("x")
+            await pilot.pause()
+            self.assertIsInstance(app.screen, skills_tui.ConfirmChanges)
+
+    async def test_n_cancels_and_leaves_the_files(self) -> None:
+        self.install_first()
+        app = self.app(pane="manage")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("space")
+            await pilot.press("x")
+            await pilot.pause()
+            await pilot.press("n")
+            await pilot.pause()
+            self.assertEqual(0, app.removed_count)
+        self.assertTrue((self.claude_root() / FIRST / "SKILL.md").is_file())
+
+    async def test_y_removes_and_backs_up(self) -> None:
+        self.install_first()
+        app = self.app(pane="manage")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("space")
+            await pilot.press("x")
+            await pilot.pause()
+            await pilot.press("y")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            self.assertEqual(1, app.removed_count)
+            self.assertEqual(0, app.failures)
+            self.assertEqual([], app.manage_rows())
+        self.assertFalse((self.claude_root() / FIRST).exists())
+        self.assertTrue(
+            list((self.project / ".claude" / ".skills-backups").rglob("SKILL.md"))
+        )
+
+    async def test_applying_nothing_is_refused(self) -> None:
+        self.install_first()
+        app = self.app(pane="manage")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("x")
+            await pilot.pause()
+            self.assertNotIsInstance(app.screen, skills_tui.ConfirmChanges)
+            self.assertEqual(0, app.removed_count)
+        self.assertTrue((self.claude_root() / FIRST / "SKILL.md").is_file())
+
+    async def test_every_registered_tool_has_an_uninstaller_wired(self) -> None:
+        app = self.app(pane="manage")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            self.assertEqual(
+                sorted(install.EXTERNAL_NAMES), sorted(app.external_uninstallers())
+            )
+            with self.assertRaises(install.InstallError) as caught:
+                app.uninstall_external("not-a-tool")
+            self.assertIn("no uninstaller wired", str(caught.exception))
+
+    async def test_an_unrecorded_row_is_advisory_yellow(self) -> None:
+        stray = self.claude_root() / "left-by-somebody-else"
+        stray.mkdir(parents=True)
+        (stray / "SKILL.md").write_text("x", encoding="utf-8")
+        app = self.app(pane="manage")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            row = app.manage_rows()[0]
+            colour, label, _verb = skills_tui.manage_meaning(row.item)
+            self.assertEqual(skills_tui.ADVISE, colour)
+            self.assertEqual("UNRECORDED", label)
+
+    async def test_an_external_tool_that_cannot_be_removed_is_explained(self) -> None:
+        (self.claude_root() / "graphify").mkdir(parents=True)
+        app = self.app(pane="manage")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            row = next(r for r in app.manage_rows() if r.item.kind == "external")
+            colour, _label, verb = skills_tui.manage_meaning(row.item)
+            self.assertEqual((skills_tui.ADVISE, "explain"), (colour, verb))
+            row.selected = True
+            self.assertEqual(
+                ["none"], [entry[1] for entry in app._removal_entries()]
+            )
+
+    async def test_applying_an_explained_tool_removes_nothing_and_counts_nothing(
+        self,
+    ) -> None:
+        """'✓ 1 removed' over an untouched directory is a lie about the run."""
+        (self.claude_root() / "graphify").mkdir(parents=True)
+        app = self.app(pane="manage")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            row = next(r for r in app.manage_rows() if r.item.kind == "external")
+            row.selected = True
+            await pilot.press("x")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            self.assertEqual(0, app.removed_count)
+            self.assertEqual(1, app.explained_count)
+            self.assertEqual(0, app.failures)
+        self.assertTrue((self.claude_root() / "graphify").is_dir())
+
+    async def test_the_view_and_mode_and_install_keys_are_inert_in_the_manage_pane(self) -> None:
+        self.install_first()
+        app = self.app(pane="manage")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            for key, unchanged in (("v", "all"), ("m", "copy")):
+                await pilot.press(key)
+                await pilot.pause()
+            self.assertEqual("all", app.view)
+            self.assertEqual("copy", app.mode)
+            await pilot.press("i")
+            await pilot.pause()
+            self.assertEqual(0, app.installed_count)
+            await pilot.press("g")
+            await pilot.pause()
+            self.assertFalse(app.guided())
+            self.assertEqual("manage", app.pane)
+        self.assertTrue((self.claude_root() / FIRST / "SKILL.md").is_file())
+
+    # -- findings, in the same pane ------------------------------------
+
+    def edit_first(self) -> Path:
+        """Install one skill and edit it, so the pane has an inconsistency."""
+        self.install_first()
+        entrypoint = self.claude_root() / FIRST / "SKILL.md"
+        entrypoint.write_text(
+            entrypoint.read_text(encoding="utf-8") + "\nEDITED-BY-THE-TEST\n",
+            encoding="utf-8",
+        )
+        return entrypoint
+
+    async def test_the_manage_pane_lists_one_row_per_finding_above_the_inventory(
+        self,
+    ) -> None:
+        self.edit_first()
+        app = self.app(pane="manage")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            rows = app.finding_rows()
+            self.assertEqual(
+                [inventory.DIVERGED], [row.finding.kind for row in rows]
+            )
+            # The findings come first: the nav order is what a reader sees.
+            self.assertIsInstance(app.nav_rows()[0], skills_tui.FindingRow)
+            self.assertIsInstance(app.nav_rows()[1], skills_tui.ManageRow)
+            drawn = str(rows[0].content)
+            self.assertIn(inventory.DIVERGED, drawn)
+            self.assertIn("reinstall every diverged copy", drawn)
+            # The other-options hint is escaped, or Rich eats it as a tag.
+            self.assertIn("\\[c] other options", drawn)
+
+    async def test_a_clean_machine_shows_the_clean_message_and_no_finding_rows(
+        self,
+    ) -> None:
+        self.install_first()
+        app = self.app(pane="manage")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            self.assertEqual([], app.finding_rows())
+            text = " ".join(str(widget.content) for widget in app._main.query(Static))
+            self.assertIn("Nothing inconsistent", text)
+            self.assertNotIn(skills_tui.FAIL, text)
+
+    async def test_space_selects_a_finding(self) -> None:
+        self.edit_first()
+        app = self.app(pane="manage")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("space")
+            await pilot.pause()
+            self.assertEqual(1, len(app.picked))
+            self.assertTrue(app.finding_rows()[0].selected)
+
+    async def test_c_cycles_the_chosen_resolution(self) -> None:
+        self.edit_first()
+        app = self.app(pane="manage")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            row = app.finding_rows()[0]
+            self.assertEqual(inventory.REINSTALL, row.resolution.action)
+            await pilot.press("c")
+            await pilot.pause()
+            self.assertEqual(inventory.KEEP, row.resolution.action)
+            self.assertEqual({app.finding_key(row.finding): 1}, app.chosen)
+
+    async def test_enter_opens_the_diff_and_escape_closes_it(self) -> None:
+        self.edit_first()
+        app = self.app(pane="manage")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+            self.assertIsInstance(app.screen, skills_tui.DiffScreen)
+            self.assertIn("EDITED-BY-THE-TEST", app.screen.body_text)
+            await pilot.press("escape")
+            await pilot.pause()
+            self.assertNotIsInstance(app.screen, skills_tui.DiffScreen)
+
+    async def test_x_asks_before_applying_a_writing_resolution(self) -> None:
+        entrypoint = self.edit_first()
+        app = self.app(pane="manage")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("space")
+            await pilot.press("x")
+            await pilot.pause()
+            self.assertIsInstance(app.screen, skills_tui.ConfirmChanges)
+            self.assertEqual(
+                ["write"], [entry[1] for entry in app._resolution_entries()]
+            )
+            await pilot.press("n")
+            await pilot.pause()
+        self.assertIn("EDITED-BY-THE-TEST", entrypoint.read_text(encoding="utf-8"))
+
+    async def test_x_applies_the_chosen_resolution_and_rescans(self) -> None:
+        entrypoint = self.edit_first()
+        app = self.app(pane="manage")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("space")
+            await pilot.press("x")
+            await pilot.pause()
+            await pilot.press("y")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            self.assertEqual(1, app.resolved_count)
+            self.assertEqual(0, app.failures)
+            self.assertEqual([], app.finding_rows())
+        self.assertNotIn("EDITED-BY-THE-TEST", entrypoint.read_text(encoding="utf-8"))
+
+    async def test_keeping_a_finding_writes_nothing(self) -> None:
+        entrypoint = self.edit_first()
+        app = self.app(pane="manage")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("c")  # reinstall -> keep
+            await pilot.press("space")
+            await pilot.press("x")
+            await pilot.pause()
+            # Nothing to warn about, so nothing is asked.
+            self.assertNotIsInstance(app.screen, skills_tui.ConfirmChanges)
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            self.assertEqual(0, app.failures)
+        self.assertIn("EDITED-BY-THE-TEST", entrypoint.read_text(encoding="utf-8"))
+
+    async def test_a_failed_fix_is_counted_and_painted_red(self) -> None:
+        self.edit_first()
+        app = self.app(pane="manage")
+        original = inventory.apply_resolution
+
+        def refuse(_resolution, _dry_run):
+            raise install.InstallError("no room on the device")
+
+        inventory.apply_resolution = refuse
+        try:
+            async with app.run_test() as pilot:
+                await pilot.pause()
+                await pilot.press("space")
+                await pilot.press("x")
+                await pilot.pause()
+                await pilot.press("y")
+                await app.workers.wait_for_complete()
+                await pilot.pause()
+                self.assertEqual(1, app.failures)
+                self.assertEqual(0, app.resolved_count)
+                self.assertIn(skills_tui.FAIL, str(app._status.content))
+        finally:
+            inventory.apply_resolution = original
+
+    async def test_one_confirm_modal_serves_both_lists(self) -> None:
+        self.edit_first()
+        app = self.app(pane="manage")
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("space")  # the finding
+            await pilot.press("down")
+            await pilot.press("space")  # the installed skill beneath it
+            await pilot.press("x")
+            await pilot.pause()
+            self.assertIsInstance(app.screen, skills_tui.ConfirmChanges)
+            self.assertEqual(
+                1,
+                sum(
+                    1
+                    for screen in app.screen_stack
+                    if isinstance(screen, skills_tui.ConfirmChanges)
+                ),
+            )
+            self.assertEqual(
+                ["write", "remove"],
+                [entry[1] for entry in app.screen.entries],
+            )
+            await pilot.press("n")
+            await pilot.pause()
 
 
 class GuidedTests(unittest.IsolatedAsyncioTestCase):
