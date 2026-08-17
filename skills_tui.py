@@ -768,6 +768,7 @@ class SkillsApp(App):
         self.installed_count = 0
         self.removed_count = 0
         self.resolved_count = 0
+        self.explained_count = 0
         self.failures = 0
         # Refreshed by rescan() whenever the manage pane is drawn; nothing here
         # is cached across an apply, because the disk is the only authority.
@@ -1756,6 +1757,7 @@ class SkillsApp(App):
         self._spin_verb = "applying" if chosen else "removing"
         self.removed_count = 0
         self.resolved_count = 0
+        self.explained_count = 0
         self.failures = 0
         self.apply_worker(items, chosen)
 
@@ -1767,6 +1769,7 @@ class SkillsApp(App):
         a second would cancel the first halfway through.
         """
         done = []
+        explained = []
         roots = []
         for item in items:
             try:
@@ -1785,7 +1788,13 @@ class SkillsApp(App):
                         )
                     )
                 elif item.kind == "external":
-                    self.uninstall_external(item.name)
+                    # A tool this collection can only explain removes nothing,
+                    # and counting it as removed would claim work the run did
+                    # not do. It is not a failure either: the notes are the
+                    # whole answer, which is why the row said `explain`.
+                    if not self.uninstall_external(item.name):
+                        explained.append(item.name)
+                        continue
                 else:  # Defensive: discover() emits no other kind.
                     raise install.InstallError(f"nothing wired to remove a {item.kind}")
                 done.append(item.name)
@@ -1803,7 +1812,7 @@ class SkillsApp(App):
                 self.call_from_thread(self.note_failure, finding.name, str(exc))
         for root in roots:
             install.prune_root(root, False)
-        self.call_from_thread(self.finish_apply, done, applied)
+        self.call_from_thread(self.finish_apply, done, applied, explained)
 
     def external_uninstallers(self) -> dict:
         """name -> a no-argument call removing what this collection recorded.
@@ -1821,18 +1830,34 @@ class SkillsApp(App):
             ),
         }
 
-    def uninstall_external(self, name: str) -> None:
+    def uninstall_external(self, name: str) -> bool:
+        """Run the tool's uninstaller; True when it actually removed something.
+
+        install.uninstall_external prints its notes whether or not it has
+        anything to remove, so the plan — the same one manage_meaning reads to
+        choose between `remove` and `explain` — is what says which it was.
+        """
         runner = self.external_uninstallers().get(name)
         if runner is None:
             raise install.InstallError(f"no uninstaller wired for external tool: {name}")
+        removable, _notes = install.external_removal_plan(name, self.roots())
         runner()
+        return bool(removable)
 
-    def finish_apply(self, names: Sequence[str], applied: int = 0) -> None:
+    def finish_apply(
+        self,
+        names: Sequence[str],
+        applied: int = 0,
+        explained: Sequence[str] = (),
+    ) -> None:
         self._spinning = False
         self._spin_verb = "installing"
         # `names` already holds only what succeeded, so it is the count.
+        # `explained` is deliberately not in it: those rows printed their notes
+        # and changed nothing.
         self.removed_count = len(names)
         self.resolved_count = applied
+        self.explained_count = len(explained)
         self.picked.clear()
         # render_all rescans, so the counts below describe the disk as it is
         # now rather than as it was when the worker started.
@@ -1849,6 +1874,11 @@ class SkillsApp(App):
                 MUTE,
                 applied,
                 len(self.findings),
+            )
+        if explained:
+            message += " [%s]· %s: nothing here can remove it[/]" % (
+                ADVISE,
+                ", ".join(explained),
             )
         self.render_status(message)
 

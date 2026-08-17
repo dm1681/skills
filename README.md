@@ -429,7 +429,10 @@ reports:
 | `orphan-receipt` | the receipt names a skill whose directory is gone |
 | `corrupt-receipt` | a receipt that will not parse; the next install rewrites it |
 
-Each finding offers fixes in a fixed order, and `--fix` applies the first.
+Each finding offers fixes in a fixed order, and `--fix` applies the first. A
+placement no receipt records is never offered as an `uninstall`, because
+removing one is `--unrecorded`'s business and applying the fix could only
+fail; the offer names `skills uninstall NAME --unrecorded` instead.
 Hiding a skill from the model is not a divergence — a skill you deliberately
 hid with `--hide-skill` legitimately differs from the checkout, and saying so
 every run would train you to ignore the report. Skills this checkout has no
