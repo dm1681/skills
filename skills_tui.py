@@ -13,19 +13,28 @@ COLOUR CONTRACT - every hue means one thing everywhere:
     green   no change  already identical to this checkout.
     teal    location   paths, roots, scope. Where things live.
     yellow  advisory   allowed, but probably not what you want.
+    pink    remove     a deletion; the copy is backed up first, and nothing is
+                       written in its place. Never used for an error.
     red     failure    errors only, so a healthy run is provably red-free.
 
 A skill's state is painted in the colour of the *consequence* of selecting it,
 so the same hue carries from the state pill to the action column to the review
 step to the progress bar.
 
+The manage pane paints a removal pink rather than peach: peach promises the
+old copy is backed up *and something replaces it*, and a removal only makes
+the first half of that promise. Red still means only that an operation failed.
+
 The install itself runs through `install.install_one` — the
-global-instructions row through `install.install_global_instructions` — so
-backups, receipts, and root resolution stay defined in one place.
+global-instructions row through `install.install_global_instructions`, every
+removal through `install.uninstall_one` and its siblings — so backups,
+receipts, and root resolution stay defined in one place. This module performs
+no filesystem removal of its own.
 """
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 from typing import Optional, Sequence
@@ -53,6 +62,7 @@ REPLACE = "#fab387"
 KEEP = "#a6e3a1"
 WHERE = "#94e2d5"
 ADVISE = "#f9e2af"
+REMOVE = "#f5c2e7"
 FAIL = "#f38ba8"
 MUTE = "#7f849c"
 BG = "#1e1e2e"
@@ -75,7 +85,23 @@ GLOBAL_SUMMARY = (
 GLOBAL_STATES = {"missing": AVAILABLE, "current": INSTALLED, "differs": OUTDATED}
 STEPS = ("Where to install", "Which skills", "Copy or link", "Review")
 SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-RECEIPT = ".dm1681-skills.json"
+RECEIPT = install.RECEIPT_NAME
+# One shell, two panes: choosing what to install, and managing what is already
+# installed. The manage pane sweeps every root it knows about, so the view and
+# mode filters — which describe an install — have nothing to say in it.
+PANES = ("skills", "manage")
+MANAGE_TITLES = {
+    "skill": ("INSTALLED SKILLS", "removed with a backup; a recorded original is put back"),
+    "managed-file": (
+        "GLOBAL INSTRUCTIONS",
+        "user-level AGENTS.md files; one you have since rewritten is left alone",
+    ),
+    "shim": ("LAUNCHER SHIMS", "the `skills` command; one from another checkout is left"),
+    "external": (
+        "EXTERNAL TOOLS",
+        "third-party; only what this collection recorded placing can go",
+    ),
+}
 
 CSS = """
 Screen { background: %(bg)s; color: %(fg)s; }
@@ -106,8 +132,18 @@ PreviewScreen { align: center middle; }
    screen background rather than the panel the parent rows sit on. */
 HiddenSkillRow { height: 3; padding: 0 2; margin: 0 0 1 3; background: %(bg)s; }
 HiddenSkillRow:focus { background: %(hi)s; }
+
+ManageRow { height: 3; padding: 0 2; margin-bottom: 1; background: %(panel)s; }
+ManageRow:focus { background: %(hi)s; }
+
+#changes { width: 66; padding: 1 2; background: %(panel)s; border: thick %(remove)s;
+           offset: 0 -3; opacity: 0;
+           transition: offset 200ms out_cubic, opacity 180ms out_cubic; }
+#changes.shown { offset: 0 0; opacity: 1; }
+ConfirmChanges { align: center middle; }
 """ % {
     "bg": BG, "fg": FG, "panel": PANEL, "hi": HI, "replace": REPLACE, "you": YOU,
+    "remove": REMOVE,
 }
 
 
@@ -207,6 +243,22 @@ def external_meaning(state: str) -> tuple:
     if state == AVAILABLE:
         return (ADD, "NOT INSTALLED", "install")
     return (REPLACE, "PRESENT", "update")
+
+
+def manage_meaning(item) -> tuple:
+    """(colour, pill label, verb) for one discovered install.
+
+    Yellow for something no receipt records: removing it is allowed, but the
+    collection cannot say it put it there, which is probably not what you
+    want. Pink for a removal. Never FAIL, never YOU — a listed install is not
+    an error, and mauve belongs to your selection alone.
+    """
+    if not item.recorded:
+        return (ADVISE, "UNRECORDED", "remove")
+    if item.kind == "external":
+        empty = not install.external_removal_plan(item.name, [item.root])[0]
+        return (ADVISE, "EXTERNAL", "explain") if empty else (REMOVE, "EXTERNAL", "remove")
+    return (REMOVE, (item.mode or "PRESENT").upper(), "remove")
 
 
 def _without_frontmatter(text: str) -> str:
@@ -359,6 +411,97 @@ class ConfirmReplace(ModalScreen):
         self.dismiss(False)
 
 
+class ManageRow(Static):
+    """One discovered install: selection mark, name, pill, path, restore line."""
+
+    can_focus = True
+
+    def __init__(self, item, selected: bool) -> None:
+        super().__init__()
+        self.item = item
+        self.selected = selected
+
+    def on_mount(self) -> None:
+        self.redraw()
+
+    def redraw(self) -> None:
+        colour, label, verb = manage_meaning(self.item)
+        self.styles.border_left = ("thick", YOU if self.selected else colour)
+        mark = "[%s]◆[/]" % YOU if self.selected else "[%s]◇[/]" % MUTE
+        action = "[%s]→ %s[/]" % (colour, verb) if self.selected else ""
+        name = self.item.name
+        if self.item.kind in ("managed-file", "shim"):
+            name = Path(self.item.name).name
+        self.update(
+            "%s [b]%-22s[/] %s  %s\n    [%s]%s[/]  [%s]%s[/]"
+            % (mark, name, pill(label, BG, colour), action,
+               WHERE, self.item.path, MUTE, self.item.detail)
+        )
+
+    def toggle(self) -> None:
+        self.selected = not self.selected
+        self.redraw()
+
+
+class ConfirmChanges(ModalScreen):
+    """Asks before writing or removing anything in the manage pane.
+
+    Writes and removals are listed under separate headings in their own
+    colours, because "12 changes" hides which of them cannot be undone by
+    running the installer again.
+    """
+
+    BINDINGS = [
+        Binding("y", "yes", "apply"),
+        Binding("n", "no", "cancel"),
+        Binding("escape", "no", "cancel"),
+    ]
+
+    def __init__(self, entries: Sequence[tuple]) -> None:
+        super().__init__()
+        self.entries = list(entries)
+
+    def compose(self) -> ComposeResult:
+        writes = [entry for entry in self.entries if entry[1] == "write"]
+        removals = [entry for entry in self.entries if entry[1] == "remove"]
+        lines = []
+        for heading, colour, group in (
+            ("WRITE", REPLACE, writes),
+            ("REMOVE", REMOVE, removals),
+        ):
+            if not group:
+                continue
+            lines.append(
+                "%s [b]%d %s[/]"
+                % (pill(heading, BG, colour), len(group),
+                   "change" if len(group) == 1 else "changes")
+            )
+            for label, _consequence, paths in group:
+                lines.append("  [%s]→[/] %s" % (colour, label))
+                for path in paths:
+                    lines.append("      [%s]%s[/]" % (WHERE, path))
+            lines.append("")
+        lines.append(
+            "[%s]Nothing is deleted outright: each copy moves into "
+            ".skills-backups\nfirst. A link is unlinked; this checkout is "
+            "untouched.[/]" % MUTE
+        )
+        lines.append("")
+        lines.append("%s  %s" % (chip("Y", "apply", REMOVE), chip("N", "cancel", MUTE)))
+        yield Container(Static("\n".join(lines)), id="changes")
+
+    def on_mount(self) -> None:
+        # A frame late, or the initial and target styles land together and
+        # nothing animates.
+        self.set_timer(0.02, lambda: self.query_one("#changes").add_class("shown"))
+
+    def action_yes(self) -> None:
+        self.dismiss(True)
+
+    def action_no(self) -> None:
+        self.dismiss(False)
+
+
 class PreviewScreen(ModalScreen):
     """The focused skill's SKILL.md."""
 
@@ -451,6 +594,8 @@ class SkillsApp(App):
         Binding("m", "cycle_mode", "mode"),
         Binding("i", "install", "install"),
         Binding("g", "toggle_guided", "guided"),
+        Binding("u", "toggle_pane", "manage"),
+        Binding("x", "apply", "apply"),
         Binding("q", "quit", "quit"),
     ]
 
@@ -462,6 +607,7 @@ class SkillsApp(App):
         mode: str = "copy",
         guided: Optional[bool] = None,
         home: Optional[Path] = None,
+        pane: str = "skills",
     ) -> None:
         super().__init__()
         self.project_dir = project_dir
@@ -475,12 +621,15 @@ class SkillsApp(App):
         self.external = list(install.EXTERNAL_NAMES)
         self.selected = set()
         self.view = "all"
+        self.pane = pane if pane in PANES else "skills"
         self.installed_count = 0
+        self.removed_count = 0
         self.failures = 0
         self._guided_requested = guided
         self.step = 0
         self._frame = 0
         self._spinning = False
+        self._spin_verb = "installing"
 
     # -- shell ----------------------------------------------------------
 
@@ -574,7 +723,7 @@ class SkillsApp(App):
         return [
             widget
             for widget in self._main.query(Static)
-            if isinstance(widget, (SkillRow, HiddenSkillRow))
+            if isinstance(widget, (SkillRow, HiddenSkillRow, ManageRow))
         ]
 
     def choices(self) -> list:
@@ -635,7 +784,29 @@ class SkillsApp(App):
         return entries
 
     def guided(self) -> bool:
-        return self.step > 0
+        # The guided flow walks an install; the manage pane is never part of it.
+        return self.pane == "skills" and self.step > 0
+
+    def bin_dir(self) -> Path:
+        return self.home / ".local" / "bin"
+
+    def discovered(self) -> list:
+        """Everything installed, here and everywhere an install was recorded."""
+        roots = self.roots()
+        for root in install.known_roots(self.home):
+            if root not in roots:
+                roots.append(root)
+        return install.discover(roots, self.home, self.bin_dir())
+
+    def manage_sections(self) -> list:
+        """(title, detail, items) per kind, empty groups dropped."""
+        items = self.discovered()
+        groups = []
+        for kind, (title, detail) in MANAGE_TITLES.items():
+            matching = [item for item in items if item.kind == kind]
+            if matching:
+                groups.append((title, detail, matching))
+        return groups
 
     def plan(self) -> list:
         """(name, state, verb, external) for each selection, in listed order."""
@@ -665,16 +836,20 @@ class SkillsApp(App):
 
     def render_head(self) -> None:
         self._head.update(
-            "%s   [%s]%s[/]   %s"
+            "%s   [%s]%s[/]   %s%s"
             % (
                 gradient("skills %s" % install.VERSION, YOU, ADD),
                 WHERE,
                 self.target(),
                 pill("PROJECT" if self.scope == "project" else "MACHINE-WIDE", BG, WHERE),
+                "  " + pill("MANAGE", BG, ADVISE) if self.pane == "manage" else "",
             )
         )
 
     def render_side(self) -> None:
+        if self.pane == "manage":
+            self._side.update(self.manage_rail())
+            return
         self._side.update(self.step_rail() if self.guided() else self.filters())
 
     def filters(self) -> str:
@@ -721,7 +896,56 @@ class SkillsApp(App):
         lines.append("\n[%s]step %d of %d[/]" % (MUTE, self.step, len(STEPS)))
         return "\n".join(lines)
 
+    def manage_rail(self) -> str:
+        """What is installed, by kind, and where this pane is looking.
+
+        Not the view/mode filters: those describe an install, and this pane
+        sweeps every root it knows about rather than the ones a mode applies to.
+        """
+        items = self.discovered()
+        lines = ["[b %s]INSTALLED[/]" % MUTE]
+        for kind, (title, _detail) in MANAGE_TITLES.items():
+            count = sum(1 for item in items if item.kind == kind)
+            label = "%-13s %d" % (title.lower(), count)
+            lines.append(
+                "[%s]   %s[/]" % (FG if count else MUTE, label)
+            )
+        lines.append("\n[b %s]WHERE[/]" % MUTE)
+        roots = self.roots()
+        for root in install.known_roots(self.home):
+            if root not in roots:
+                roots.append(root)
+        for root in roots:
+            lines.append("[%s] ▸ %s[/]" % (WHERE, root))
+        lines.append("[%s]   %s[/]" % (WHERE, self.bin_dir()))
+        return "\n".join(lines)
+
+    def main_manage(self) -> None:
+        groups = self.manage_sections()
+        if not groups:
+            self._main.mount(
+                Static(
+                    "[%s]Nothing from this collection is installed in these "
+                    "locations.[/]" % MUTE
+                )
+            )
+            return
+        for title, detail, items in groups:
+            self._main.mount(self.section_header(title, detail))
+            for item in items:
+                self._main.mount(ManageRow(item, False))
+
+    def manage_rows(self) -> list:
+        return list(self._main.query(ManageRow))
+
     def render_main(self) -> None:
+        if self.pane == "manage":
+            self._main.remove_children()
+            self.main_manage()
+            rows = self.manage_rows()
+            if rows:
+                rows[0].focus()
+            return
         self._main.remove_children()
         renderer = {
             0: self.main_dashboard,
@@ -948,6 +1172,13 @@ class SkillsApp(App):
         self._main.mount(Static("\n".join(lines)))
 
     def render_foot(self) -> None:
+        if self.pane == "manage":
+            keys = [
+                ("SPACE", "select", YOU), ("A", "all", YOU), ("X", "apply", REMOVE),
+                ("U", "skills", MUTE), ("S", "scope", WHERE), ("Q", "quit", MUTE),
+            ]
+            self._foot.update("  ".join(chip(k, v, c) for k, v, c in keys))
+            return
         if self.guided():
             keys = [("↑↓", "move", MUTE)]
             if self.step in (1, 2, 3):
@@ -971,7 +1202,11 @@ class SkillsApp(App):
         if message:
             self._status.update(message)
             return
-        count = len(self.selected)
+        count = (
+            sum(1 for row in self.manage_rows() if row.selected)
+            if self.pane == "manage"
+            else len(self.selected)
+        )
         self._status.update(
             "[%s]nothing selected[/]" % MUTE
             if not count
@@ -983,13 +1218,14 @@ class SkillsApp(App):
             return
         self._frame += 1
         glyph = SPINNER[self._frame % len(SPINNER)]
-        self.render_status("[%s]%s[/] [%s]installing…[/]" % (YOU, glyph, MUTE))
+        self.render_status("[%s]%s[/] [%s]%s…[/]" % (YOU, glyph, MUTE, self._spin_verb))
 
     # -- actions --------------------------------------------------------
 
     def focused_row(self):
         node = self.focused
-        return node if isinstance(node, (SkillRow, ChoiceRow, HiddenSkillRow)) else None
+        types = (SkillRow, ChoiceRow, HiddenSkillRow, ManageRow)
+        return node if isinstance(node, types) else None
 
     def action_move(self, delta: int) -> None:
         options = self.nav_rows() or self.choices()
@@ -1058,7 +1294,10 @@ class SkillsApp(App):
 
     def action_toggle(self) -> None:
         row = self.focused_row()
-        if isinstance(row, HiddenSkillRow):
+        if isinstance(row, ManageRow):
+            row.toggle()
+            self.render_status()
+        elif isinstance(row, HiddenSkillRow):
             self.toggle_model_visibility(row)
         elif isinstance(row, SkillRow):
             row.toggle()
@@ -1080,6 +1319,16 @@ class SkillsApp(App):
                 other.redraw()
 
     def action_toggle_all(self) -> None:
+        if self.pane == "manage":
+            rows = self.manage_rows()
+            if not rows:
+                return
+            value = not all(row.selected for row in rows)
+            for row in rows:
+                row.selected = value
+                row.redraw()
+            self.render_status()
+            return
         rows = [row for row in self.rows()]
         if not rows:
             return
@@ -1113,7 +1362,16 @@ class SkillsApp(App):
             self.step -= 1
             self.render_all()
 
+    def inert_here(self, what: str) -> bool:
+        """Refuse a key that has no meaning in the manage pane, and say why."""
+        if self.pane != "manage":
+            return False
+        self.render_status("[%s]the %s applies to installing[/]" % (ADVISE, what))
+        return True
+
     def action_cycle_view(self) -> None:
+        if self.inert_here("view filter"):
+            return
         if self.guided():
             return
         self.view = VIEWS[(VIEWS.index(self.view) + 1) % len(VIEWS)]
@@ -1128,6 +1386,8 @@ class SkillsApp(App):
         self.render_all()
 
     def action_cycle_mode(self) -> None:
+        if self.inert_here("copy-link mode"):
+            return
         if self.guided():
             return
         self.mode = "link" if self.mode == "copy" else "copy"
@@ -1146,10 +1406,20 @@ class SkillsApp(App):
             self.render_main()
 
     def action_toggle_guided(self) -> None:
+        if self.inert_here("guided setup"):
+            return
         self.step = 0 if self.guided() else 1
         self.render_all()
 
+    def action_toggle_pane(self) -> None:
+        self.pane = "manage" if self.pane == "skills" else "skills"
+        self.selected.clear()
+        self.step = 0
+        self.render_all()
+
     def action_install(self) -> None:
+        if self.inert_here("install key"):
+            return
         if self.guided():
             return
         if not self.selected:
@@ -1163,10 +1433,125 @@ class SkillsApp(App):
         self.start_install()
 
     def _after_confirm(self, approved: Optional[bool]) -> None:
-        if approved:
-            self.start_install()
-        else:
+        if not approved:
             self.render_status("[%s]no changes made[/]" % MUTE)
+            return
+        if self.pane == "manage":
+            self.start_apply()
+        else:
+            self.start_install()
+
+    # -- managing -------------------------------------------------------
+
+    def action_apply(self) -> None:
+        if self.pane != "manage":
+            return
+        entries = self._removal_entries()
+        if not entries:
+            self.render_status("[%s]select something first[/]" % ADVISE)
+            return
+        if any(consequence != "none" for _label, consequence, _paths in entries):
+            self.push_screen(ConfirmChanges(entries), self._after_confirm)
+            return
+        self.start_apply()
+
+    def _removal_entries(self) -> list:
+        """(label, consequence, paths) for every selected row, for the modal."""
+        entries = []
+        for row in self.manage_rows():
+            if not row.selected:
+                continue
+            item = row.item
+            _colour, _label, verb = manage_meaning(item)
+            if verb == "explain":
+                entries.append(
+                    ("%s: %s" % (item.name, item.detail), "none", [])
+                )
+                continue
+            entries.append(
+                ("%s %s" % (verb, item.name), "remove", [str(item.path)])
+            )
+        return entries
+
+    def start_apply(self) -> None:
+        items = [row.item for row in self.manage_rows() if row.selected]
+        if not items:
+            self.render_status("[%s]select something first[/]" % ADVISE)
+            return
+        self._spinning = True
+        self._spin_verb = "removing"
+        self.removed_count = 0
+        self.failures = 0
+        self.apply_worker(items)
+
+    @work(thread=True, exclusive=True)
+    def apply_worker(self, items: list) -> None:
+        """Every removal goes through an install.* primitive, never through here."""
+        done = []
+        roots = []
+        for item in items:
+            try:
+                if item.kind == "skill":
+                    install.uninstall_one(
+                        item.name, item.root, False, allow_unrecorded=not item.recorded
+                    )
+                    if item.root not in roots:
+                        roots.append(item.root)
+                elif item.kind == "managed-file":
+                    install.uninstall_managed_file(item.path, False, home=self.home)
+                elif item.kind == "shim":
+                    install.remove_shims(
+                        argparse.Namespace(
+                            home=self.home, dry_run=False, add_path=False
+                        )
+                    )
+                elif item.kind == "external":
+                    self.uninstall_external(item.name)
+                else:  # Defensive: discover() emits no other kind.
+                    raise install.InstallError(f"nothing wired to remove a {item.kind}")
+                done.append(item.name)
+            except (install.InstallError, OSError) as exc:
+                self.call_from_thread(self.note_failure, item.name, str(exc))
+        for root in roots:
+            install.prune_root(root, False)
+        self.call_from_thread(self.finish_apply, done)
+
+    def external_uninstallers(self) -> dict:
+        """name -> a no-argument call removing what this collection recorded.
+
+        A table rather than a branch, exactly like external_installers: a
+        registry entry with nothing wired to it is a missing key a test can
+        see, not a failure that waits for somebody to press apply.
+        """
+        return {
+            "graphify": lambda: install.uninstall_external(
+                "graphify", self.roots(), False
+            ),
+            "matt-skills": lambda: install.uninstall_external(
+                "matt-skills", self.roots(), False
+            ),
+        }
+
+    def uninstall_external(self, name: str) -> None:
+        runner = self.external_uninstallers().get(name)
+        if runner is None:
+            raise install.InstallError(f"no uninstaller wired for external tool: {name}")
+        runner()
+
+    def finish_apply(self, names: Sequence[str]) -> None:
+        self._spinning = False
+        self._spin_verb = "installing"
+        self.removed_count = len(names) - self.failures
+        self.render_all()
+        if self.failures:
+            self.render_status(
+                "[%s]× %d failed[/] [%s]· %d removed[/]"
+                % (FAIL, self.failures, MUTE, self.removed_count)
+            )
+        else:
+            self.render_status(
+                "[%s]✓ %d removed[/]" % (KEEP, self.removed_count)
+            )
 
     # -- installing -----------------------------------------------------
 
@@ -1276,7 +1661,9 @@ def run(
     agents: Optional[Sequence[str]] = None,
     mode: str = "copy",
     guided: Optional[bool] = None,
+    pane: str = "skills",
+    home: Optional[Path] = None,
 ) -> int:
-    app = SkillsApp(project_dir, scope, agents, mode, guided)
+    app = SkillsApp(project_dir, scope, agents, mode, guided, home, pane)
     app.run()
     return 0

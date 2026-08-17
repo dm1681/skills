@@ -81,9 +81,10 @@ date, or differing from this checkout — beside a sidebar holding the view
 filter, the destination, and copy/link mode. Keys: `↑`/`↓` to move, `Space` to
 select, `Enter` for the `SKILL.md` preview, `V` to filter the list, `S` to
 switch between a repo-level and a machine-wide install, `M` between copy and
-link, `I` to install, `G` for the guided flow, `Q` to quit. A skill that already
-exists and differs is never replaced silently: it asks first, then moves the old
-copy into an adjacent `.skills-backups/` directory.
+link, `I` to install, `U` for the manage pane, `X` to apply a removal there,
+`G` for the guided flow, `Q` to quit. A skill that already exists and differs
+is never replaced silently: it asks first, then moves the old copy into an
+adjacent `.skills-backups/` directory.
 
 ### Guided mode
 
@@ -107,6 +108,7 @@ Colour is information, not decoration, and one hue means one thing everywhere:
 | green | already identical to this checkout; nothing will happen |
 | teal | a location — paths, roots, scope |
 | yellow | allowed, but probably not what you want |
+| pink | a removal; the copy is backed up first and nothing replaces it |
 | red | failure, so a healthy run is provably red-free |
 
 A skill's state is painted in the colour of the *consequence* of selecting it,
@@ -336,6 +338,63 @@ Graphify's generic `agents` platform for the shared `.agents/skills` target and
 uses the explicit `codex`, `cursor`, `copilot`, or `claude` platform when that
 agent was selected. See [`docs/graphify.md`](docs/graphify.md) for the exact
 command matrix and boundaries.
+
+## Uninstall
+
+Removal is the mirror of install and goes through the same code, so the same
+backup guarantee applies:
+
+```sh
+skills status                       # what is installed, and where
+skills manage                       # the dashboard's manage pane
+skills uninstall NAME               # one skill, from this project's roots
+skills uninstall NAME --user        # ...machine-wide instead
+skills uninstall --all              # every skill recorded in those roots
+skills uninstall --global-instructions   # the two managed home files
+skills uninstall --shims            # the `skills` launchers
+skills uninstall --external matt-skills  # what this collection recorded placing
+skills uninstall NAME --dry-run     # print what would happen, write nothing
+```
+
+`skills status` lists skills, managed instruction files, launcher shims, and
+external tools, one line each, with the root it lives in and what a removal
+would be able to restore. `skills manage` shows the same list as selectable
+rows: `Space` to select, `X` to apply, `U` back to the skill list. Removals
+are pink, and nothing is written until the confirmation is accepted.
+
+What comes back afterwards:
+
+- A skill directory is moved into the adjacent `.skills-backups/` directory,
+  never deleted, and whatever *this collection displaced when it installed* is
+  moved back. That is recorded in the receipt at install time, so an original
+  it never saw is reported rather than guessed at: `--restore-from PATH`
+  restores one explicitly, and `--no-restore` leaves it in `.skills-backups/`.
+- A managed instruction file is judged by its marker. One you have since
+  rewritten is left alone and said so — `left … (hand-edited since install)`,
+  exit 0 — and a backup without the marker is yours, so it is put back. The two
+  files always go together, because `~/.claude/CLAUDE.md` imports
+  `~/.agents/AGENTS.md`.
+- A shim written from another checkout is left alone. `--shims --add-path`
+  also removes the `PATH` line this collection appended, after copying the
+  profile into `.skills-backups/`.
+- `graphify` cannot be removed here: its own CLI placed the skill. The command
+  prints what to run instead — `uv tool uninstall graphifyy`, then graphify's
+  own CLI for the registered skill directory.
+- `--no-backup` deletes rather than moving aside. That one is not recoverable.
+
+A directory no receipt records is refused rather than removed, and the message
+names `--unrecorded` for when you meant it. Uninstalling twice is not an error:
+the second run prints `absent` everywhere and exits 0.
+
+Every install records its root in `~/.dm1681-skills-roots.json` — locations
+only, never contents — so a project or `--target` destination is swept by
+`skills status` without being named again. Roots installed by earlier versions
+were never recorded, so those are only found when you name them with
+`--project-dir` or `--target`.
+
+Without the `skills` command, the installer carries the same flags:
+`./install.sh --status`, `./install.sh --uninstall --skill NAME`,
+`./install.sh --uninstall --all --dry-run`.
 
 ## Sync on another machine
 

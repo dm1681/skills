@@ -16,7 +16,7 @@ import tempfile
 import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Iterable, Mapping, NamedTuple, Optional, TextIO
+from typing import Callable, Iterable, Mapping, NamedTuple, Optional, Sequence, TextIO
 
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -27,6 +27,15 @@ VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 # Stamped into every file the installer owns outside a skills root, so a later
 # run (or a human) can tell a generated pointer from hand-written guidance.
 MANAGED_MARKER = "<!-- dm1681/skills: managed file -->"
+
+# The install receipt is the ledger an uninstall reads back: one per skills
+# root for the skills in it, one in $HOME for what this collection installed
+# outside any root (managed instruction files, launcher shims).
+RECEIPT_NAME = ".dm1681-skills.json"
+RECEIPT_SCHEMA = 2
+# Locations only, never contents. Without it a project or --target root cannot
+# be found again short of walking the filesystem.
+ROOT_REGISTRY_NAME = ".dm1681-skills-roots.json"
 
 SHARED_AGENTS = {"universal", "agents", "codex", "cursor", "copilot"}
 KNOWN_AGENTS = SHARED_AGENTS | {"claude", "all"}
@@ -63,6 +72,10 @@ class ExternalTool(NamedTuple):
     about its state is whether its marker directory is present. The marker is
     a separate field because an install may drop many skill directories under
     names that differ from the row's (matt-skills installs a dozen).
+
+    `removal` is the honest half of the same asymmetry: a tool this collection
+    only ever handed to somebody else's installer cannot be uninstalled here,
+    and saying so beats a removal that silently misses most of what was placed.
     """
 
     name: str
@@ -70,6 +83,7 @@ class ExternalTool(NamedTuple):
     origin: str
     requires: str
     marker: str
+    removal: str
 
 
 EXTERNAL_TOOLS = (
@@ -79,6 +93,10 @@ EXTERNAL_TOOLS = (
         origin="graphifyy on PyPI, installed and registered by its own CLI",
         requires="uv",
         marker="graphify",
+        removal=(
+            "not removable here: its own CLI placed the skill; "
+            "uv tool uninstall graphifyy removes the package"
+        ),
     ),
     ExternalTool(
         name="matt-skills",
@@ -86,6 +104,10 @@ EXTERNAL_TOOLS = (
         origin="mattpocock/skills on GitHub, staged and copied in by the skills CLI",
         requires="npx",
         marker="setup-matt-pocock-skills",
+        removal=(
+            "removes the skill directories recorded with origin=matt-skills "
+            "in the install receipt"
+        ),
     ),
 )
 EXTERNAL_NAMES = tuple(tool.name for tool in EXTERNAL_TOOLS)
@@ -481,7 +503,16 @@ def install_matt_skills(
                     "upstream install did not include setup-matt-pocock-skills"
                 )
             for source in sources:
-                emit(install_one(source, destination_root, "copy", force, False))
+                emit(
+                    install_one(
+                        source,
+                        destination_root,
+                        "copy",
+                        force,
+                        False,
+                        origin="matt-skills",
+                    )
+                )
             # The copies just overwrote any frontmatter edits from an earlier
             # review, so the recorded choices must be re-applied here or an
             # update silently re-hides every skill the user enabled.
@@ -577,15 +608,42 @@ def record_model_decisions(roots: Iterable[Path], updates: Mapping[str, str]) ->
             continue
         decisions = read_model_decisions([root])
         decisions.update(updates)
-        (root / MODEL_DECISIONS_FILE).write_text(
-            json.dumps(
-                {"schema_version": 1, "decisions": decisions},
-                indent=2,
-                sort_keys=True,
-            )
-            + "\n",
-            encoding="utf-8",
+        _write_model_decisions(root, decisions)
+
+
+def _write_model_decisions(root: Path, decisions: dict) -> None:
+    """The write half of record_model_decisions, so forgetting can reuse it."""
+    (root / MODEL_DECISIONS_FILE).write_text(
+        json.dumps(
+            {"schema_version": 1, "decisions": decisions},
+            indent=2,
+            sort_keys=True,
         )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def forget_model_decisions(
+    roots: Iterable[Path], names: Iterable[str], dry_run: bool = False
+) -> None:
+    """Drop visibility choices for skills being removed.
+
+    A recorded choice outlives the files it applies to otherwise, and would be
+    re-applied to a fresh install the user never asked to hide.
+    """
+    if dry_run:
+        return
+    dropped = set(names)
+    for root in roots:
+        if not (root / MODEL_DECISIONS_FILE).is_file():
+            continue
+        decisions = read_model_decisions([root])
+        remaining = {
+            name: choice for name, choice in decisions.items() if name not in dropped
+        }
+        if remaining != decisions:
+            _write_model_decisions(root, remaining)
 
 
 def apply_model_decisions(root: Path, emit: Callable[[str], None] = print) -> None:
@@ -657,11 +715,24 @@ def install_one(
     mode: str,
     force: bool,
     dry_run: bool,
+    *,
+    origin: str = "bundled",
+    record: bool = True,
 ) -> str:
     destination = root / source.name
+    # Read before anything moves: whether this name was already ours is what
+    # decides if the backup taken below is somebody else's original or our own
+    # earlier copy, and an uninstall may only restore the former.
+    recorded = receipt_entries(root, kind="skill")
     exists = destination.exists() or destination.is_symlink()
     current = exists and destination_matches_mode(destination, mode)
     if current and trees_equal(destination, source):
+        if record and source.name not in recorded:
+            # Self-heals a v1 receipt and any install that predates the ledger:
+            # nothing to write, but the entry has to exist to be removable.
+            record_entry(
+                root, source.name, "skill", mode=mode, origin=origin, dry_run=dry_run
+            )
         return f"unchanged  {destination}"
     if exists and not force:
         actual = "link" if destination.is_symlink() else "copy"
@@ -698,24 +769,310 @@ def install_one(
         if backup is not None and not destination.exists() and not destination.is_symlink():
             shutil.move(str(backup), str(destination))
         raise
+    if record:
+        record_entry(
+            root,
+            source.name,
+            "skill",
+            mode=mode,
+            origin=origin,
+            backup=backup,
+            foreign=None if backup is None else source.name not in recorded,
+        )
     return f"installed  {destination}" + (f" (backup: {backup})" if backup else "")
 
 
-def write_receipt(root: Path, skills: list[str], mode: str, dry_run: bool) -> None:
+# -- the ledger -------------------------------------------------------------
+#
+# One receipt per directory, holding both what the last run selected (`skills`,
+# `mode`, `version` — the v1 keys, unchanged) and the durable inventory an
+# uninstall reads (`entries`). An entry is keyed by skill name for a skill and
+# by absolute path for a managed file or a shim, and remembers who installed it
+# and what was moved aside to make room.
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def receipt_path(root: Path) -> Path:
+    return root / RECEIPT_NAME
+
+
+def _upgrade_receipt(data: dict) -> dict:
+    """v1 -> v2 in memory only; the file is rewritten on the next real write.
+
+    Every name in a v1 `skills` list becomes an entry with kind="skill",
+    origin="unknown", the receipt's mode/version, and no backups — provenance
+    unknown, which is exactly what a v1 receipt can honestly claim.
+    """
+    upgraded = dict(data)
+    entries = upgraded.get("entries")
+    entries = dict(entries) if isinstance(entries, dict) else {}
+    for name in upgraded.get("skills") or []:
+        if not isinstance(name, str) or name in entries:
+            continue
+        entries[name] = {
+            "kind": "skill",
+            "origin": "unknown",
+            "mode": upgraded.get("mode"),
+            "version": upgraded.get("version"),
+            "installed_at": upgraded.get("installed_at"),
+            "backups": [],
+        }
+    upgraded["entries"] = entries
+    upgraded["schema_version"] = RECEIPT_SCHEMA
+    return upgraded
+
+
+def read_receipt(root: Path) -> dict:
+    """Parsed receipt for one directory, upgraded to the current schema.
+
+    Returns {} when absent, unreadable, or not a JSON object — a corrupt
+    receipt is never a reason to refuse to uninstall.
+    """
+    try:
+        loaded = json.loads(receipt_path(root).read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeDecodeError):
+        return {}
+    if not isinstance(loaded, dict):
+        return {}
+    return _upgrade_receipt(loaded)
+
+
+def receipt_entries(
+    root: Path, kind: Optional[str] = None, origin: Optional[str] = None
+) -> dict:
+    """entry_id -> entry, filtered. Insertion-ordered."""
+    entries = read_receipt(root).get("entries")
+    if not isinstance(entries, dict):
+        return {}
+    return {
+        entry_id: entry
+        for entry_id, entry in entries.items()
+        if isinstance(entry, dict)
+        and (kind is None or entry.get("kind") == kind)
+        and (origin is None or entry.get("origin") == origin)
+    }
+
+
+def _write_receipt_data(root: Path, data: dict) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    temporary = root / (RECEIPT_NAME + ".tmp")
+    temporary.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    os.replace(temporary, receipt_path(root))
+
+
+def record_entry(
+    root: Path,
+    entry_id: str,
+    kind: str,
+    *,
+    mode: Optional[str] = None,
+    origin: str = "bundled",
+    backup: Optional[Path] = None,
+    foreign: Optional[bool] = None,
+    dry_run: bool = False,
+) -> None:
+    """Merge one installed thing into this directory's receipt.
+
+    Idempotent per id: re-recording updates mode/version/installed_at and
+    *appends* a backup rather than replacing the list — the backup history is
+    what tells uninstall which copy predates this collection.
+    """
     if dry_run:
         return
-    receipt = {
-        "schema_version": 1,
-        "collection": "dm1681/skills",
-        "version": VERSION,
-        "skills": skills,
-        "mode": mode,
-        "installed_at": datetime.now(timezone.utc).isoformat(),
-    }
-    root.mkdir(parents=True, exist_ok=True)
-    temporary = root / ".dm1681-skills.json.tmp"
-    temporary.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
-    os.replace(temporary, root / ".dm1681-skills.json")
+    data = read_receipt(root)
+    data["schema_version"] = RECEIPT_SCHEMA
+    data.setdefault("collection", "dm1681/skills")
+    entries = data.get("entries")
+    entries = dict(entries) if isinstance(entries, dict) else {}
+    entry = entries.get(entry_id)
+    entry = dict(entry) if isinstance(entry, dict) else {}
+    backups = entry.get("backups")
+    backups = list(backups) if isinstance(backups, list) else []
+    if backup is not None:
+        backups.append({"path": str(backup), "at": _now(), "foreign": foreign})
+    entry.update(
+        {
+            "kind": kind,
+            "origin": origin,
+            "mode": mode,
+            "version": VERSION,
+            "installed_at": _now(),
+            "backups": backups,
+        }
+    )
+    entries[entry_id] = entry
+    data["entries"] = entries
+    _write_receipt_data(root, data)
+
+
+def forget_entry(root: Path, entry_id: str, dry_run: bool = False) -> str:
+    """Drop one entry from `entries` and from `skills`, without touching files."""
+    data = read_receipt(root)
+    entries = data.get("entries")
+    entries = dict(entries) if isinstance(entries, dict) else {}
+    skills = data.get("skills")
+    skills = list(skills) if isinstance(skills, list) else []
+    if entry_id not in entries and entry_id not in skills:
+        return f"unchanged  {receipt_path(root)}"
+    if dry_run:
+        return f"would forget {entry_id} in {receipt_path(root)}"
+    entries.pop(entry_id, None)
+    data["entries"] = entries
+    data["skills"] = [name for name in skills if name != entry_id]
+    data["schema_version"] = RECEIPT_SCHEMA
+    _write_receipt_data(root, data)
+    return f"forgot     {entry_id} in {receipt_path(root)}"
+
+
+def prune_root(root: Path, dry_run: bool = False) -> list:
+    """Clean up a root that holds nothing of ours any more.
+
+    A root holding somebody else's files keeps its directory; only this
+    collection's bookkeeping is removed, and only once no entry and no skill
+    directory is left to describe.
+    """
+    messages: list = []
+    if not root.is_dir() or receipt_entries(root):
+        return messages
+    if any(
+        (path / "SKILL.md").is_file()
+        for path in root.iterdir()
+        if path.is_dir() or path.is_symlink()
+    ):
+        return messages
+    ours = (RECEIPT_NAME, MODEL_DECISIONS_FILE)
+    for name in ours:
+        path = root / name
+        if not (path.exists() or path.is_symlink()):
+            continue
+        if dry_run:
+            messages.append(f"would remove {path}")
+            continue
+        remove_path(path)
+        messages.append(f"removed    {path}")
+    remaining = [path for path in root.iterdir() if path.name not in ours]
+    if dry_run:
+        if not remaining:
+            messages.append(f"would remove {root}")
+        return messages
+    try:
+        root.rmdir()
+    except OSError:
+        return messages
+    messages.append(f"removed    {root}")
+    return messages
+
+
+def write_receipt(root: Path, skills: list, mode: str, dry_run: bool) -> None:
+    """Record this run's selection, keeping every entry the ledger already has.
+
+    An entry for a skill outside this run — or one whose directory somebody
+    has since deleted — survives on purpose: the ledger is what makes a stale
+    record visible, and dropping it silently would erase the only evidence.
+    """
+    if dry_run:
+        return
+    data = read_receipt(root)
+    entries = data.get("entries")
+    entries = dict(entries) if isinstance(entries, dict) else {}
+    for name in skills:
+        if name in entries:
+            continue
+        entries[name] = {
+            "kind": "skill",
+            "origin": "bundled",
+            "mode": mode,
+            "version": VERSION,
+            "installed_at": _now(),
+            "backups": [],
+        }
+    data.update(
+        {
+            "schema_version": RECEIPT_SCHEMA,
+            "collection": "dm1681/skills",
+            "version": VERSION,
+            "skills": list(skills),
+            "mode": mode,
+            "installed_at": _now(),
+            "entries": entries,
+        }
+    )
+    _write_receipt_data(root, data)
+
+
+# -- the root registry ------------------------------------------------------
+
+
+def registry_path(home: Path) -> Path:
+    return home.expanduser() / ROOT_REGISTRY_NAME
+
+
+def _read_registry(home: Path) -> list:
+    try:
+        loaded = json.loads(registry_path(home).read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeDecodeError):
+        return []
+    if not isinstance(loaded, dict):
+        return []
+    roots = loaded.get("roots")
+    if not isinstance(roots, list):
+        return []
+    return [item for item in roots if isinstance(item, str)]
+
+
+def _write_registry(home: Path, roots: Sequence[str]) -> None:
+    home = home.expanduser()
+    home.mkdir(parents=True, exist_ok=True)
+    target = registry_path(home)
+    temporary = target.with_name(ROOT_REGISTRY_NAME + ".tmp")
+    temporary.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "collection": "dm1681/skills",
+                "roots": list(roots),
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    os.replace(temporary, target)
+
+
+def record_root(home: Path, root: Path, dry_run: bool = False) -> None:
+    """Remember one install location, so a later run can find it again."""
+    if dry_run:
+        return
+    entry = str(Path(root).expanduser().resolve())
+    known = _read_registry(home)
+    if entry in known:
+        return
+    _write_registry(home, sorted(set(known) | {entry}))
+
+
+def known_roots(home: Path) -> list:
+    """Every recorded root that still exists, sorted and deduped.
+
+    Prunes stale entries at read time only — it rewrites nothing, because a
+    root that is missing today may be a mount that comes back tomorrow.
+    """
+    return [Path(item) for item in sorted(set(_read_registry(home))) if Path(item).is_dir()]
+
+
+def forget_roots(home: Path, roots: Iterable[Path], dry_run: bool = False) -> list:
+    known = _read_registry(home)
+    dropping: set = set()
+    for root in roots:
+        dropping.add(str(root))
+        dropping.add(str(Path(root).expanduser().resolve()))
+    dropped = [Path(item) for item in known if item in dropping]
+    if dropped and not dry_run:
+        _write_registry(home, [item for item in known if item not in dropping])
+    return dropped
 
 
 def global_instruction_files(home: Path, mode: str) -> list[tuple[Path, str]]:
@@ -795,7 +1152,22 @@ def global_instruction_status(home: Path, mode: str) -> list[tuple[Path, str]]:
     ]
 
 
-def _write_managed_file(path: Path, text: str, dry_run: bool) -> str:
+def _looks_managed(path: Path) -> bool:
+    """Whether a file — or a backup of one — carries this collection's marker."""
+    try:
+        return path.read_text(encoding="utf-8").startswith(MANAGED_MARKER)
+    except (OSError, UnicodeDecodeError):
+        return False
+
+
+def _write_managed_file(
+    path: Path,
+    text: str,
+    dry_run: bool,
+    *,
+    mode: Optional[str] = None,
+    home: Optional[Path] = None,
+) -> str:
     if _managed_file_state(path, text) == "current":
         return f"unchanged  {path}"
     exists = path.exists() or path.is_symlink()
@@ -817,14 +1189,554 @@ def _write_managed_file(path: Path, text: str, dry_run: bool) -> str:
         if backup is not None and not path.exists() and not path.is_symlink():
             shutil.move(str(backup), str(path))
         raise
+    # These files live outside every skills root, so their ledger is the one in
+    # $HOME. `foreign` is decided by the marker: a backup without it is what the
+    # user had before this collection ever wrote here.
+    record_entry(
+        (home or path.parent.parent).expanduser(),
+        str(path),
+        "managed-file",
+        mode=mode,
+        backup=backup,
+        foreign=None if backup is None else not _looks_managed(backup),
+    )
     return f"installed  {path}" + (f" (backup: {backup})" if backup else "")
 
 
 def install_global_instructions(home: Path, mode: str, dry_run: bool) -> list[str]:
     return [
-        _write_managed_file(path, text, dry_run)
+        _write_managed_file(path, text, dry_run, mode=mode, home=home)
         for path, text in global_instruction_files(home, mode)
     ]
+
+
+# -- discovery: what is installed, and what a removal would find -----------
+#
+# Nothing in this section writes. It is the single place that lists what is on
+# disk, so `--status`, the manage pane, and anything built on top read one
+# description of the world rather than three that can disagree.
+
+
+class Backup(NamedTuple):
+    path: Path
+    at: str  # ISO from the receipt, or the stamp parsed out of the directory name
+    foreign: Optional[bool]  # None when provenance is unknown
+
+
+class Installed(NamedTuple):
+    """One thing this collection put somewhere, as a removal would see it.
+
+    `mode` is what the receipt recorded and `shape` is what is on disk right
+    now; `origin` is who installed it and `bundled` is whether a source tree
+    exists here to compare against. Four fields rather than two, because a
+    matt-skills copy is not a bundled skill and a link is not a copy, and
+    conflating either pair produces a confident wrong answer.
+    """
+
+    kind: str  # "skill" | "managed-file" | "shim" | "external"
+    name: str
+    path: Path  # what a removal would act on
+    root: Path  # the receipt-bearing directory
+    mode: Optional[str]
+    shape: Optional[str]  # "link" | "copy" on disk right now, or None
+    origin: str  # bundled | matt-skills | graphify | unknown
+    bundled: bool
+    recorded: bool
+    backups: list  # list[Backup], oldest first
+    detail: str  # one honest line, already written for a human
+
+
+BACKUP_STAMP = "%Y%m%dT%H%M%SZ"
+# What that format renders to: 20260817T120000Z. backup_path may append a
+# "-1" collision suffix after it, so the stamp is read by width.
+BACKUP_STAMP_WIDTH = 16
+
+
+def known_backups(root: Path, entry_id: str) -> list:
+    """Backups this collection recorded for one entry, oldest first, filtered
+    to those still on disk."""
+    entry = receipt_entries(root).get(entry_id) or {}
+    found = []
+    for record in entry.get("backups") or []:
+        if not isinstance(record, dict) or not record.get("path"):
+            continue
+        path = Path(str(record["path"]))
+        if not (path.exists() or path.is_symlink()):
+            continue
+        found.append(Backup(path, str(record.get("at") or ""), record.get("foreign")))
+    return found
+
+
+def disk_backups(root: Path, entry_id: str) -> list:
+    """Backups found beside `root`, oldest first, with unknown provenance.
+
+    For a managed file, `root` is the file's parent and `entry_id` its name;
+    that is where backup_path puts them.
+    """
+    backup_root = root.parent / ".skills-backups" / root.name
+    if not backup_root.is_dir():
+        return []
+    found = []
+    for path in backup_root.glob(f"{entry_id}-*"):
+        stamp = path.name[len(entry_id) + 1 :][:BACKUP_STAMP_WIDTH]
+        try:
+            at = datetime.strptime(stamp, BACKUP_STAMP).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        found.append((at, path))
+    return [
+        Backup(path, at.isoformat(), None)
+        for at, path in sorted(found, key=lambda item: (item[0], str(item[1])))
+    ]
+
+
+def restorable_backup(root: Path, entry_id: str, kind: str = "skill") -> tuple:
+    """(chosen, note) — what may legitimately be moved back into place.
+
+    A skill is never auto-restored from an unrecorded candidate: it is just as
+    likely an older copy of our own skill, and restoring that would leave our
+    files behind after an "uninstall". A managed file can be judged on its
+    contents instead, because ours carry MANAGED_MARKER and the user's do not.
+    """
+    known = known_backups(root, entry_id)
+    foreign = [backup for backup in known if backup.foreign is True]
+    if foreign:
+        return foreign[-1], "recorded pre-install original"
+    if kind == "managed-file":
+        managed = Path(entry_id)
+        candidates = disk_backups(managed.parent, managed.name)
+    else:
+        candidates = disk_backups(root, entry_id)
+    recorded_paths = {backup.path for backup in known}
+    extra = [backup for backup in candidates if backup.path not in recorded_paths]
+    if kind == "managed-file":
+        outside = [backup for backup in extra if not _looks_managed(backup.path)]
+        if outside:
+            return outside[0], "oldest backup that this collection did not write"
+        if extra:
+            return None, "every backup here carries this collection's marker"
+        return None, "no pre-install original was recorded"
+    if extra:
+        return None, (
+            f"{len(extra)} backup(s) exist but no receipt records which predate "
+            "this collection; restore one explicitly with --restore-from PATH"
+        )
+    return None, "no pre-install original was recorded"
+
+
+def discover_skills(roots: Sequence[Path]) -> list:
+    """Every skill this collection can see in the given roots.
+
+    The union of receipt entries and directories holding a SKILL.md, so a
+    directory nobody recorded is still listed (and removable with
+    --unrecorded), and an entry whose files are gone is still listed (so the
+    stale record can be cleaned).
+    """
+    bundled = set(available_skills()) if SOURCE_ROOT.is_dir() else set()
+    items = []
+    for root in roots:
+        entries = receipt_entries(root, kind="skill")
+        names = set(entries)
+        if root.is_dir():
+            names.update(
+                path.name
+                for path in root.iterdir()
+                if (path.is_dir() or path.is_symlink()) and (path / "SKILL.md").is_file()
+            )
+        for name in sorted(names):
+            entry = entries.get(name) or {}
+            destination = root / name
+            present = destination.exists() or destination.is_symlink()
+            if not present:
+                detail = "recorded, but nothing on disk"
+            elif not entry:
+                detail = "UNRECORDED"
+            else:
+                chosen, note = restorable_backup(root, name)
+                detail = "original recoverable" if chosen else note
+            items.append(
+                Installed(
+                    kind="skill",
+                    name=name,
+                    path=destination,
+                    root=root,
+                    mode=entry.get("mode"),
+                    shape=(
+                        None
+                        if not present
+                        else "link"
+                        if destination.is_symlink()
+                        else "copy"
+                    ),
+                    origin=str(entry.get("origin") or "unknown"),
+                    bundled=name in bundled,
+                    recorded=bool(entry),
+                    backups=known_backups(root, name),
+                    detail=detail,
+                )
+            )
+    return items
+
+
+def discover_managed_files(home: Path) -> list:
+    """The managed instruction files that exist in this home."""
+    home = home.expanduser()
+    recorded = receipt_entries(home, kind="managed-file")
+    items = []
+    # Probed with "link" only because the two paths do not depend on the mode.
+    for path, _text in global_instruction_files(home, "link"):
+        if not (path.exists() or path.is_symlink()):
+            continue
+        entry = recorded.get(str(path)) or {}
+        if not _looks_managed(path):
+            detail = "hand-edited since install"
+        else:
+            chosen, note = restorable_backup(home, str(path), "managed-file")
+            detail = "original recoverable" if chosen else note
+        items.append(
+            Installed(
+                kind="managed-file",
+                name=str(path),
+                path=path,
+                root=home,
+                mode=entry.get("mode"),
+                shape="link" if path.is_symlink() else "copy",
+                origin=str(entry.get("origin") or "unknown"),
+                bundled=False,
+                recorded=bool(entry),
+                backups=known_backups(home, str(path)),
+                detail=detail,
+            )
+        )
+    return items
+
+
+def discover_shims(bin_dir: Path) -> list:
+    """The launcher shims present in one directory, and whose they are."""
+    import skills_cli
+
+    items = []
+    for path, content, _newline, _executable in skills_cli.shims(REPO_ROOT, bin_dir):
+        if not path.is_file():
+            continue
+        try:
+            ours = path.read_text(encoding="utf-8") == content
+        except (OSError, UnicodeDecodeError):
+            ours = False
+        items.append(
+            Installed(
+                kind="shim",
+                name=str(path),
+                path=path,
+                root=bin_dir,
+                mode=None,
+                shape="copy",
+                origin="bundled",
+                bundled=False,
+                recorded=ours,
+                detail=(
+                    "written by this checkout" if ours else "written from another checkout"
+                ),
+                backups=[],
+            )
+        )
+    return items
+
+
+def discover_external(roots: Sequence[Path]) -> list:
+    """One row per external tool whose marker directory is present anywhere."""
+    items = []
+    for tool in EXTERNAL_TOOLS:
+        present = [
+            root
+            for root in roots
+            if (root / tool.marker).exists() or (root / tool.marker).is_symlink()
+        ]
+        if not present:
+            continue
+        _removable, notes = external_removal_plan(tool.name, present)
+        items.append(
+            Installed(
+                kind="external",
+                name=tool.name,
+                path=present[0] / tool.marker,
+                root=present[0],
+                mode=None,
+                shape=None,
+                origin=tool.name,
+                bundled=False,
+                # Presence is the marker directory, which is all this collection
+                # can honestly claim about somebody else's package; whether any
+                # of it is removable here is external_removal_plan's answer.
+                recorded=True,
+                backups=[],
+                detail=notes[0],
+            )
+        )
+    return items
+
+
+def discover(
+    roots: Sequence[Path], home: Path, bin_dir: Optional[Path] = None
+) -> list:
+    """Everything installed, in reading order. bin_dir=None skips shims."""
+    items = list(discover_skills(roots))
+    items.extend(discover_managed_files(home))
+    if bin_dir is not None:
+        items.extend(discover_shims(bin_dir))
+    items.extend(discover_external(roots))
+    return items
+
+
+def format_status(items: Sequence[Installed]) -> str:
+    """Plain text, grouped by kind, one aligned line per item."""
+    if not items:
+        return "nothing from this collection was found in the scanned locations"
+    # A skill is named; a managed file or a shim *is* a path, and repeating its
+    # directory in the root column would say the same thing twice.
+    named = ("skill", "external")
+    rows = [
+        (
+            item,
+            item.name if item.kind in named else str(item.path),
+            str(item.root) if item.kind in named else "",
+        )
+        for item in items
+    ]
+    label_width = max(len(label) for _item, label, _root in rows)
+    root_width = max(len(root) for _item, _label, root in rows)
+    lines = []
+    for kind in ("skill", "managed-file", "shim", "external"):
+        for item, label, root in rows:
+            if item.kind != kind:
+                continue
+            lines.append(
+                (
+                    "%-12s %-*s %-6s %-*s %s"
+                    % (
+                        item.kind,
+                        label_width,
+                        label,
+                        item.shape or "",
+                        root_width,
+                        root,
+                        item.detail,
+                    )
+                ).rstrip()
+            )
+    return "\n".join(lines)
+
+
+# -- removal ----------------------------------------------------------------
+
+
+def uninstall_one(
+    name: str,
+    root: Path,
+    dry_run: bool,
+    *,
+    restore: bool = True,
+    keep_backup: bool = True,
+    allow_unrecorded: bool = False,
+    restore_from: Optional[Path] = None,
+) -> str:
+    """Remove one installed skill, restoring what it replaced when it may.
+
+    Absent is not an error: an idempotent uninstall has to be able to say so,
+    and a second run after a manual delete should agree with the first.
+    """
+    destination = root / name
+    exists = destination.exists() or destination.is_symlink()
+    recorded = name in receipt_entries(root, kind="skill")
+    if exists and not recorded and not allow_unrecorded:
+        raise InstallError(
+            f"{destination} is not recorded as installed by this collection "
+            "(rerun with --unrecorded to remove it anyway)"
+        )
+    if not exists:
+        forget_entry(root, name, dry_run)
+        return f"absent     {destination}"
+
+    chosen, note = restorable_backup(root, name)
+    if restore_from is not None:
+        source = Path(restore_from).expanduser()
+        if not (source.exists() or source.is_symlink()):
+            raise InstallError(f"backup to restore does not exist: {source}")
+        chosen, note = Backup(source, "", None), "restored from --restore-from"
+    if not restore:
+        chosen, note = None, "left in .skills-backups (--no-restore)"
+
+    is_link = destination.is_symlink()
+    backup = backup_path(root, name) if (keep_backup and not is_link) else None
+    if dry_run:
+        message = f"would remove {destination}"
+        if backup is not None:
+            message += f"; back up to {backup}"
+        message += f"; restore {chosen.path}" if chosen is not None else f"; {note}"
+        return message
+
+    # Ordered so a failure never leaves a hole: the destination is vacated
+    # exactly once, and only then does anything move back into it.
+    if is_link:
+        destination.unlink()
+    elif backup is not None:
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(destination), str(backup))
+    else:
+        remove_path(destination)
+    if chosen is not None:
+        # Moved, not copied, mirroring install_one, which moved it out.
+        shutil.move(str(chosen.path), str(destination))
+    forget_entry(root, name, False)
+    forget_model_decisions([root], [name])
+
+    parts = [f"removed    {destination}"]
+    if is_link:
+        parts.append("(link; nothing to back up)")
+    elif backup is not None:
+        parts.append(f"(backup: {backup})")
+    if chosen is not None:
+        parts.append(f"(restored: {chosen.path})")
+    else:
+        parts.append(f"({note})")
+    return " ".join(parts)
+
+
+def relink_one(root: Path, name: str, dry_run: bool) -> str:
+    """Point one installed skill back at this checkout."""
+    return install_one(SOURCE_ROOT / name, root, "link", True, dry_run)
+
+
+def uninstall_managed_file(
+    path: Path,
+    dry_run: bool,
+    *,
+    home: Optional[Path] = None,
+    restore: bool = True,
+    keep_backup: bool = True,
+) -> str:
+    """Remove one managed instruction file, restoring what it replaced.
+
+    A file the user has since rewritten is theirs. Leaving it and saying so is
+    the honest answer, and not an error: the run continues and exits 0.
+    """
+    if not (path.exists() or path.is_symlink()):
+        return f"absent     {path}"
+    if not _looks_managed(path):
+        return f"left       {path} (hand-edited since install; not removed)"
+
+    receipt_root = (home or path.parent.parent).expanduser()
+    # Read before the current file is moved aside, or our own fresh backup
+    # becomes a restore candidate.
+    chosen, note = restorable_backup(receipt_root, str(path), "managed-file")
+    if not restore:
+        chosen, note = None, "left in .skills-backups (--no-restore)"
+    backup = backup_path(path.parent, path.name) if keep_backup else None
+    if dry_run:
+        message = f"would remove {path}"
+        if backup is not None:
+            message += f"; back up to {backup}"
+        message += f"; restore {chosen.path}" if chosen is not None else f"; {note}"
+        return message
+
+    if backup is not None:
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(path), str(backup))
+    else:
+        remove_path(path)
+    if chosen is not None:
+        shutil.move(str(chosen.path), str(path))
+    forget_entry(receipt_root, str(path), False)
+
+    parts = [f"removed    {path}"]
+    if backup is not None:
+        parts.append(f"(backup: {backup})")
+    if chosen is not None:
+        parts.append(f"(restored: {chosen.path})")
+    else:
+        parts.append(f"({note})")
+    return " ".join(parts)
+
+
+def uninstall_global_instructions(
+    home: Path, dry_run: bool, *, restore: bool = True, keep_backup: bool = True
+) -> list:
+    """Both managed files, always together.
+
+    ~/.claude/CLAUDE.md imports ~/.agents/AGENTS.md, so removing one alone
+    leaves a dangling @import pointing at a file that is no longer there.
+    """
+    home = home.expanduser()
+    return [
+        uninstall_managed_file(
+            path, dry_run, home=home, restore=restore, keep_backup=keep_backup
+        )
+        for path, _text in global_instruction_files(home, "link")
+    ]
+
+
+def external_removal_plan(name: str, roots: Sequence[Path]) -> tuple:
+    """(removable, notes) — what this collection recorded placing, and the
+    honest lines about everything it cannot touch."""
+    tool = external_tool(name)
+    notes = [tool.removal]
+    removable: list = []
+    if name == "matt-skills":
+        for root in roots:
+            recorded = sorted(
+                entry_id
+                for entry_id in receipt_entries(root, kind="skill", origin="matt-skills")
+                if (root / entry_id).exists() or (root / entry_id).is_symlink()
+            )
+            removable.extend((entry_id, root) for entry_id in recorded)
+            marker = root / tool.marker
+            if not recorded and (marker.exists() or marker.is_symlink()):
+                notes.append(
+                    f"{root}: installed before this version recorded what it "
+                    "placed, so nothing is removed. `skills status` lists the "
+                    "directories; remove them by name with "
+                    "`skills uninstall NAME --unrecorded`."
+                )
+    elif name == "graphify":
+        notes.append("run: uv tool uninstall graphifyy")
+        notes.append(
+            "its registered skill was placed by graphify itself — check "
+            "<root>/graphify in each root and remove it with graphify's own CLI"
+        )
+    return removable, notes
+
+
+def uninstall_external(
+    name: str,
+    roots: Sequence[Path],
+    dry_run: bool,
+    *,
+    restore: bool = True,
+    keep_backup: bool = True,
+) -> list:
+    """Remove what is recorded and print every note; never guess at the rest."""
+    removable, notes = external_removal_plan(name, roots)
+    messages = list(notes)
+    for entry_id, root in removable:
+        messages.append(
+            uninstall_one(
+                entry_id, root, dry_run, restore=restore, keep_backup=keep_backup
+            )
+        )
+    return messages
+
+
+def remove_shims(args: argparse.Namespace) -> int:
+    """Mirror of setup_path(): shim and PATH mechanics belong to skills_cli."""
+    import skills_cli
+
+    return skills_cli.command_remove_path(
+        argparse.Namespace(
+            bin=args.home.expanduser() / ".local" / "bin",
+            dry_run=args.dry_run,
+            add_path=args.add_path,
+        )
+    )
 
 
 def setup_path(args: argparse.Namespace) -> int:
@@ -1046,7 +1958,7 @@ def strip_appended_graphify(home: Path, dry_run: bool) -> list[str]:
         imports_chain = re.search(r"^@", remaining, re.MULTILINE) is not None
         if not (GRAPHIFY_HEADING.search(remaining) or (imports_chain and source_carries)):
             continue
-        messages.append(_write_managed_file(path, remaining, dry_run))
+        messages.append(_write_managed_file(path, remaining, dry_run, home=root))
     return messages
 
 
@@ -1114,7 +2026,8 @@ def parser() -> argparse.ArgumentParser:
         help=(
             "install global/AGENTS.md as user-level instructions in "
             "~/.agents/AGENTS.md and ~/.claude/CLAUDE.md; link (default) points "
-            "them at this checkout, copy writes the text into ~/.agents/AGENTS.md"
+            "them at this checkout, copy writes the text into ~/.agents/AGENTS.md. "
+            "With --uninstall the link|copy value is ignored: the paths are fixed"
         ),
     )
     interaction = result.add_mutually_exclusive_group()
@@ -1157,6 +2070,46 @@ def parser() -> argparse.ArgumentParser:
     )
     result.add_argument("--force", action="store_true")
     result.add_argument("--dry-run", action="store_true")
+    result.add_argument(
+        "--uninstall",
+        action="store_true",
+        help=(
+            "remove instead of install; --skill/--agent/--scope/--project-dir/"
+            "--target/--global-instructions/--matt-skills/--graphify/--setup-path "
+            "select what goes"
+        ),
+    )
+    result.add_argument(
+        "--all",
+        action="store_true",
+        help="with --uninstall: every skill recorded in the resolved roots",
+    )
+    result.add_argument(
+        "--unrecorded",
+        action="store_true",
+        help="with --uninstall: also remove skill directories no receipt records",
+    )
+    result.add_argument(
+        "--no-restore",
+        action="store_true",
+        help="with --uninstall: leave pre-install originals in .skills-backups",
+    )
+    result.add_argument(
+        "--no-backup",
+        action="store_true",
+        help="with --uninstall: delete rather than move aside (unrecoverable)",
+    )
+    result.add_argument(
+        "--restore-from",
+        type=Path,
+        metavar="PATH",
+        help="with --uninstall and exactly one --skill: restore this backup",
+    )
+    result.add_argument(
+        "--status",
+        action="store_true",
+        help="list what this collection installed in the resolved roots, and exit",
+    )
     result.add_argument("--list", action="store_true", help="list bundled skills and exit")
     result.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
     return result
@@ -1208,6 +2161,7 @@ def execute_install(args: argparse.Namespace, selected: list[str]) -> None:
                 )
             )
         write_receipt(root, selected, args.mode, args.dry_run)
+        record_root(args.home, root, args.dry_run)
     if args.matt_skills:
         install_matt_skills(
             args.agent,
@@ -1249,6 +2203,110 @@ def execute_install(args: argparse.Namespace, selected: list[str]) -> None:
         hint = launcher_hint()
         if hint:
             print(hint)
+
+
+def _status_roots(args: argparse.Namespace) -> list:
+    """The roots this run names, plus every root an earlier run recorded."""
+    roots = list(stage_roots(args, args.scope))
+    for root in known_roots(args.home.expanduser()):
+        if root not in roots:
+            roots.append(root)
+    return roots
+
+
+def execute_uninstall(args: argparse.Namespace, selected: list) -> None:
+    """Mirror of execute_install, in reverse order of installation."""
+    roots = stage_roots(args, args.scope)
+    restore = not args.no_restore
+    keep_backup = not args.no_backup
+    for name, wanted in (("graphify", args.graphify), ("matt-skills", args.matt_skills)):
+        if not wanted:
+            continue
+        for message in uninstall_external(
+            name, roots, args.dry_run, restore=restore, keep_backup=keep_backup
+        ):
+            print(message)
+    for root in roots:
+        for name in selected:
+            print(
+                uninstall_one(
+                    name,
+                    root,
+                    args.dry_run,
+                    restore=restore,
+                    keep_backup=keep_backup,
+                    allow_unrecorded=args.unrecorded,
+                    restore_from=args.restore_from,
+                )
+            )
+        for message in prune_root(root, args.dry_run):
+            print(message)
+    if args.global_instructions is not None:
+        for message in uninstall_global_instructions(
+            args.home, args.dry_run, restore=restore, keep_backup=keep_backup
+        ):
+            print(message)
+        # The home receipt exists only to describe those files; with none left
+        # it is litter. prune_root leaves the home itself alone — it is never
+        # empty, and the rmdir it attempts fails harmlessly.
+        for message in prune_root(args.home.expanduser(), args.dry_run):
+            print(message)
+    if args.setup_path:
+        remove_shims(args)
+
+
+def uninstall_main(args: argparse.Namespace) -> int:
+    """Validate an uninstall selection, then carry it out."""
+    others = (
+        args.global_instructions is not None
+        or bool(args.matt_skills)
+        or args.graphify
+        or args.setup_path
+    )
+    if not (args.skill or args.all or others):
+        raise InstallError(
+            "--uninstall needs to know what to remove: --skill NAME, --all, "
+            "--global-instructions, --matt-skills, --graphify, or --setup-path"
+        )
+    if args.skill and args.all:
+        raise InstallError("pass --skill or --all, not both")
+    if args.restore_from is not None:
+        if len(args.skill) != 1:
+            raise InstallError(
+                "--restore-from restores one backup into one place, so it needs "
+                "exactly one --skill"
+            )
+        if args.no_restore:
+            raise InstallError("--restore-from and --no-restore contradict each other")
+
+    roots = stage_roots(args, args.scope)
+    if args.all:
+        selected = sorted(
+            {entry_id for root in roots for entry_id in receipt_entries(root, kind="skill")}
+        )
+        if not selected:
+            print("nothing recorded in: " + ", ".join(str(root) for root in roots))
+            if not others:
+                return 0
+    else:
+        # Deliberately not validated against available_skills(): a skill can be
+        # removed from the checkout after being installed, and that install
+        # still has to be removable.
+        selected = list(args.skill)
+        for name in selected:
+            installed = any(
+                name in receipt_entries(root, kind="skill")
+                or (root / name).exists()
+                or (root / name).is_symlink()
+                for root in roots
+            )
+            if not installed:
+                raise InstallError(
+                    "not installed in %s: %s"
+                    % (", ".join(str(root) for root in roots), name)
+                )
+    execute_uninstall(args, selected)
+    return 0
 
 
 def manage_model_invocation(args: argparse.Namespace) -> int:
@@ -1299,6 +2357,27 @@ def main(argv: Optional[list[str]] = None) -> int:
         if args.cloud_bootstrap:
             print(cloud_bootstrap(args.home.expanduser(), dry_run=args.dry_run))
             return 0
+        if args.status:
+            home = args.home.expanduser()
+            print(
+                format_status(
+                    discover(_status_roots(args), home, home / ".local" / "bin")
+                )
+            )
+            return 0
+        for flag, flag_name in (
+            (args.all, "--all"),
+            (args.unrecorded, "--unrecorded"),
+            (args.no_backup, "--no-backup"),
+            (args.no_restore, "--no-restore"),
+            (args.restore_from is not None, "--restore-from"),
+        ):
+            if flag and not args.uninstall:
+                raise InstallError(f"{flag_name} only applies to --uninstall")
+        if args.uninstall:
+            # Ahead of the --setup-path branch: under --uninstall that flag
+            # selects the shims for removal rather than asking for them.
+            return uninstall_main(args)
         if args.setup_path:
             return setup_path(args)
         if args.enable_skill or args.hide_skill:
