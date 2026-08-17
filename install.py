@@ -2110,6 +2110,11 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="list what this collection installed in the resolved roots, and exit",
     )
+    result.add_argument(
+        "--doctor",
+        action="store_true",
+        help="report inconsistencies between installs and this checkout, then exit",
+    )
     result.add_argument("--list", action="store_true", help="list bundled skills and exit")
     result.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
     return result
@@ -2365,6 +2370,12 @@ def main(argv: Optional[list[str]] = None) -> int:
                 )
             )
             return 0
+        if args.doctor:
+            # Imported here, not at module scope: the doctor reads the picture
+            # this module writes, so the dependency only ever points one way.
+            import inventory
+
+            return inventory.command_doctor_from_installer(args)
         for flag, flag_name in (
             (args.all, "--all"),
             (args.unrecorded, "--unrecorded"),

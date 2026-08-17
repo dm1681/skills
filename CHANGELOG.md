@@ -38,6 +38,25 @@ All notable changes to this repository are documented here. Versions follow
   external tools with what a removal would restore, and asks before writing.
   The pane deletes nothing itself: every removal goes through an `install.*`
   primitive, pinned by a test that reads the module's source.
+- Inconsistency detection, in the new `inventory.py`: `skills doctor` reports
+  a broken link, a directory with no `SKILL.md`, one skill installed twice
+  with different contents, a copy that differs from this checkout, a link into
+  *another* checkout, a copy/link shape that disagrees with the receipt, a
+  receipt naming a directory that is gone, and a receipt that will not parse.
+  `--fix` applies the first offered resolution (optionally only for named
+  kinds), `--json` prints the same report for a script, `--prune` forgets
+  recorded roots that no longer exist, and the command exits 3 while anything
+  is still inconsistent. `./install.sh --doctor` is the same report on a
+  machine with no `skills` command yet. Hiding a skill from the model is not
+  reported as a divergence, and a skill this checkout has no source for is
+  only reported when the same name diverges between two roots.
+- The manage pane lists those findings above the inventory, with `C` to cycle
+  which fix a finding will get, `↵` to open its diff, and one confirmation
+  covering both the writes and the removals a run would make. A finding is
+  yellow, a reinstall peach, keeping it green, a removal pink.
+- `skills status` and `skills doctor` share one discovery block, so they sweep
+  identically: `--project-dir` is repeatable, `--root DIR` names a root
+  outright, and `--no-registry` looks only where it is told.
 
 - The dashboard lists `matt-skills` as an external tool row. Selecting it
   unfolds the installed skills that ship `disable-model-invocation`, each
@@ -119,7 +138,11 @@ All notable changes to this repository are documented here. Versions follow
 - The colour contract gains pink for a removal. Widening peach would have made
   one hue mean two things: peach promises the old copy is backed up *and*
   something replaces it, and a removal only makes the first half of that
-  promise. Red still means only that an operation failed.
+  promise. Red still means only that an operation failed. A *finding* is
+  yellow — advisory, not a failure — and each offered fix takes the colour of
+  its consequence.
+- `skills status --project-dir` is now repeatable, and gained `--root` and
+  `--no-registry`, matching the block `skills doctor` uses.
 - `semantic-pr-review`'s entrypoint dropped from 212 to about 120 lines. Build
   commands and the browser verification procedure moved to a new
   `references/build-and-verify.md`, and prose that duplicated the other

@@ -120,6 +120,7 @@ def validate() -> list[str]:
     for path in (
         ROOT / "install.py",
         ROOT / "skills_cli.py",
+        ROOT / "inventory.py",
         ROOT / "scripts" / "validate_repo.py",
     ):
         try:

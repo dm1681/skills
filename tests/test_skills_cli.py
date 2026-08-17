@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -13,6 +14,7 @@ CLI = ROOT / "skills_cli.py"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import install  # noqa: E402
 import skills_cli  # noqa: E402
 
 BUNDLED = sorted(
@@ -384,6 +386,120 @@ class CommandLineTests(unittest.TestCase):
             )
             self.assertIn(BUNDLED[0], result.stdout)
             self.assertIn("skill", result.stdout)
+
+    def edit_installed(self, project: Path) -> Path:
+        """Install one skill into a project and edit it, so the doctor has work."""
+        self.run_cli(
+            "install", BUNDLED[0], "--project-dir", str(project), "--agent", "claude"
+        )
+        entrypoint = project / ".claude" / "skills" / BUNDLED[0] / "SKILL.md"
+        entrypoint.write_text(
+            entrypoint.read_text(encoding="utf-8") + "\nEDITED-BY-THE-TEST\n",
+            encoding="utf-8",
+        )
+        return entrypoint
+
+    def test_doctor_lists_findings_and_exits_three(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            self.edit_installed(project)
+            result = self.run_cli(
+                "doctor", "--project-dir", str(project), "--home", str(project),
+                expected=3,
+            )
+            self.assertIn("diverged-from-source", result.stdout)
+            self.assertIn(BUNDLED[0], result.stdout)
+
+    def test_doctor_exit_zero_suppresses_the_finding_code(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            self.edit_installed(project)
+            self.run_cli(
+                "doctor", "--project-dir", str(project), "--home", str(project),
+                "--exit-zero",
+            )
+
+    def test_doctor_json_parses(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            self.edit_installed(project)
+            result = self.run_cli(
+                "doctor", "--project-dir", str(project), "--home", str(project),
+                "--json", expected=3,
+            )
+            report = json.loads(result.stdout)
+            self.assertEqual(
+                ["diverged-from-source"],
+                [finding["kind"] for finding in report["findings"]],
+            )
+
+    def test_doctor_fix_reinstalls_and_leaves_nothing_behind(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            entrypoint = self.edit_installed(project)
+            result = self.run_cli(
+                "doctor", "--project-dir", str(project), "--home", str(project), "--fix"
+            )
+            self.assertIn("nothing inconsistent is left", result.stdout)
+            self.assertNotIn("EDITED-BY-THE-TEST", entrypoint.read_text(encoding="utf-8"))
+
+    def test_doctor_fix_dry_run_changes_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            entrypoint = self.edit_installed(project)
+            result = self.run_cli(
+                "doctor", "--project-dir", str(project), "--home", str(project),
+                "--fix", "--dry-run", expected=3,
+            )
+            self.assertIn("would", result.stdout)
+            self.assertIn("EDITED-BY-THE-TEST", entrypoint.read_text(encoding="utf-8"))
+
+    def test_doctor_fix_rejects_an_unknown_kind(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            self.edit_installed(project)
+            result = self.run_cli(
+                "doctor", "--project-dir", str(project), "--home", str(project),
+                "--fix", "not-a-kind", expected=2,
+            )
+            self.assertIn("unknown finding kind", result.stderr)
+
+    def test_doctor_prune_forgets_a_missing_root(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            gone = project / "gone" / ".claude" / "skills"
+            gone.mkdir(parents=True)
+            install.record_root(project, gone)
+            install.remove_path(project / "gone")
+            result = self.run_cli(
+                "doctor", "--project-dir", str(project), "--home", str(project),
+                "--prune",
+            )
+            self.assertIn("forgot", result.stdout)
+            self.assertEqual([], install.known_roots(project))
+            self.assertNotIn(str(gone), install.registry_path(project).read_text())
+
+    def test_doctor_works_without_textual(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            code = (
+                "import sys; sys.modules['textual'] = None; "
+                "sys.path.insert(0, %r);\n"
+                "import skills_cli\n"
+                "code = skills_cli.main(%r)\n"
+                "print('tui-imported', 'skills_tui' in sys.modules)\n"
+                "raise SystemExit(code)\n"
+                % (
+                    str(ROOT),
+                    ["doctor", "--project-dir", str(project), "--home", str(project)],
+                )
+            )
+            result = subprocess.run(
+                [sys.executable, "-c", code], cwd=str(ROOT), text=True,
+                capture_output=True, check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            self.assertIn("tui-imported False", result.stdout)
 
 
 if __name__ == "__main__":

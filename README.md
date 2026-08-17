@@ -81,8 +81,9 @@ date, or differing from this checkout — beside a sidebar holding the view
 filter, the destination, and copy/link mode. Keys: `↑`/`↓` to move, `Space` to
 select, `Enter` for the `SKILL.md` preview, `V` to filter the list, `S` to
 switch between a repo-level and a machine-wide install, `M` between copy and
-link, `I` to install, `U` for the manage pane, `X` to apply a removal there,
-`G` for the guided flow, `Q` to quit. A skill that already exists and differs
+link, `I` to install, `U` for the manage pane, and there `C` to cycle a finding's
+fix, `Enter` for its diff, and `X` to apply; `G` for the guided flow, `Q` to
+quit. A skill that already exists and differs
 is never replaced silently: it asks first, then moves the old copy into an
 adjacent `.skills-backups/` directory.
 
@@ -360,7 +361,8 @@ skills uninstall NAME --dry-run     # print what would happen, write nothing
 external tools, one line each, with the root it lives in and what a removal
 would be able to restore. `skills manage` shows the same list as selectable
 rows: `Space` to select, `X` to apply, `U` back to the skill list. Removals
-are pink, and nothing is written until the confirmation is accepted.
+are pink, and nothing is written until the confirmation is accepted. The same
+pane lists whatever `skills doctor` would report, above the inventory.
 
 What comes back afterwards:
 
@@ -395,6 +397,54 @@ were never recorded, so those are only found when you name them with
 Without the `skills` command, the installer carries the same flags:
 `./install.sh --status`, `./install.sh --uninstall --skill NAME`,
 `./install.sh --uninstall --all --dry-run`.
+
+### Find and fix inconsistencies
+
+`skills status` says what is installed. `skills doctor` says what disagrees
+with itself:
+
+```sh
+skills doctor                       # report; exit 3 if anything is inconsistent
+skills doctor --json                # the same report, for a script
+skills doctor --fix --dry-run       # what the default fixes would do
+skills doctor --fix                 # apply the default fix for every finding
+skills doctor --fix diverged-from-source   # ...only for these kinds
+skills doctor --prune               # forget recorded roots that no longer exist
+skills doctor --include-foreign     # also compare skills this checkout lacks
+```
+
+It sweeps the user roots, every `--project-dir` (repeatable, default the
+current directory), any `--root DIR` you name, and every root an earlier
+install recorded — `--no-registry` looks only where it is told. What it
+reports:
+
+| Finding | What it means |
+| --- | --- |
+| `broken-link` | a link whose target moved; the checkout was renamed |
+| `incomplete` | a directory with no `SKILL.md`, so no agent can load it |
+| `duplicate-diverged` | one skill installed in two roots with different contents |
+| `diverged-from-source` | an installed copy differs from this checkout |
+| `stale-link` | a link into *another* checkout of this collection |
+| `shape-mismatch` | the same content installed as both a copy and a link |
+| `orphan-receipt` | the receipt names a skill whose directory is gone |
+| `corrupt-receipt` | a receipt that will not parse; the next install rewrites it |
+
+Each finding offers fixes in a fixed order, and `--fix` applies the first.
+Hiding a skill from the model is not a divergence — a skill you deliberately
+hid with `--hide-skill` legitimately differs from the checkout, and saying so
+every run would train you to ignore the report. Skills this checkout has no
+source for (matt-skills' dozen, anything hand-written) are only ever reported
+when the same name diverges between two roots, unless you pass
+`--include-foreign`.
+
+Exit codes: `0` clean (or `--exit-zero`), `3` findings remain after the run,
+`2` a usage error, `1` an OS error.
+
+`skills manage` shows the same findings as selectable rows above the inventory:
+`C` cycles which fix a finding will get, `↵` opens its diff, `Space` selects,
+`X` applies. Findings are yellow, a reinstall peach, keeping it green, and a
+removal pink — one hue per consequence, as everywhere else. On a machine with
+no `skills` command yet, `./install.sh --doctor` prints the same report.
 
 ## Sync on another machine
 
