@@ -82,6 +82,29 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Changed
 
+- `--matt-skills` fetches `mattpocock/skills` with git instead of shelling out
+  to `npx skills@latest`. The upstream CLI only copied files — a checkout and
+  its staged output are byte-identical — so the transport swap changes nothing
+  about what lands on disk, while `git` replaces Node.js 18+ as the one
+  requirement for that path. The revision is pinned by `MATT_SKILLS_REF` rather
+  than always taking `main`, so two installs a week apart match, an update is a
+  reviewed commit, and `git diff` between two refs shows what an update would
+  change. `MATT_SKILLS_COMMIT` records the commit behind that tag, so a
+  force-moved tag upstream stops the install instead of silently changing what
+  lands. The new `--matt-ref` takes a tag, a branch, or a commit SHA
+  (`--matt-ref main` restores the old track-upstream behavior) and refuses an
+  empty value rather than falling back to the pin; every install prints the ref
+  and the commit it resolved to. The disposable checkout takes no line-ending
+  conversion and none of the user's git hooks — `core.autocrlf` would install
+  different bytes on Windows than everywhere else, and a `post-checkout` hook
+  inherited through `init.templateDir` or `core.hooksPath` runs before the copy
+  and can edit files the commit check would still call correct — and the
+  install confirms the checkout still matches the commit before copying
+  anything. Discovery walks the checkout for `SKILL.md`
+  instead of assuming upstream's directory depth, skips the top-level
+  `skills/deprecated/` category, and stops on a name claimed by two categories.
+  The per-agent staging mapping is gone: the skills carry no agent-specific
+  content, so every selected root gets the same files.
 - `semantic-pr-review`'s entrypoint dropped from 212 to about 120 lines. Build
   commands and the browser verification procedure moved to a new
   `references/build-and-verify.md`, and prose that duplicated the other

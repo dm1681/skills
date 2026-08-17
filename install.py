@@ -43,10 +43,21 @@ GRAPHIFY_PLATFORMS = {
     "claude": "claude",
 }
 MATT_SKILLS_SOURCE = "mattpocock/skills"
-MATT_SKILLS_AGENTS = {
-    "universal": "codex",
-    "claude": "claude-code",
-}
+MATT_SKILLS_REPO = "https://github.com/mattpocock/skills.git"
+# Pinned on purpose. The upstream CLI always took `main`, which made two installs
+# a week apart silently different; a ref in the file makes an update a commit
+# somebody reviewed, and `git diff` between two refs shows exactly what changed.
+# The tag is what a human reads and the commit is what actually pins: a tag can
+# be force-moved upstream, so the default install verifies that it still points
+# where this repository says it does. Update the two together.
+MATT_SKILLS_REF = "v1.2.3"
+MATT_SKILLS_COMMIT = "6acc160e4e0cd062dbbbd7a1b26ae92855edf07e"
+# Upstream retires skills into `skills/deprecated/` rather than deleting them.
+# Nothing lives there today, so skipping it changes no install; it only keeps a
+# future retirement from arriving as a fresh install. Matched against the first
+# path component only, so a skill that merely has `deprecated` deeper in its
+# path still installs.
+MATT_SKILLS_SKIP = ("deprecated",)
 
 
 class InstallError(RuntimeError):
@@ -83,8 +94,8 @@ EXTERNAL_TOOLS = (
     ExternalTool(
         name="matt-skills",
         summary="mattpocock/skills engineering workflows",
-        origin="mattpocock/skills on GitHub, staged and copied in by the skills CLI",
-        requires="npx",
+        origin="mattpocock/skills on GitHub, cloned at a pinned ref and copied in",
+        requires="git",
         marker="setup-matt-pocock-skills",
     ),
 )
@@ -377,72 +388,159 @@ def install_graphify(
         emit(message)
 
 
-def matt_skills_agents(agent_names: Iterable[str]) -> list[str]:
-    """Map this installer's agent names to the skills CLI agent names."""
-    requested = list(agent_names) or list(DEFAULT_AGENTS)
-    unknown = sorted(set(requested) - KNOWN_AGENTS)
-    if unknown:
-        raise InstallError(f"unknown agent: {', '.join(unknown)}")
-    if "all" in requested:
-        requested = ["universal", "claude"]
-    mapped: list[str] = []
-    for agent_name in requested:
-        canonical = "universal" if agent_name in SHARED_AGENTS else agent_name
-        agent = MATT_SKILLS_AGENTS[canonical]
-        if agent not in mapped:
-            mapped.append(agent)
-    return mapped
+def matt_skills_fetch_commands(
+    ref: str = MATT_SKILLS_REF,
+    executable: str = "git",
+) -> list[list[str]]:
+    """Shallow-fetch exactly one upstream revision into an empty directory.
 
+    `fetch <url> <ref>` rather than `clone --branch <ref>`, because clone's
+    --branch accepts a tag or a branch and refuses a commit SHA. Naming a ref
+    exists so an install can be pinned, and a moved tag pins nothing, so the
+    one form that takes all three is the form worth having. A commit has to be
+    named in full: the remote resolves the positional argument as a refspec,
+    and an abbreviated SHA is not one.
 
-def matt_skills_install_command(
-    agents: Iterable[str],
-    executable: str = "npx",
-) -> list[str]:
-    """Build the official command used inside a temporary staging project."""
-    command = [
-        executable,
-        "--yes",
-        "skills@latest",
-        "add",
-        MATT_SKILLS_SOURCE,
-        "--skill",
-        "*",
+    Checkout overrides line-ending conversion because Git for Windows enables
+    `core.autocrlf` by default, which would rewrite every checked-out file to
+    CRLF — the same commit would then install different bytes on Windows than
+    everywhere else, and the shell script one upstream skill ships would land
+    with a `#!/bin/bash\r` shebang that no POSIX shell can run.
+
+    It also refuses the user's hooks, by two separate doors: `--template=`
+    keeps `init.templateDir` from seeding this throwaway repository with them,
+    and an unreadable `core.hooksPath` neutralizes a global setting, which the
+    empty template does not cover. A `post-checkout` hook runs before anything
+    is copied and can edit the working tree, which the commit check cannot see.
+    """
+    return [
+        [executable, "init", "--quiet", "--template="],
+        [executable, "fetch", "--quiet", "--depth", "1", MATT_SKILLS_REPO, ref],
+        [
+            executable,
+            "-c",
+            "core.hooksPath=.git/no-hooks",
+            "-c",
+            "core.autocrlf=false",
+            "-c",
+            "core.eol=lf",
+            "checkout",
+            "--quiet",
+            "--detach",
+            "FETCH_HEAD",
+        ],
     ]
-    for agent in matt_skills_agents(agents):
-        command.extend(("--agent", agent))
-    command.extend(("--copy", "--yes"))
-    return command
 
 
-def require_npx() -> str:
-    executable = shutil.which("npx")
+def require_git() -> str:
+    executable = shutil.which("git")
     if executable:
         return executable
     raise InstallError(
-        "--matt-skills requires npx (Node.js 18 or newer); install Node.js "
-        "from https://nodejs.org/ and rerun"
+        "--matt-skills requires git; install it from "
+        "https://git-scm.com/downloads and rerun"
     )
 
 
-def _staged_matt_root(staging_dir: Path, canonical_agent: str) -> Path:
-    if canonical_agent == "universal":
-        return staging_dir / ".agents" / "skills"
-    if canonical_agent == "claude":
-        return staging_dir / ".claude" / "skills"
-    raise InstallError(f"unsupported Matt skills staging agent: {canonical_agent}")
+def matt_skills_head(checkout: Path, executable: str = "git") -> str:
+    """The full commit a checkout landed on, or "" when git cannot say.
+
+    Two jobs: verifying that the pinned tag still points where this repository
+    says it does, and provenance for the line printed after an install, since
+    with `--matt-ref main` the ref alone does not identify what arrived.
+    """
+    result = subprocess.run(
+        [executable, "rev-parse", "HEAD"],
+        cwd=checkout,
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    return result.stdout.strip() if result.returncode == 0 else ""
 
 
-def _matt_source_roots(
-    agents: Iterable[str], roots: list[Path], staging_dir: Path
-) -> list[Path]:
-    canonical_agents = expand_agents(agents)
-    if len(canonical_agents) == len(roots):
-        return [
-            _staged_matt_root(staging_dir, agent) for agent in canonical_agents
-        ]
-    if len(roots) == 1:
-        return [_staged_matt_root(staging_dir, canonical_agents[0])]
-    raise InstallError("Matt skills destinations do not match the selected agents")
+def matt_skills_worktree_changes(
+    checkout: Path, executable: str = "git"
+) -> Optional[str]:
+    """What the checkout holds beyond the commit it fetched, or None if unknown.
+
+    The commit check proves which revision was asked for, not what landed on
+    disk. Anything that runs during checkout — a hook, a smudge filter — can
+    edit the working tree afterwards and leave `rev-parse HEAD` still pointing
+    at the pinned commit, so the bytes this installs would not be the bytes
+    that commit contains. The same overrides as the checkout itself, or a
+    global `core.autocrlf` would report every file as modified.
+    """
+    result = subprocess.run(
+        [
+            executable,
+            "-c",
+            "core.autocrlf=false",
+            "-c",
+            "core.eol=lf",
+            "status",
+            "--porcelain",
+        ],
+        cwd=checkout,
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def _has_ancestor_skill(skill_dir: Path, root: Path) -> bool:
+    """Whether a directory sits inside another skill, up to but excluding root.
+
+    Asked of the filesystem rather than of whatever a caller has collected so
+    far, because path order is not ancestor-first: `tdd/SKILL.md` sorts before
+    `tdd/references/tdd/SKILL.md` on POSIX and after it on Windows, where paths
+    compare as one case-folded string rather than component by component.
+    """
+    for parent in skill_dir.parents:
+        if parent == root:
+            break
+        if (parent / "SKILL.md").is_file():
+            return True
+    return False
+
+
+def matt_skill_sources(checkout: Path) -> list[Path]:
+    """Every skill directory in an upstream checkout, flattened by name.
+
+    Upstream files skills under `skills/<category>/<name>/`, and every consumer
+    — its own CLI included — installs them flat as `<name>/`. Discovery walks
+    for `SKILL.md` rather than hard-coding those two levels, so a reorganization
+    upstream costs nothing here; the price of flattening is that two categories
+    could one day claim one name, which is a stop rather than a coin toss. That
+    claim is compared case-insensitively, because `Foo` and `foo` are two
+    directories in the checkout but one destination on Windows and on a stock
+    macOS filesystem — the collision has to be caught before the second copy
+    quietly replaces the first.
+    """
+    root = checkout / "skills"
+    if not root.is_dir():
+        raise InstallError(
+            f"{MATT_SKILLS_SOURCE} checkout has no skills/ directory: {checkout}"
+        )
+    sources: dict[str, Path] = {}
+    for entrypoint in sorted(root.rglob("SKILL.md")):
+        skill_dir = entrypoint.parent
+        relative = skill_dir.relative_to(root)
+        if relative.parts and relative.parts[0] in MATT_SKILLS_SKIP:
+            continue
+        # A skill may ship further SKILL.md files under references/; only the
+        # outermost one names an installable skill.
+        if _has_ancestor_skill(skill_dir, root):
+            continue
+        claimed = sources.get(skill_dir.name.casefold())
+        if claimed is not None:
+            raise InstallError(
+                f"{MATT_SKILLS_SOURCE} has two skills named {skill_dir.name}: "
+                f"{claimed.relative_to(checkout)} and {relative}"
+            )
+        sources[skill_dir.name.casefold()] = skill_dir
+    return [sources[name] for name in sorted(sources)]
 
 
 def install_matt_skills(
@@ -452,34 +550,74 @@ def install_matt_skills(
     dry_run: bool,
     emit: Callable[[str], None] = print,
     executable: Optional[str] = None,
+    ref: Optional[str] = None,
 ) -> None:
-    """Stage upstream skills, then copy them into the exact resolved roots."""
-    command = matt_skills_install_command(agents)
+    """Fetch one upstream revision, then copy it into the resolved roots.
+
+    Every root gets the same files: the skills are agent-agnostic upstream, and
+    the CLI this replaced wrote byte-identical trees to each agent it was given.
+    `agents` is still validated so an unknown name fails here rather than
+    installing somewhere the caller did not ask for.
+    """
+    expand_agents(agents)
+    if ref is not None and not ref.strip():
+        # `--matt-ref "$REF"` with an unset REF asked for a revision and named
+        # none. Falling back to the pin would install something the caller did
+        # not choose, which is the failure this flag exists to prevent.
+        raise InstallError("--matt-ref was given an empty value; name a revision")
+    reference = MATT_SKILLS_REF if ref is None else ref.strip()
     if dry_run:
-        emit(f"would run  {shlex.join(command)}")
+        for command in matt_skills_fetch_commands(reference):
+            emit(f"would run  {shlex.join(command)}")
         for root in roots:
             emit(f"would copy all discovered Matt Pocock skills -> {root}")
         return
 
-    npx = executable or require_npx()
+    git = executable or require_git()
     with tempfile.TemporaryDirectory(prefix="mattpocock-skills-") as directory:
-        staging_dir = Path(directory)
-        _run(matt_skills_install_command(agents, npx), staging_dir)
-        source_roots = _matt_source_roots(agents, roots, staging_dir)
-        for source_root, destination_root in zip(source_roots, roots):
-            sources = (
-                sorted(
-                    path
-                    for path in source_root.iterdir()
-                    if path.is_dir() and (path / "SKILL.md").is_file()
-                )
-                if source_root.is_dir()
-                else []
-            )
-            if not any(path.name == "setup-matt-pocock-skills" for path in sources):
+        checkout = Path(directory)
+        for command in matt_skills_fetch_commands(reference, git):
+            _run(command, checkout)
+        head = matt_skills_head(checkout, git)
+        if reference == MATT_SKILLS_REF:
+            # A tag is a movable label. Checking it against the commit recorded
+            # here is what makes the default install reproducible; without it, a
+            # force-moved tag upstream changes what installs with no change in
+            # this repository for anyone to review.
+            if not head:
                 raise InstallError(
-                    "upstream install did not include setup-matt-pocock-skills"
+                    f"could not read the commit behind {MATT_SKILLS_SOURCE} "
+                    f"{MATT_SKILLS_REF}, so the pin cannot be verified"
                 )
+            if head != MATT_SKILLS_COMMIT:
+                raise InstallError(
+                    f"{MATT_SKILLS_SOURCE} {MATT_SKILLS_REF} now points at "
+                    f"{head[:7]}, not the pinned {MATT_SKILLS_COMMIT[:7]}. The "
+                    "tag moved upstream: review the difference and update "
+                    "MATT_SKILLS_COMMIT, or name a revision with --matt-ref"
+                )
+        changes = matt_skills_worktree_changes(checkout, git)
+        if changes is None:
+            raise InstallError(
+                f"could not confirm the {MATT_SKILLS_SOURCE} checkout matches "
+                f"{reference}, so nothing was installed"
+            )
+        if changes:
+            raise InstallError(
+                f"the {MATT_SKILLS_SOURCE} checkout does not match {reference} — "
+                "a git hook or filter modified it, so nothing was installed. "
+                f"First change: {changes.splitlines()[0].strip()}"
+            )
+        sources = matt_skill_sources(checkout)
+        if not any(source.name == "setup-matt-pocock-skills" for source in sources):
+            raise InstallError(
+                f"{MATT_SKILLS_SOURCE} at {reference} did not include "
+                "setup-matt-pocock-skills"
+            )
+        emit(
+            f"{MATT_SKILLS_SOURCE} @ {reference}" + (f" ({head[:7]})" if head else "")
+        )
+        for destination_root in roots:
             for source in sources:
                 emit(install_one(source, destination_root, "copy", force, False))
             # The copies just overwrote any frontmatter edits from an earlier
@@ -495,7 +633,7 @@ MODEL_DECISIONS_FILE = ".skills-model-invocation.json"
 def skill_is_model_hidden(skill_dir: Path) -> bool:
     """Whether this skill's frontmatter hides it from the model's skill list.
 
-    Upstream collections (mattpocock/skills hides 23 of its 51) set
+    Upstream collections (mattpocock/skills hides 23 of the 35 it ships) set
     `disable-model-invocation: true` to keep their descriptions out of every
     session's context. The cost is that a harness which routes slash commands
     through the model gets "that skill is not installed in this session" for
@@ -920,7 +1058,7 @@ def cloud_offer(home: Path, repo: Path = REPO_ROOT) -> Optional[str]:
         "Also available, neither bundled here nor installed by default:",
         f"  {'graphify'.ljust(width)}  external, needs uv",
         f"      {external_tool('graphify').summary}",
-        f"  {'matt-skills'.ljust(width)}  external, needs npx",
+        f"  {'matt-skills'.ljust(width)}  external, needs git",
         f"      {external_tool('matt-skills').summary}. Its `code-review` shares",
         "      a name with Claude's built-in and replaces it for the session.",
         "",
@@ -1087,6 +1225,15 @@ def parser() -> argparse.ArgumentParser:
     )
     result.set_defaults(matt_skills=None)
     result.add_argument(
+        "--matt-ref",
+        default=None,
+        metavar="REF",
+        help=(
+            "with --matt-skills: the tag, branch, or commit of mattpocock/skills "
+            f"to install (default: {MATT_SKILLS_REF}; pass main to track upstream)"
+        ),
+    )
+    result.add_argument(
         "--enable-skill",
         action="append",
         default=[],
@@ -1172,6 +1319,7 @@ def open_dashboard(args: argparse.Namespace) -> int:
     for option, flag in (
         (args.graphify, "--graphify"),
         (args.matt_skills, "--matt-skills"),
+        (args.matt_ref is not None, "--matt-ref"),
         (args.target is not None, "--target"),
         (args.global_instructions is not None, "--global-instructions"),
     ):
@@ -1215,7 +1363,8 @@ def execute_install(args: argparse.Namespace, selected: list[str]) -> None:
             args.force,
             args.dry_run,
             print,
-            getattr(args, "matt_npx", None),
+            getattr(args, "matt_git", None),
+            getattr(args, "matt_ref", None),
         )
     if args.global_instructions is not None:
         for result in install_global_instructions(
@@ -1323,12 +1472,20 @@ def main(argv: Optional[list[str]] = None) -> int:
             raise InstallError(f"unknown skill: {', '.join(unknown)}")
         if len(selected) != len(set(selected)):
             raise InstallError("a skill was selected more than once")
+        if args.matt_ref is not None and not args.matt_skills:
+            # Ignoring it would install the pinned revision under a command line
+            # that asked for another one, which is the failure this flag exists
+            # to prevent.
+            raise InstallError(
+                "--matt-ref only applies to --matt-skills; add --matt-skills to "
+                "install that revision"
+            )
         if args.graphify and args.target is not None:
             raise InstallError(
                 "--graphify cannot be combined with --target; use --scope instead"
             )
         if args.matt_skills and not args.dry_run:
-            args.matt_npx = require_npx()
+            args.matt_git = require_git()
         if args.graphify and not args.dry_run:
             graphify_cwd = args.project_dir.expanduser().resolve()
             if args.scope == "project" and not graphify_cwd.is_dir():
