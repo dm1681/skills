@@ -8,9 +8,28 @@ self-contained under [`skills/`](skills/).
 
 | Skill | Purpose |
 | --- | --- |
+| `review-loop` | Drive a pull request through repeated review rounds until every surface reports no findings, telling a clean verdict apart from a stalled or skipped one. |
 | `semantic-pr-review` | Explain a pull request as a source-verified semantic hierarchy and interactive flowchart. |
 | `viz-driven-dev` | Build the plot, overlay, or video that would show a feature's effect before implementing it, then regenerate it from real output. |
 | `wow-addon-dev` | Build, debug, package, and publish retail World of Warcraft addons under the taint and secret-value fences. |
+
+## Review loop
+
+`review-loop` drives one pull request through repeated review rounds until
+every active review surface reports no findings, then stops and reports. It
+never merges: a human approves and merges.
+
+Its load-bearing claim is that a green check is not a verdict. A clean review,
+a review that died mid-run, and one the runner skipped in fifteen seconds all
+show the same green, so each round is classified on a verdict the reviewer
+actually posted — never on CI status, never on silence — and a round that
+cannot be classified is reported as unresolved rather than clean.
+
+The surfaces, the deterministic gate, and the local verification command are
+discovered per repository rather than hardcoded, and the loop degrades to the
+gate alone when a repo has no model reviewer at all.
+[`references/traps.md`](skills/review-loop/references/traps.md) catalogues the
+failure modes that produce a green check while reviewing nothing.
 
 ## Semantic PR review
 
