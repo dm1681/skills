@@ -406,12 +406,20 @@ def matt_skills_fetch_commands(
     CRLF — the same commit would then install different bytes on Windows than
     everywhere else, and the shell script one upstream skill ships would land
     with a `#!/bin/bash\r` shebang that no POSIX shell can run.
+
+    It also refuses the user's hooks, by two separate doors: `--template=`
+    keeps `init.templateDir` from seeding this throwaway repository with them,
+    and an unreadable `core.hooksPath` neutralizes a global setting, which the
+    empty template does not cover. A `post-checkout` hook runs before anything
+    is copied and can edit the working tree, which the commit check cannot see.
     """
     return [
-        [executable, "init", "--quiet"],
+        [executable, "init", "--quiet", "--template="],
         [executable, "fetch", "--quiet", "--depth", "1", MATT_SKILLS_REPO, ref],
         [
             executable,
+            "-c",
+            "core.hooksPath=.git/no-hooks",
             "-c",
             "core.autocrlf=false",
             "-c",
@@ -449,6 +457,36 @@ def matt_skills_head(checkout: Path, executable: str = "git") -> str:
         capture_output=True,
     )
     return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def matt_skills_worktree_changes(
+    checkout: Path, executable: str = "git"
+) -> Optional[str]:
+    """What the checkout holds beyond the commit it fetched, or None if unknown.
+
+    The commit check proves which revision was asked for, not what landed on
+    disk. Anything that runs during checkout — a hook, a smudge filter — can
+    edit the working tree afterwards and leave `rev-parse HEAD` still pointing
+    at the pinned commit, so the bytes this installs would not be the bytes
+    that commit contains. The same overrides as the checkout itself, or a
+    global `core.autocrlf` would report every file as modified.
+    """
+    result = subprocess.run(
+        [
+            executable,
+            "-c",
+            "core.autocrlf=false",
+            "-c",
+            "core.eol=lf",
+            "status",
+            "--porcelain",
+        ],
+        cwd=checkout,
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
 
 
 def _has_ancestor_skill(skill_dir: Path, root: Path) -> bool:
@@ -558,6 +596,18 @@ def install_matt_skills(
                     "tag moved upstream: review the difference and update "
                     "MATT_SKILLS_COMMIT, or name a revision with --matt-ref"
                 )
+        changes = matt_skills_worktree_changes(checkout, git)
+        if changes is None:
+            raise InstallError(
+                f"could not confirm the {MATT_SKILLS_SOURCE} checkout matches "
+                f"{reference}, so nothing was installed"
+            )
+        if changes:
+            raise InstallError(
+                f"the {MATT_SKILLS_SOURCE} checkout does not match {reference} — "
+                "a git hook or filter modified it, so nothing was installed. "
+                f"First change: {changes.splitlines()[0].strip()}"
+            )
         sources = matt_skill_sources(checkout)
         if not any(source.name == "setup-matt-pocock-skills" for source in sources):
             raise InstallError(

@@ -30,7 +30,7 @@ class MattSkillsTests(unittest.TestCase):
     def test_fetch_pins_one_revision_of_the_upstream_repository(self) -> None:
         self.assertEqual(
             [
-                ["git", "init", "--quiet"],
+                ["git", "init", "--quiet", "--template="],
                 [
                     "git",
                     "fetch",
@@ -42,6 +42,8 @@ class MattSkillsTests(unittest.TestCase):
                 ],
                 [
                     "git",
+                    "-c",
+                    "core.hooksPath=.git/no-hooks",
                     "-c",
                     "core.autocrlf=false",
                     "-c",
@@ -64,6 +66,17 @@ class MattSkillsTests(unittest.TestCase):
         checkout = INSTALLER.matt_skills_fetch_commands()[-1]
         self.assertIn("core.autocrlf=false", checkout)
         self.assertIn("core.eol=lf", checkout)
+
+    def test_the_users_git_hooks_are_kept_out_of_the_checkout(self) -> None:
+        """A post-checkout hook runs before the copy and can edit the tree.
+
+        Two doors, because closing one leaves the other open: `--template=`
+        blocks `init.templateDir`, and the unreadable hooks path blocks a
+        global `core.hooksPath`, which an empty template does not affect.
+        """
+        commands = INSTALLER.matt_skills_fetch_commands()
+        self.assertIn("--template=", commands[0])
+        self.assertIn("core.hooksPath=.git/no-hooks", commands[-1])
 
     def test_the_default_ref_is_pinned_rather_than_a_moving_branch(self) -> None:
         self.assertEqual(
@@ -161,6 +174,9 @@ class MattSkillsTests(unittest.TestCase):
                 mock.patch.object(
                     INSTALLER, "matt_skills_head", return_value=INSTALLER.MATT_SKILLS_COMMIT
                 ),
+                mock.patch.object(
+                    INSTALLER, "matt_skills_worktree_changes", return_value=""
+                ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run) as run,
             ):
                 INSTALLER.install_matt_skills(
@@ -191,6 +207,9 @@ class MattSkillsTests(unittest.TestCase):
                 mock.patch.object(
                     INSTALLER, "matt_skills_head", return_value=INSTALLER.MATT_SKILLS_COMMIT
                 ),
+                mock.patch.object(
+                    INSTALLER, "matt_skills_worktree_changes", return_value=""
+                ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
                 INSTALLER.install_matt_skills(
@@ -216,6 +235,9 @@ class MattSkillsTests(unittest.TestCase):
                     INSTALLER,
                     "matt_skills_head",
                     return_value=INSTALLER.MATT_SKILLS_COMMIT,
+                ),
+                mock.patch.object(
+                    INSTALLER, "matt_skills_worktree_changes", return_value=""
                 ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
@@ -261,10 +283,11 @@ class MattSkillsTests(unittest.TestCase):
                 force=False, dry_run=True, ref="v1.0.0",
             )
         self.assertEqual(
-            "would run  git init --quiet\n"
+            "would run  git init --quiet --template=\n"
             "would run  git fetch --quiet --depth 1 "
             "https://github.com/mattpocock/skills.git v1.0.0\n"
-            "would run  git -c core.autocrlf=false -c core.eol=lf "
+            "would run  git -c core.hooksPath=.git/no-hooks "
+            "-c core.autocrlf=false -c core.eol=lf "
             "checkout --quiet --detach FETCH_HEAD\n"
             f"would copy all discovered Matt Pocock skills -> {ROOT / '.agents' / 'skills'}\n"
             f"would copy all discovered Matt Pocock skills -> {ROOT / '.claude' / 'skills'}\n",
@@ -300,6 +323,9 @@ class MattSkillsTests(unittest.TestCase):
             with (
                 mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
                 mock.patch.object(INSTALLER, "matt_skills_head", return_value="f" * 40),
+                mock.patch.object(
+                    INSTALLER, "matt_skills_worktree_changes", return_value=""
+                ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
                 with self.assertRaisesRegex(INSTALLER.InstallError, "tag moved"):
@@ -324,6 +350,9 @@ class MattSkillsTests(unittest.TestCase):
             with (
                 mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
                 mock.patch.object(INSTALLER, "matt_skills_head", return_value="f" * 40),
+                mock.patch.object(
+                    INSTALLER, "matt_skills_worktree_changes", return_value=""
+                ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
                 INSTALLER.install_matt_skills(
@@ -338,6 +367,68 @@ class MattSkillsTests(unittest.TestCase):
                 (destination / "setup-matt-pocock-skills" / "SKILL.md").is_file()
             )
 
+    def test_a_modified_worktree_stops_the_install(self) -> None:
+        """The commit can be right while the files on disk are not."""
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory).resolve() / "skills"
+
+            def fake_run(command: list[str], cwd: Path) -> None:
+                if command[1] == "fetch":
+                    write_upstream(cwd, "engineering/setup-matt-pocock-skills")
+
+            with (
+                mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
+                mock.patch.object(
+                    INSTALLER,
+                    "matt_skills_head",
+                    return_value=INSTALLER.MATT_SKILLS_COMMIT,
+                ),
+                mock.patch.object(
+                    INSTALLER,
+                    "matt_skills_worktree_changes",
+                    return_value=" M skills/engineering/tdd/SKILL.md",
+                ),
+                mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
+            ):
+                with self.assertRaisesRegex(INSTALLER.InstallError, "git hook or filter"):
+                    INSTALLER.install_matt_skills(
+                        ["claude"],
+                        [destination],
+                        force=False,
+                        dry_run=False,
+                        emit=lambda _: None,
+                    )
+            self.assertFalse(destination.exists())
+
+    def test_an_unverifiable_worktree_stops_the_install(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory).resolve() / "skills"
+
+            def fake_run(command: list[str], cwd: Path) -> None:
+                if command[1] == "fetch":
+                    write_upstream(cwd, "engineering/setup-matt-pocock-skills")
+
+            with (
+                mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
+                mock.patch.object(
+                    INSTALLER,
+                    "matt_skills_head",
+                    return_value=INSTALLER.MATT_SKILLS_COMMIT,
+                ),
+                mock.patch.object(
+                    INSTALLER, "matt_skills_worktree_changes", return_value=None
+                ),
+                mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
+            ):
+                with self.assertRaisesRegex(INSTALLER.InstallError, "could not confirm"):
+                    INSTALLER.install_matt_skills(
+                        ["claude"],
+                        [destination],
+                        force=False,
+                        dry_run=False,
+                        emit=lambda _: None,
+                    )
+
     def test_an_unverifiable_pin_stops_the_default_install(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory).resolve() / "skills"
@@ -349,6 +440,9 @@ class MattSkillsTests(unittest.TestCase):
             with (
                 mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
                 mock.patch.object(INSTALLER, "matt_skills_head", return_value=""),
+                mock.patch.object(
+                    INSTALLER, "matt_skills_worktree_changes", return_value=""
+                ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
                 with self.assertRaisesRegex(
@@ -447,6 +541,9 @@ class ModelInvocationTests(unittest.TestCase):
             mock.patch.object(
                     INSTALLER, "matt_skills_head", return_value=INSTALLER.MATT_SKILLS_COMMIT
                 ),
+            mock.patch.object(
+                INSTALLER, "matt_skills_worktree_changes", return_value=""
+            ),
             mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
         ):
             INSTALLER.install_matt_skills(

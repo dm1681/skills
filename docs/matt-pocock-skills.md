@@ -23,9 +23,11 @@ user installs and applies the installer's existing backup-before-replace policy.
 The effective commands have this form:
 
 ```sh
-git init --quiet
+git init --quiet --template=
 git fetch --quiet --depth 1 https://github.com/mattpocock/skills.git v1.2.3
-git -c core.autocrlf=false -c core.eol=lf checkout --quiet --detach FETCH_HEAD
+git -c core.hooksPath=.git/no-hooks -c core.autocrlf=false -c core.eol=lf \
+  checkout --quiet --detach FETCH_HEAD
+git status --porcelain   # must be empty before anything is copied
 ```
 
 `git fetch <url> <ref>` rather than `git clone --branch <ref>`, because clone's
@@ -37,6 +39,15 @@ Checkout overrides line-ending conversion because Git for Windows enables
 `core.autocrlf` by default. Without the override the same commit installs
 different bytes there than everywhere else, and the shell script one upstream
 skill ships arrives with a `#!/bin/bash\r` shebang that no POSIX shell can run.
+
+It also keeps the user's own git hooks out of the disposable checkout, by two
+doors because closing one leaves the other open: `--template=` stops
+`init.templateDir` from seeding this repository with them, and an unreadable
+`core.hooksPath` neutralizes a global setting the empty template does not
+affect. A `post-checkout` hook would otherwise run before the copy and edit
+files that the commit check still calls correct. Since a hook is not the only
+thing that can rewrite a working tree, the install then asks git whether the
+checkout still matches the commit, and stops without copying if it does not.
 
 Git is the only requirement; there is no Node.js dependency. `--dry-run` prints
 the exact commands and final destinations without network access. Custom
