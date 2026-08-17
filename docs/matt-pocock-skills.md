@@ -15,34 +15,67 @@ explicit:
 ./install.sh --agent all --matt-skills
 ```
 
-The installer invokes the upstream `skills` CLI with all skills selected,
-copies rather than links the result, and suppresses its nested prompts. The CLI
-runs in a disposable staging project; this installer then copies every
-discovered skill into the same resolved roots used for the bundled skills. That
-preserves `~/.agents/skills` for shared user installs and applies the
-installer's existing backup-before-replace policy.
+The installer shallow-fetches one revision of the upstream repository into a
+disposable checkout, then copies every skill it discovers into the same resolved
+roots used for the bundled skills. That preserves `~/.agents/skills` for shared
+user installs and applies the installer's existing backup-before-replace policy.
 
-| This installer | Upstream `skills` CLI |
-| --- | --- |
-| `universal` / `agents` | `codex` staging, then selected `.agents/skills` root |
-| `codex` | `codex` staging, then selected `.agents/skills` root |
-| `cursor` | `codex` staging, then selected `.agents/skills` root |
-| `copilot` | `codex` staging, then selected `.agents/skills` root |
-| `claude` | `claude-code` |
-| `all` | `codex` and `claude-code` |
-
-The effective command has this form:
+The effective commands have this form:
 
 ```sh
-npx --yes skills@latest add mattpocock/skills --skill '*' \
-  --agent <mapped-agent> --copy --yes
+git init --quiet
+git fetch --quiet --depth 1 https://github.com/mattpocock/skills.git v1.2.3
+git checkout --quiet --detach FETCH_HEAD
 ```
 
-Node.js 18 or newer is required because the upstream installer is distributed
-through `npx`. `--dry-run` prints the exact staging command and final
-destinations without requiring Node.js or network access. Custom `--target`
-paths are supported because destination resolution remains under this
+`git fetch <url> <ref>` rather than `git clone --branch <ref>`, because clone's
+`--branch` takes a tag or a branch and refuses a commit SHA. Every install
+prints the ref and the commit it resolved to, so `--matt-ref main` still leaves
+a record of what actually arrived.
+
+Git is the only requirement; there is no Node.js dependency. `--dry-run` prints
+the exact commands and final destinations without network access. Custom
+`--target` paths are supported because destination resolution remains under this
 installer's control.
+
+## Which revision gets installed
+
+`MATT_SKILLS_REF` in `install.py` pins the default, so two installs a week apart
+are the same install. Override it per run:
+
+```sh
+./install.sh --agent all --matt-skills --matt-ref main       # track upstream
+./install.sh --agent all --matt-skills --matt-ref v1.2.2     # an older release
+./install.sh --agent all --matt-skills --matt-ref 9c9f36c    # an exact commit
+```
+
+Updating the pin is a commit somebody reviews, and the diff behind it is
+readable before it lands:
+
+```sh
+git clone https://github.com/mattpocock/skills.git
+git -C skills diff v1.2.3..v1.3.0 -- skills/
+```
+
+## What gets installed
+
+Upstream files its skills under `skills/<category>/<name>/`; every consumer,
+including upstream's own CLI, installs them flat as `<name>/`. Discovery walks
+the checkout for `SKILL.md` rather than assuming that depth, so a reorganization
+upstream costs nothing here. Two exceptions:
+
+- `skills/deprecated/` is skipped. Upstream retires skills there instead of
+  deleting them, and a retirement should not arrive as a fresh install.
+- Two categories claiming one name stops the install rather than letting one
+  silently win. Nothing collides today.
+
+Every selected root receives the same files. The skills carry no agent-specific
+content — upstream's CLI wrote byte-identical trees to each agent it was given —
+so there is no agent mapping to keep in step any more.
+
+An upstream checkout that does not contain `setup-matt-pocock-skills` fails the
+install, because that is the shape of the collection changing under us and a
+partial install is worse than a stop.
 
 ## One-time repository setup
 

@@ -266,9 +266,21 @@ class InstallerTests(unittest.TestCase):
             result = self.run_installer(
                 "--home", directory, "--agent", "all", "--matt-skills", "--dry-run"
             )
-            self.assertIn("npx --yes skills@latest add mattpocock/skills", result.stdout)
-            self.assertIn("--skill '*'", result.stdout)
-            self.assertIn("--agent codex --agent claude-code", result.stdout)
+            self.assertIn(
+                "git fetch --quiet --depth 1 "
+                f"https://github.com/mattpocock/skills.git {install.MATT_SKILLS_REF}",
+                result.stdout,
+            )
+            self.assertIn("git checkout --quiet --detach FETCH_HEAD", result.stdout)
+
+    def test_matt_skills_dry_run_honours_a_requested_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.run_installer(
+                "--home", directory, "--matt-skills", "--matt-ref", "main", "--dry-run"
+            )
+            self.assertIn(
+                "https://github.com/mattpocock/skills.git main", result.stdout
+            )
 
     def test_matt_skills_supports_custom_target_via_staging(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

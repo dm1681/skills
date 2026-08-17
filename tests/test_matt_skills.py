@@ -16,50 +16,92 @@ INSTALLER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(INSTALLER)
 
 
+def write_upstream(checkout: Path, *relative: str) -> None:
+    """Lay out an upstream checkout the way mattpocock/skills is laid out."""
+    for path in relative:
+        skill_dir = checkout / "skills" / path
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            f"---\nname: {skill_dir.name}\n---\n", encoding="utf-8"
+        )
+
+
 class MattSkillsTests(unittest.TestCase):
-    def test_command_installs_all_skills_for_selected_agents(self) -> None:
+    def test_fetch_pins_one_revision_of_the_upstream_repository(self) -> None:
         self.assertEqual(
             [
-                "npx",
-                "--yes",
-                "skills@latest",
-                "add",
-                "mattpocock/skills",
-                "--skill",
-                "*",
-                "--agent",
-                "codex",
-                "--agent",
-                "claude-code",
-                "--copy",
-                "--yes",
+                ["git", "init", "--quiet"],
+                [
+                    "git",
+                    "fetch",
+                    "--quiet",
+                    "--depth",
+                    "1",
+                    "https://github.com/mattpocock/skills.git",
+                    "v9.9.9",
+                ],
+                ["git", "checkout", "--quiet", "--detach", "FETCH_HEAD"],
             ],
-            INSTALLER.matt_skills_install_command(["all"]),
+            INSTALLER.matt_skills_fetch_commands("v9.9.9"),
         )
 
-    def test_shared_agents_use_one_staging_target(self) -> None:
+    def test_the_default_ref_is_pinned_rather_than_a_moving_branch(self) -> None:
         self.assertEqual(
-            ["codex"],
-            INSTALLER.matt_skills_agents(
-                ["codex", "cursor", "copilot"]
-            ),
+            INSTALLER.matt_skills_fetch_commands()[1][-1], INSTALLER.MATT_SKILLS_REF
         )
-        self.assertEqual(
-            ["codex", "claude-code"],
-            INSTALLER.matt_skills_agents(["all"]),
-        )
+        self.assertNotEqual(INSTALLER.MATT_SKILLS_REF, "main")
 
-    def test_install_stages_then_copies_to_exact_resolved_root(self) -> None:
+    def test_sources_are_flattened_across_upstream_categories(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            checkout = Path(directory)
+            write_upstream(checkout, "engineering/tdd", "productivity/teach")
+            self.assertEqual(
+                ["tdd", "teach"],
+                [source.name for source in INSTALLER.matt_skill_sources(checkout)],
+            )
+
+    def test_retired_skills_are_not_installed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            checkout = Path(directory)
+            write_upstream(checkout, "engineering/tdd", "deprecated/old-one")
+            self.assertEqual(
+                ["tdd"],
+                [source.name for source in INSTALLER.matt_skill_sources(checkout)],
+            )
+
+    def test_a_nested_reference_skill_is_not_a_second_skill(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            checkout = Path(directory)
+            write_upstream(checkout, "engineering/tdd", "engineering/tdd/references/tdd")
+            self.assertEqual(
+                [checkout / "skills" / "engineering" / "tdd"],
+                INSTALLER.matt_skill_sources(checkout),
+            )
+
+    def test_two_categories_claiming_one_name_stop_the_install(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            checkout = Path(directory)
+            write_upstream(checkout, "engineering/tdd", "productivity/tdd")
+            with self.assertRaisesRegex(INSTALLER.InstallError, "two skills named tdd"):
+                INSTALLER.matt_skill_sources(checkout)
+
+    def test_a_checkout_without_skills_is_actionable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(INSTALLER.InstallError, "no skills/ directory"):
+                INSTALLER.matt_skill_sources(Path(directory))
+
+    def test_install_fetches_then_copies_to_exact_resolved_root(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory).resolve() / ".agents" / "skills"
 
             def fake_run(command: list[str], cwd: Path) -> None:
-                source = cwd / ".agents" / "skills" / "setup-matt-pocock-skills"
-                source.mkdir(parents=True)
-                (source / "SKILL.md").write_text("---\nname: setup-matt-pocock-skills\n---\n")
+                if command[1] != "fetch":
+                    return
+                write_upstream(cwd, "engineering/setup-matt-pocock-skills")
 
             with (
-                mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/npx"),
+                mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
+                mock.patch.object(INSTALLER, "matt_skills_head", return_value="abc1234"),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run) as run,
             ):
                 INSTALLER.install_matt_skills(
@@ -69,17 +111,76 @@ class MattSkillsTests(unittest.TestCase):
                     dry_run=False,
                     emit=lambda _: None,
                 )
-            self.assertEqual(1, run.call_count)
+            self.assertEqual(3, run.call_count)
             self.assertTrue(
                 (destination / "setup-matt-pocock-skills" / "SKILL.md").is_file()
             )
 
-    def test_missing_npx_is_actionable(self) -> None:
+    def test_every_root_receives_the_same_upstream_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory).resolve()
+            roots = [base / ".agents" / "skills", base / ".claude" / "skills"]
+
+            def fake_run(command: list[str], cwd: Path) -> None:
+                if command[1] == "fetch":
+                    write_upstream(
+                        cwd, "engineering/setup-matt-pocock-skills", "productivity/teach"
+                    )
+
+            with (
+                mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
+                mock.patch.object(INSTALLER, "matt_skills_head", return_value=""),
+                mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
+            ):
+                INSTALLER.install_matt_skills(
+                    ["all"], roots, force=False, dry_run=False, emit=lambda _: None
+                )
+            for root in roots:
+                self.assertEqual(
+                    ["setup-matt-pocock-skills", "teach"],
+                    sorted(path.name for path in root.iterdir()),
+                )
+
+    def test_an_upstream_layout_change_is_reported_not_half_installed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory).resolve() / ".agents" / "skills"
+
+            def fake_run(command: list[str], cwd: Path) -> None:
+                if command[1] == "fetch":
+                    write_upstream(cwd, "engineering/tdd")
+
+            with (
+                mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
+                mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
+            ):
+                with self.assertRaisesRegex(
+                    INSTALLER.InstallError, "setup-matt-pocock-skills"
+                ):
+                    INSTALLER.install_matt_skills(
+                        ["universal"],
+                        [destination],
+                        force=False,
+                        dry_run=False,
+                        emit=lambda _: None,
+                    )
+
+    def test_unknown_agents_are_refused_before_anything_is_fetched(self) -> None:
+        with mock.patch.object(
+            INSTALLER,
+            "_run",
+            side_effect=AssertionError("an unknown agent must not reach the network"),
+        ):
+            with self.assertRaisesRegex(INSTALLER.InstallError, "unknown agent"):
+                INSTALLER.install_matt_skills(
+                    ["nope"], [ROOT], force=False, dry_run=False
+                )
+
+    def test_missing_git_is_actionable(self) -> None:
         with mock.patch.object(INSTALLER.shutil, "which", return_value=None):
-            with self.assertRaisesRegex(INSTALLER.InstallError, "requires npx"):
+            with self.assertRaisesRegex(INSTALLER.InstallError, "requires git"):
                 INSTALLER.install_matt_skills([], [ROOT], force=False, dry_run=False)
 
-    def test_dry_run_prints_exact_command_without_requiring_npx(self) -> None:
+    def test_dry_run_prints_exact_commands_without_requiring_git(self) -> None:
         output = io.StringIO()
         with (
             mock.patch.object(
@@ -91,15 +192,36 @@ class MattSkillsTests(unittest.TestCase):
         ):
             INSTALLER.install_matt_skills(
                 ["all"], [ROOT / ".agents" / "skills", ROOT / ".claude" / "skills"],
-                force=False, dry_run=True
+                force=False, dry_run=True, ref="v1.0.0",
             )
         self.assertEqual(
-            "would run  npx --yes skills@latest add mattpocock/skills "
-            "--skill '*' --agent codex --agent claude-code --copy --yes\n"
+            "would run  git init --quiet\n"
+            "would run  git fetch --quiet --depth 1 "
+            "https://github.com/mattpocock/skills.git v1.0.0\n"
+            "would run  git checkout --quiet --detach FETCH_HEAD\n"
             f"would copy all discovered Matt Pocock skills -> {ROOT / '.agents' / 'skills'}\n"
             f"would copy all discovered Matt Pocock skills -> {ROOT / '.claude' / 'skills'}\n",
             output.getvalue(),
         )
+
+    def test_an_unset_ref_falls_back_to_the_pinned_revision(self) -> None:
+        self.assertIsNone(INSTALLER.parser().parse_args([]).matt_ref)
+        self.assertEqual(
+            "main", INSTALLER.parser().parse_args(["--matt-ref", "main"]).matt_ref
+        )
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            INSTALLER.install_matt_skills(
+                ["claude"], [ROOT], force=False, dry_run=True, ref=None
+            )
+        self.assertIn(INSTALLER.MATT_SKILLS_REF, output.getvalue())
+
+    def test_a_ref_without_the_opt_in_is_refused(self) -> None:
+        errors = io.StringIO()
+        with contextlib.redirect_stderr(errors):
+            status = INSTALLER.main(["--matt-ref", "main", "--dry-run"])
+        self.assertEqual(status, 2)
+        self.assertIn("--matt-ref only applies to --matt-skills", errors.getvalue())
 
     def test_parser_supports_explicit_opt_in_and_opt_out(self) -> None:
         enabled = INSTALLER.parser().parse_args(["--matt-skills"])
@@ -168,12 +290,15 @@ class ModelInvocationTests(unittest.TestCase):
         INSTALLER.record_model_decisions([self.root], {"grill-with-docs": "enabled"})
 
         def fake_run(command: list, cwd: Path) -> None:
-            staged = cwd / ".claude" / "skills"
-            write_skill(staged, "setup-matt-pocock-skills")
-            write_skill(staged, "grill-with-docs")
+            if command[1] != "fetch":
+                return
+            upstream = cwd / "skills" / "engineering"
+            write_skill(upstream, "setup-matt-pocock-skills")
+            write_skill(upstream, "grill-with-docs")
 
         with (
-            mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/npx"),
+            mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
+            mock.patch.object(INSTALLER, "matt_skills_head", return_value=""),
             mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
         ):
             INSTALLER.install_matt_skills(

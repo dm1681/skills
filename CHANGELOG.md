@@ -82,6 +82,20 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Changed
 
+- `--matt-skills` fetches `mattpocock/skills` with git instead of shelling out
+  to `npx skills@latest`. The upstream CLI only copied files — a checkout and
+  its staged output are byte-identical — so the transport swap changes nothing
+  about what lands on disk, while `git` replaces Node.js 18+ as the one
+  requirement for that path. The revision is pinned by `MATT_SKILLS_REF` rather
+  than always taking `main`, so two installs a week apart match, an update is a
+  reviewed commit, and `git diff` between two refs shows what an update would
+  change. The new `--matt-ref` takes a tag, a branch, or a commit SHA
+  (`--matt-ref main` restores the old track-upstream behavior), and every
+  install prints the ref and the commit it resolved to. Discovery walks the
+  checkout for `SKILL.md` instead of assuming upstream's directory depth,
+  skips `skills/deprecated/`, and stops on a name claimed by two categories.
+  The per-agent staging mapping is gone: the skills carry no agent-specific
+  content, so every selected root gets the same files.
 - `semantic-pr-review`'s entrypoint dropped from 212 to about 120 lines. Build
   commands and the browser verification procedure moved to a new
   `references/build-and-verify.md`, and prose that duplicated the other

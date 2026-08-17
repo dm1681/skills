@@ -214,6 +214,8 @@ Useful options:
 --mode copy|link             copy is the cross-platform default
 --matt-skills                install all Matt Pocock skills for chosen agents
 --no-matt-skills             skip Matt Pocock skills (the default)
+--matt-ref REF               tag, branch, or commit of mattpocock/skills to
+                             install; defaults to the pinned revision
 --graphify                   install/upgrade Graphify and register its skill
 --global-instructions [link|copy]
                              install global/AGENTS.md as user-level guidance
@@ -290,21 +292,25 @@ collection provides `implement`, `tdd`, and `code-review` workflows. No skill in
 this collection requires them, so the dashboard does not offer to fetch them and
 never prompts for a third-party download.
 
-Opt in explicitly with `--matt-skills`. This requires Node.js 18 or newer and
-runs the upstream cross-agent installer non-interactively:
+Opt in explicitly with `--matt-skills`. It needs `git` and nothing else: the
+installer shallow-fetches one pinned revision of the upstream repository into a
+temporary checkout,
 
 ```sh
-npx --yes skills@latest add mattpocock/skills --skill '*' \
-  --agent <selected-agent> --copy --yes
+git init --quiet
+git fetch --quiet --depth 1 https://github.com/mattpocock/skills.git v1.2.3
+git checkout --quiet --detach FETCH_HEAD
 ```
 
-The upstream CLI runs inside a temporary project. This installer then copies
-the discovered skills into the exact selected roots, including the preferred
-user-scoped `~/.agents/skills` directory, while applying the same conflict
-backup policy used for bundled skills. After installation, run
+then copies every skill it finds into the exact selected roots, including the
+preferred user-scoped `~/.agents/skills` directory, under the same conflict
+backup policy used for bundled skills. The pin is a constant in `install.py`, so
+updating is a reviewed commit and `git diff v1.2.3..v1.3.0 -- skills/` shows what
+an update would change. Track upstream instead with `--matt-ref main`, or pin an
+exact commit by passing its SHA. After installation, run
 `/setup-matt-pocock-skills` once inside the target repository. See
-[`docs/matt-pocock-skills.md`](docs/matt-pocock-skills.md) for the agent mapping
-and operational boundary.
+[`docs/matt-pocock-skills.md`](docs/matt-pocock-skills.md) for what is installed
+and the operational boundary.
 
 ### Optional Graphify installation
 
