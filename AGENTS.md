@@ -51,6 +51,15 @@ wrappers) installs them locally, `skills_tui.py` is the interactive dashboard,
 - `~/.dm1681-skills-roots.json` indexes install *locations* only. It is the
   only way a project or `--target` root is found again, so anything that
   installs must call `install.record_root`.
+- Detection, diff, and resolution planning live in `inventory.py`, a sibling
+  that must never import textual — `skills doctor` and `./install.sh --doctor`
+  are scripted paths. Every mutation it offers still goes through `install.py`
+  (`install_one`, `uninstall_one`, `relink_one`, `forget_entry`) via
+  `inventory.apply_fix`; the module writes nothing itself.
+- `inventory.scan` composes `install.discover` rather than walking roots
+  itself, so there is exactly one place that lists what is on disk. A
+  `Placement` *wraps* an `install.Installed` and adds the digest and
+  comparisons detection needs.
 
 ## Cloud sessions and new repos
 

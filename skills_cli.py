@@ -10,6 +10,7 @@ directory -- `./.agents/skills` and `./.claude/skills`.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import sys
@@ -23,6 +24,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 import install  # noqa: E402
+import inventory  # noqa: E402
 
 
 SHIM_NAME = "skills"
@@ -544,24 +546,116 @@ def command_install(args: argparse.Namespace) -> int:
     )
 
 
+def add_discovery_args(sub: argparse.ArgumentParser) -> None:
+    """The arguments that decide *where* a command looks.
+
+    Shared by `status` and `doctor` so the two sweep identically: a machine
+    with an inconsistency the doctor reports must be one whose status lists the
+    same install.
+    """
+    sub.add_argument(
+        "--project-dir",
+        type=Path,
+        action="append",
+        default=None,
+        metavar="DIR",
+        help="a project to sweep (repeatable; default the current directory)",
+    )
+    sub.add_argument(
+        "--root",
+        type=Path,
+        action="append",
+        default=[],
+        metavar="DIR",
+        help="a skills root to sweep outright (repeatable)",
+    )
+    sub.add_argument(
+        "--no-registry",
+        action="store_true",
+        help="skip the roots earlier installs recorded; look only where told",
+    )
+    sub.add_argument("--home", type=Path, default=None, help=argparse.SUPPRESS)
+
+
+def _project_dirs(args: argparse.Namespace) -> list:
+    return [
+        path.expanduser().resolve() for path in (args.project_dir or [Path.cwd()])
+    ]
+
+
 def command_status(args: argparse.Namespace) -> int:
     home = (args.home or Path.home()).expanduser()
-    roots = install.resolve_roots(
-        args.agent,
-        "user" if args.user else "project",
-        home,
-        args.project_dir.expanduser().resolve(),
-        None,
-    )
-    # Plus every root an earlier install recorded, so a project or --target
-    # destination is found again without being named a second time.
-    roots = _dedup(list(roots) + install.known_roots(home))
+    scope = "user" if args.user else "project"
+    roots: list = []
+    for project in _project_dirs(args):
+        roots.extend(install.resolve_roots(args.agent, scope, home, project, None))
+    roots.extend(path.expanduser().resolve() for path in args.root)
+    if not args.no_registry:
+        # Every root an earlier install recorded, so a project or --target
+        # destination is found again without being named a second time.
+        roots.extend(install.known_roots(home))
     print(
         install.format_status(
-            install.discover(roots, home, (args.bin or DEFAULT_BIN).expanduser())
+            install.discover(_dedup(roots), home, (args.bin or DEFAULT_BIN).expanduser())
         )
     )
     return 0
+
+
+def command_doctor(args: argparse.Namespace) -> int:
+    """Report what disagrees with itself, and optionally repair it.
+
+    Exit code 3 when findings remain after the run: a script can tell "checked,
+    all well" from "checked, still wrong" without parsing anything.
+    """
+    if args.json and args.fix is not None:
+        raise install.InstallError(
+            "--json reports and --fix changes things; run them one at a time"
+        )
+    home = (args.home or Path.home()).expanduser()
+    extra = [path.expanduser().resolve() for path in args.root]
+    projects = _project_dirs(args)
+    swept = inventory.scan(home, projects, extra, not args.no_registry)
+    results = inventory.findings(swept, args.include_foreign)
+
+    if args.prune:
+        dropped = install.forget_roots(home, swept.missing_roots, args.dry_run)
+        for root in dropped:
+            print("%s %s" % ("would forget" if args.dry_run else "forgot     ", root))
+        if not dropped:
+            print("no recorded root is missing")
+
+    if args.json:
+        print(json.dumps(inventory.report_json(swept, results), indent=2))
+    elif args.fix is None:
+        inventory.render_report(swept, results, include_foreign=args.include_foreign)
+    else:
+        kinds = list(args.fix)
+        unknown = [kind for kind in kinds if kind not in inventory.KINDS]
+        if unknown:
+            raise install.InstallError(
+                "unknown finding kind: %s; known: %s"
+                % (", ".join(unknown), ", ".join(inventory.KINDS))
+            )
+        chosen = [
+            finding for finding in results if not kinds or finding.kind in kinds
+        ]
+        if not chosen:
+            print("nothing to fix")
+        for finding in chosen:
+            for line in inventory.apply_resolution(finding.resolutions[0], args.dry_run):
+                print(line)
+        # Nothing is cached: the second scan is the only honest answer to
+        # "did that work", and a dry run legitimately still reports everything.
+        swept = inventory.scan(home, projects, extra, not args.no_registry)
+        results = inventory.findings(swept, args.include_foreign)
+        print(
+            "%d inconsistenc%s left" % (len(results), "y" if len(results) == 1 else "ies")
+            if results
+            else "nothing inconsistent is left"
+        )
+
+    return 0 if args.exit_zero or not results else 3
 
 
 def command_uninstall(args: argparse.Namespace) -> int:
@@ -721,7 +815,6 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="report the machine-wide roots instead of the project directory's",
     )
-    status.add_argument("--project-dir", type=Path, default=Path.cwd())
     status.add_argument(
         "--agent", action="append", default=[], metavar="NAME",
         help="universal, codex, cursor, copilot, claude, or all (repeatable; default all)",
@@ -730,8 +823,41 @@ def parser() -> argparse.ArgumentParser:
         "--bin", type=Path, default=None, metavar="DIR",
         help="directory holding the launcher shims (default ~/.local/bin)",
     )
-    status.add_argument("--home", type=Path, default=None, help=argparse.SUPPRESS)
+    add_discovery_args(status)
     status.set_defaults(handler=command_status)
+
+    doctor = subcommands.add_parser(
+        "doctor", help="report installs that disagree with this checkout"
+    )
+    add_discovery_args(doctor)
+    doctor.add_argument(
+        "--include-foreign",
+        action="store_true",
+        help="also compare skills this checkout has no source for",
+    )
+    doctor.add_argument("--json", action="store_true", help="print the report as JSON")
+    doctor.add_argument(
+        "--exit-zero",
+        action="store_true",
+        help="exit 0 even when inconsistencies remain (the default is 3)",
+    )
+    doctor.add_argument(
+        "--prune",
+        action="store_true",
+        help="forget recorded roots that no longer exist",
+    )
+    doctor.add_argument(
+        "--fix",
+        nargs="*",
+        default=None,
+        metavar="KIND",
+        help=(
+            "apply the default fix for every finding, or only for the named "
+            "kinds: %s" % ", ".join(inventory.KINDS)
+        ),
+    )
+    doctor.add_argument("--dry-run", action="store_true")
+    doctor.set_defaults(handler=command_doctor)
 
     remover = subcommands.add_parser(
         "uninstall", help="remove installed skills, instructions, or shims"

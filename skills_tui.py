@@ -25,6 +25,11 @@ The manage pane paints a removal pink rather than peach: peach promises the
 old copy is backed up *and something replaces it*, and a removal only makes
 the first half of that promise. Red still means only that an operation failed.
 
+The manage pane paints a *finding* yellow — an inconsistency is advisory, not
+a failure — and each offered resolution in the colour of its consequence: peach
+to reinstall over it, green to keep it, pink to remove one copy. Diff lines
+follow the same rule: additions blue, removals pink, hunk headers teal.
+
 The install itself runs through `install.install_one` — the
 global-instructions row through `install.install_global_instructions`, every
 removal through `install.uninstall_one` and its siblings — so backups,
@@ -44,6 +49,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 import install  # noqa: E402
+import inventory  # noqa: E402
 
 from textual import work  # noqa: E402
 from textual.app import App, ComposeResult  # noqa: E402
@@ -76,6 +82,17 @@ MEANING = {
     OUTDATED: (REPLACE, "DIFFERS", "replace"),
     INSTALLED: (KEEP, "UP TO DATE", "skip"),
 }
+# resolution action -> (colour, pill label, verb). One entry per consequence
+# class: a write is peach, a removal pink, keeping it green. MEANING stays as
+# it is — it describes an install, and a finding is not one.
+RESOLUTIONS = {
+    inventory.REINSTALL: (REPLACE, "REINSTALL", "reinstall"),
+    inventory.RELINK: (REPLACE, "RELINK", "relink"),
+    inventory.KEEP: (KEEP, "KEEP", "keep"),
+    inventory.UNINSTALL: (REMOVE, "REMOVE", "uninstall"),
+    inventory.FORGET: (REMOVE, "FORGET", "forget"),
+}
+FINDING_COLOUR = ADVISE
 VIEWS = ("all", "differs", "up to date")
 VIEW_STATES = {"differs": OUTDATED, "up to date": INSTALLED}
 GLOBAL = "global-instructions"
@@ -136,11 +153,19 @@ HiddenSkillRow:focus { background: %(hi)s; }
 ManageRow { height: 3; padding: 0 2; margin-bottom: 1; background: %(panel)s; }
 ManageRow:focus { background: %(hi)s; }
 
-#changes { width: 66; padding: 1 2; background: %(panel)s; border: thick %(remove)s;
-           offset: 0 -3; opacity: 0;
+/* height: auto so the box ends where its two sections do — it now carries
+   both the writes and the removals of one apply. */
+#changes { width: 76; height: auto; padding: 1 2; background: %(panel)s;
+           border: thick %(remove)s; offset: 0 -3; opacity: 0;
            transition: offset 200ms out_cubic, opacity 180ms out_cubic; }
 #changes.shown { offset: 0 0; opacity: 1; }
 ConfirmChanges { align: center middle; }
+
+FindingRow { height: 5; padding: 0 2; margin-bottom: 1; background: %(panel)s; }
+FindingRow:focus { background: %(hi)s; }
+#diff { width: 84%%; height: 84%%; padding: 1 2; background: %(panel)s;
+        border: round %(you)s; }
+DiffScreen { align: center middle; }
 """ % {
     "bg": BG, "fg": FG, "panel": PANEL, "hi": HI, "replace": REPLACE, "you": YOU,
     "remove": REMOVE,
@@ -502,6 +527,123 @@ class ConfirmChanges(ModalScreen):
         self.dismiss(False)
 
 
+class FindingRow(Static):
+    """One inconsistency: kind pill, name, the roots involved, the chosen fix.
+
+    The pill is yellow because a finding is advisory — the machine still works
+    — while the left edge carries the colour of what the *chosen* resolution
+    would do, so cycling the choice repaints the consequence.
+    """
+
+    can_focus = True
+
+    def __init__(self, finding, index: int, selected: bool) -> None:
+        super().__init__()
+        self.finding = finding
+        self.index = index % max(len(finding.resolutions), 1)
+        self.selected = selected
+
+    @property
+    def resolution(self):
+        return self.finding.resolutions[self.index]
+
+    def on_mount(self) -> None:
+        self.redraw()
+
+    def redraw(self) -> None:
+        resolution = self.resolution
+        colour, _label, verb = RESOLUTIONS[resolution.action]
+        self.styles.border_left = ("thick", YOU if self.selected else colour)
+        mark = "[%s]◆[/]" % YOU if self.selected else "[%s]◇[/]" % MUTE
+        lines = [
+            "%s %s [b]%s[/]"
+            % (mark, pill(self.finding.kind, BG, FINDING_COLOUR), self.finding.name)
+        ]
+        for placement in self.finding.placements:
+            if not placement.present:
+                # Nothing on disk to describe: the header already named it, and
+                # "absent missing" would only read as noise.
+                continue
+            lines.append(
+                "    [%s]%s[/] [%s]%s %s %s[/]"
+                % (
+                    WHERE,
+                    placement.root,
+                    MUTE,
+                    placement.shape or "absent",
+                    inventory.short_digest(placement.digest),
+                    "matches this checkout"
+                    if placement.matches_source
+                    else "differs"
+                    if placement.matches_source is False
+                    else "",
+                )
+            )
+        choices = len(self.finding.resolutions)
+        lines.append(
+            "    [%s]→ %s[/]  [%s]%s[/]"
+            % (
+                colour,
+                resolution.label or verb,
+                MUTE,
+                # Escaped: Rich would read a bare [c] as a style tag and drop it.
+                "\\[c] other options (%d of %d)" % (self.index + 1, choices)
+                if choices > 1
+                else "",
+            )
+        )
+        self.update("\n".join(lines))
+
+    def toggle(self) -> None:
+        self.selected = not self.selected
+        self.redraw()
+
+    def cycle(self, delta: int = 1) -> None:
+        self.index = (self.index + delta) % len(self.finding.resolutions)
+        self.redraw()
+
+
+class DiffScreen(ModalScreen):
+    """The chosen finding's diff, coloured by line prefix."""
+
+    BINDINGS = [Binding("escape,enter,q", "close", "close")]
+
+    def __init__(self, title: str, body: str) -> None:
+        super().__init__()
+        self.title_line = title
+        self.body_text = body
+
+    def compose(self) -> ComposeResult:
+        yield VerticalScroll(
+            Static(
+                "[b %s]%s[/]\n\n%s" % (WHERE, self.title_line, self._paint(self.body_text))
+            ),
+            id="diff",
+        )
+
+    def _paint(self, body: str) -> str:
+        painted = []
+        for line in body.splitlines():
+            # Diff content is somebody's file, so a bracket in it is text, not
+            # markup: escape before colouring, never after.
+            safe = line.replace("[", "\\[")
+            if line.startswith("@@") or line.startswith("--- only in") or (
+                line.startswith("+++ only in")
+            ):
+                colour = WHERE
+            elif line.startswith("+"):
+                colour = ADD
+            elif line.startswith("-"):
+                colour = REMOVE
+            else:
+                colour = MUTE
+            painted.append("[%s]%s[/]" % (colour, safe))
+        return "\n".join(painted)
+
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+
 class PreviewScreen(ModalScreen):
     """The focused skill's SKILL.md."""
 
@@ -595,6 +737,7 @@ class SkillsApp(App):
         Binding("i", "install", "install"),
         Binding("g", "toggle_guided", "guided"),
         Binding("u", "toggle_pane", "manage"),
+        Binding("c", "cycle_resolution", "fix"),
         Binding("x", "apply", "apply"),
         Binding("q", "quit", "quit"),
     ]
@@ -624,7 +767,14 @@ class SkillsApp(App):
         self.pane = pane if pane in PANES else "skills"
         self.installed_count = 0
         self.removed_count = 0
+        self.resolved_count = 0
         self.failures = 0
+        # Refreshed by rescan() whenever the manage pane is drawn; nothing here
+        # is cached across an apply, because the disk is the only authority.
+        self.inventory = None
+        self.findings = []
+        self.chosen = {}  # finding key -> index into its resolutions
+        self.picked = set()  # finding keys selected for action
         self._guided_requested = guided
         self.step = 0
         self._frame = 0
@@ -723,7 +873,7 @@ class SkillsApp(App):
         return [
             widget
             for widget in self._main.query(Static)
-            if isinstance(widget, (SkillRow, HiddenSkillRow, ManageRow))
+            if isinstance(widget, (SkillRow, HiddenSkillRow, ManageRow, FindingRow))
         ]
 
     def choices(self) -> list:
@@ -798,6 +948,27 @@ class SkillsApp(App):
                 roots.append(root)
         return install.discover(roots, self.home, self.bin_dir())
 
+    def scan_inventory(self):
+        """This app's roots plus everything the registry remembers."""
+        return inventory.scan(self.home, [self.project_dir])
+
+    def rescan(self) -> None:
+        """Refresh the findings, keeping any choice still worth keeping."""
+        self.inventory = self.scan_inventory()
+        self.findings = inventory.findings(self.inventory)
+        live = {self.finding_key(finding) for finding in self.findings}
+        self.chosen = {key: index for key, index in self.chosen.items() if key in live}
+        self.picked = {key for key in self.picked if key in live}
+
+    @staticmethod
+    def finding_key(finding) -> str:
+        """Stable across a rescan, so a cycled choice survives one."""
+        return "%s|%s|%s" % (
+            finding.kind,
+            finding.name,
+            ",".join(str(placement.path) for placement in finding.placements),
+        )
+
     def manage_sections(self) -> list:
         """(title, detail, items) per kind, empty groups dropped."""
         items = self.discovered()
@@ -828,6 +999,10 @@ class SkillsApp(App):
     # -- rendering ------------------------------------------------------
 
     def render_all(self) -> None:
+        # Before anything paints: the rail counts findings and the main pane
+        # lists them, so both have to be looking at the same scan.
+        if self.pane == "manage":
+            self.rescan()
         self.render_head()
         self.render_side()
         self.render_main()
@@ -903,7 +1078,16 @@ class SkillsApp(App):
         sweeps every root it knows about rather than the ones a mode applies to.
         """
         items = self.discovered()
-        lines = ["[b %s]INSTALLED[/]" % MUTE]
+        lines = ["[b %s]FINDINGS[/]" % MUTE]
+        if not self.findings:
+            lines.append("[%s]   nothing inconsistent[/]" % MUTE)
+        for kind in inventory.KINDS:
+            count = sum(1 for finding in self.findings if finding.kind == kind)
+            if count:
+                # The rail is 26 columns wide; the longest kind is not.
+                label = kind if len(kind) <= 18 else kind[:17] + "…"
+                lines.append("[%s]  %-18s %d[/]" % (ADVISE, label, count))
+        lines.append("\n[b %s]INSTALLED[/]" % MUTE)
         for kind, (title, _detail) in MANAGE_TITLES.items():
             count = sum(1 for item in items if item.kind == kind)
             label = "%-13s %d" % (title.lower(), count)
@@ -918,7 +1102,35 @@ class SkillsApp(App):
         for root in roots:
             lines.append("[%s] ▸ %s[/]" % (WHERE, root))
         lines.append("[%s]   %s[/]" % (WHERE, self.bin_dir()))
+        for root in (self.inventory.missing_roots if self.inventory else ()):
+            lines.append("[%s]   %s (missing)[/]" % (ADVISE, root))
         return "\n".join(lines)
+
+    def main_findings(self) -> None:
+        """The findings section, above everything the inventory lists."""
+        self._main.mount(
+            self.section_header(
+                "INCONSISTENCIES",
+                "what disagrees with this checkout; C cycles the fix, ↵ diffs it",
+            )
+        )
+        if not self.findings:
+            skills = sum(
+                1 for item in self.discovered() if item.kind == "skill"
+            )
+            roots = len(self.inventory.roots) if self.inventory else 0
+            self._main.mount(
+                Static(
+                    "[%s]✓ Nothing inconsistent.[/]\n\n[%s]%d skills across %d "
+                    "roots, all matching this checkout.[/]" % (KEEP, MUTE, skills, roots)
+                )
+            )
+            return
+        for finding in self.findings:
+            key = self.finding_key(finding)
+            self._main.mount(
+                FindingRow(finding, self.chosen.get(key, 0), key in self.picked)
+            )
 
     def main_manage(self) -> None:
         groups = self.manage_sections()
@@ -930,6 +1142,7 @@ class SkillsApp(App):
                 )
             )
             return
+        self.main_findings()
         for title, detail, items in groups:
             self._main.mount(self.section_header(title, detail))
             for item in items:
@@ -938,11 +1151,14 @@ class SkillsApp(App):
     def manage_rows(self) -> list:
         return list(self._main.query(ManageRow))
 
+    def finding_rows(self) -> list:
+        return list(self._main.query(FindingRow))
+
     def render_main(self) -> None:
         if self.pane == "manage":
             self._main.remove_children()
             self.main_manage()
-            rows = self.manage_rows()
+            rows = self.nav_rows()
             if rows:
                 rows[0].focus()
             return
@@ -1174,8 +1390,8 @@ class SkillsApp(App):
     def render_foot(self) -> None:
         if self.pane == "manage":
             keys = [
-                ("SPACE", "select", YOU), ("A", "all", YOU), ("X", "apply", REMOVE),
-                ("U", "skills", MUTE), ("S", "scope", WHERE), ("Q", "quit", MUTE),
+                ("SPACE", "select", YOU), ("C", "fix", REPLACE), ("↵", "diff", MUTE),
+                ("X", "apply", REMOVE), ("U", "skills", MUTE), ("Q", "quit", MUTE),
             ]
             self._foot.update("  ".join(chip(k, v, c) for k, v, c in keys))
             return
@@ -1203,7 +1419,7 @@ class SkillsApp(App):
             self._status.update(message)
             return
         count = (
-            sum(1 for row in self.manage_rows() if row.selected)
+            sum(1 for row in self.manage_rows() if row.selected) + len(self.picked)
             if self.pane == "manage"
             else len(self.selected)
         )
@@ -1224,7 +1440,7 @@ class SkillsApp(App):
 
     def focused_row(self):
         node = self.focused
-        types = (SkillRow, ChoiceRow, HiddenSkillRow, ManageRow)
+        types = (SkillRow, ChoiceRow, HiddenSkillRow, ManageRow, FindingRow)
         return node if isinstance(node, types) else None
 
     def action_move(self, delta: int) -> None:
@@ -1294,7 +1510,15 @@ class SkillsApp(App):
 
     def action_toggle(self) -> None:
         row = self.focused_row()
-        if isinstance(row, ManageRow):
+        if isinstance(row, FindingRow):
+            row.toggle()
+            key = self.finding_key(row.finding)
+            if row.selected:
+                self.picked.add(key)
+            else:
+                self.picked.discard(key)
+            self.render_status()
+        elif isinstance(row, ManageRow):
             row.toggle()
             self.render_status()
         elif isinstance(row, HiddenSkillRow):
@@ -1348,7 +1572,9 @@ class SkillsApp(App):
     def action_advance(self) -> None:
         if not self.guided():
             row = self.focused_row()
-            if isinstance(row, SkillRow):
+            if isinstance(row, FindingRow):
+                self.open_diff(row.finding)
+            elif isinstance(row, SkillRow):
                 self.push_screen(PreviewScreen(row.skill))
             return
         if self.step == 4:
@@ -1414,6 +1640,7 @@ class SkillsApp(App):
     def action_toggle_pane(self) -> None:
         self.pane = "manage" if self.pane == "skills" else "skills"
         self.selected.clear()
+        self.picked.clear()
         self.step = 0
         self.render_all()
 
@@ -1443,10 +1670,37 @@ class SkillsApp(App):
 
     # -- managing -------------------------------------------------------
 
+    def open_diff(self, finding) -> None:
+        """Show what a finding is actually about, or say there is nothing to show."""
+        if not finding.diff_pair:
+            self.render_status("[%s]nothing to diff for this one[/]" % MUTE)
+            return
+        left, right = finding.diff_pair
+        labels = finding.diff_labels or (str(left), str(right))
+        self.push_screen(
+            DiffScreen(
+                "%s: %s ↔ %s" % (finding.name, labels[0], labels[1]),
+                inventory.diff_text(left, right, labels[0], labels[1]),
+            )
+        )
+
+    def action_cycle_resolution(self) -> None:
+        if self.pane != "manage":
+            return
+        row = self.focused_row()
+        if not isinstance(row, FindingRow):
+            self.render_status("[%s]C chooses a fix for a finding[/]" % ADVISE)
+            return
+        row.cycle()
+        self.chosen[self.finding_key(row.finding)] = row.index
+        self.render_status("[%s]%s[/]" % (MUTE, row.resolution.label))
+
     def action_apply(self) -> None:
         if self.pane != "manage":
             return
-        entries = self._removal_entries()
+        # One modal for both lists: a run that reinstalls one skill and removes
+        # another is one decision, and splitting it would hide half of it.
+        entries = self._resolution_entries() + self._removal_entries()
         if not entries:
             self.render_status("[%s]select something first[/]" % ADVISE)
             return
@@ -1454,6 +1708,25 @@ class SkillsApp(App):
             self.push_screen(ConfirmChanges(entries), self._after_confirm)
             return
         self.start_apply()
+
+    def picked_resolutions(self) -> list:
+        """(finding, resolution) for every finding selected in the pane."""
+        return [
+            (row.finding, row.resolution)
+            for row in self.finding_rows()
+            if self.finding_key(row.finding) in self.picked
+        ]
+
+    def _resolution_entries(self) -> list:
+        """(label, consequence, paths) for every picked finding, for the modal."""
+        return [
+            (
+                "%s: %s" % (finding.name, resolution.label),
+                resolution.consequence,
+                [str(fix.root / fix.name) for fix in resolution.fixes],
+            )
+            for finding, resolution in self.picked_resolutions()
+        ]
 
     def _removal_entries(self) -> list:
         """(label, consequence, paths) for every selected row, for the modal."""
@@ -1475,18 +1748,24 @@ class SkillsApp(App):
 
     def start_apply(self) -> None:
         items = [row.item for row in self.manage_rows() if row.selected]
-        if not items:
+        chosen = self.picked_resolutions()
+        if not items and not chosen:
             self.render_status("[%s]select something first[/]" % ADVISE)
             return
         self._spinning = True
-        self._spin_verb = "removing"
+        self._spin_verb = "applying" if chosen else "removing"
         self.removed_count = 0
+        self.resolved_count = 0
         self.failures = 0
-        self.apply_worker(items)
+        self.apply_worker(items, chosen)
 
     @work(thread=True, exclusive=True)
-    def apply_worker(self, items: list) -> None:
-        """Every removal goes through an install.* primitive, never through here."""
+    def apply_worker(self, items: list, chosen: list) -> None:
+        """Every change goes through an install.* primitive, never through here.
+
+        One worker for both lists, because the workers are exclusive: starting
+        a second would cancel the first halfway through.
+        """
         done = []
         roots = []
         for item in items:
@@ -1512,9 +1791,19 @@ class SkillsApp(App):
                 done.append(item.name)
             except (install.InstallError, OSError) as exc:
                 self.call_from_thread(self.note_failure, item.name, str(exc))
+        applied = 0
+        for finding, resolution in chosen:
+            try:
+                inventory.apply_resolution(resolution, False)
+                applied += 1
+                for fix in resolution.fixes:
+                    if fix.root not in roots and fix.action == inventory.UNINSTALL:
+                        roots.append(fix.root)
+            except (install.InstallError, OSError) as exc:
+                self.call_from_thread(self.note_failure, finding.name, str(exc))
         for root in roots:
             install.prune_root(root, False)
-        self.call_from_thread(self.finish_apply, done)
+        self.call_from_thread(self.finish_apply, done, applied)
 
     def external_uninstallers(self) -> dict:
         """name -> a no-argument call removing what this collection recorded.
@@ -1538,20 +1827,30 @@ class SkillsApp(App):
             raise install.InstallError(f"no uninstaller wired for external tool: {name}")
         runner()
 
-    def finish_apply(self, names: Sequence[str]) -> None:
+    def finish_apply(self, names: Sequence[str], applied: int = 0) -> None:
         self._spinning = False
         self._spin_verb = "installing"
-        self.removed_count = len(names) - self.failures
+        # `names` already holds only what succeeded, so it is the count.
+        self.removed_count = len(names)
+        self.resolved_count = applied
+        self.picked.clear()
+        # render_all rescans, so the counts below describe the disk as it is
+        # now rather than as it was when the worker started.
         self.render_all()
         if self.failures:
             self.render_status(
                 "[%s]× %d failed[/] [%s]· %d removed[/]"
                 % (FAIL, self.failures, MUTE, self.removed_count)
             )
-        else:
-            self.render_status(
-                "[%s]✓ %d removed[/]" % (KEEP, self.removed_count)
+            return
+        message = "[%s]✓ %d removed[/]" % (KEEP, self.removed_count)
+        if applied:
+            message += " [%s]· ✓ %d fixed · %d inconsistencies left[/]" % (
+                MUTE,
+                applied,
+                len(self.findings),
             )
+        self.render_status(message)
 
     # -- installing -----------------------------------------------------
 
