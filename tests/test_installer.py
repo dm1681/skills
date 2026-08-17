@@ -18,7 +18,7 @@ import install  # noqa: E402
 
 INSTALLER = ROOT / "install.py"
 SKILL = "wow-addon-dev"
-EXPLAINER_SKILL = "semantic-pr-review"
+EXPLAINER_SKILL = "semantic-review"
 BUNDLED = sorted(
     path.name
     for path in (ROOT / "skills").iterdir()

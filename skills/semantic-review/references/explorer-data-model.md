@@ -1,4 +1,4 @@
-# PR Explorer Data Model
+# Explorer Data Model
 
 Use this model to separate source-backed analysis from presentation. Populate it only after verifying every node and edge in source, tests, or interface documentation.
 
@@ -6,7 +6,7 @@ Use this model to separate source-backed analysis from presentation. Populate it
 
 | Field | Required content |
 | --- | --- |
-| `pr` | `number`, `repository`, `head_sha`, optional `evidence_sha`, optional `url` |
+| `pr` | Snapshot identity for any changeset: `number`, `repository`, `head_sha`, optional `evidence_sha`, optional `url` |
 | `summary` | `goal`, `old_to_new`, `ownership_chain`, `payoff`, and `residual_debt` |
 | `systems` | Stable owner or branch identities with `id`, `label`, and theme `color_token` |
 | `nodes` | Semantic components keyed by unique `id` |
@@ -16,11 +16,20 @@ Use this model to separate source-backed analysis from presentation. Populate it
 | `convergence_node` | Shared normalized output node |
 | `shared_after` | Ordered nodes after convergence |
 
+## Naming the changeset
+
+The snapshot block is keyed `pr` because a pull request was the first supported input, but it identifies any changeset:
+
+- **Pull request** — `number` is the PR number, `repository` is `owner/name`, `head_sha` is the head commit.
+- **Ref comparison, commit range, or committed working-tree snapshot** — `number` carries a short changeset label instead (`main...feature`, `HEAD~3..HEAD`, `snapshot 9f2c1ab`), `repository` names the origin the commits are reachable in, and `head_sha` is the analyzed commit. The page prints a bare label as-is and only prefixes `PR ` when the label is a number.
+
+Two constraints outlive the rename. Excerpts are materialized from Git blobs, so the analyzed snapshot must be a commit — review uncommitted work against a snapshot commit or worktree, or deliver the narrative walkthrough without the explorer. Source links are built from `repository` as GitHub blob URLs, so a changeset with no GitHub-reachable origin should be delivered with local editor links and a stated limitation rather than fabricated web links.
+
 ## Choosing the analyzed snapshot
 
 Everything resolves against one commit. Normally that is `pr.head_sha`.
 
-A deletion-only PR has no evidence at its head: the files worth explaining exist only in the pre-image. Set `pr.evidence_sha` to the commit the excerpts come from and leave `pr.head_sha` as the real head. The scaffold materializes from `evidence_sha`, records a notice naming both commits, and renders that notice on the page, so a pre-image anchor is always visible to the reader. Never overload `head_sha` to mean a commit that is not the head.
+A deletion-only changeset has no evidence at its head: the files worth explaining exist only in the pre-image. Set `pr.evidence_sha` to the commit the excerpts come from and leave `pr.head_sha` as the real head. The scaffold materializes from `evidence_sha`, records a notice naming both commits, and renders that notice on the page, so a pre-image anchor is always visible to the reader. Never overload `head_sha` to mean a commit that is not the head.
 
 ## Backtick handling per field
 
@@ -103,7 +112,7 @@ Every runtime edge must contain:
 
 Use an empty `transfer` list only when the edge explicitly represents control flow with no runtime payload. Cross-cutting tests and documentation belong on a separate evidence rail rather than payload-free runtime edges.
 
-Classify the handoff itself, not merely its endpoint nodes. An edge is `context` when the PR leaves the transfer and transformation unchanged, even if an adjacent node changed. Use the edge status to style the visible path segment in both full-path and delta views.
+Classify the handoff itself, not merely its endpoint nodes. An edge is `context` when the changeset leaves the transfer and transformation unchanged, even if an adjacent node changed. Use the edge status to style the visible path segment in both full-path and delta views.
 
 ## Branch record
 
@@ -172,4 +181,4 @@ A real implementation branch should normally include adapter, translated request
 }
 ```
 
-The example shows structure only. Do not reuse its claims or labels without PR-specific evidence.
+The example shows structure only. Do not reuse its claims or labels without changeset-specific evidence.

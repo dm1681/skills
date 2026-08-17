@@ -9,7 +9,7 @@ self-contained under [`skills/`](skills/).
 | Skill | Purpose |
 | --- | --- |
 | `review-loop` | Drive a pull request through repeated review rounds until every surface reports no findings, telling a clean verdict apart from a stalled or skipped one. |
-| `semantic-pr-review` | Explain a pull request as a source-verified semantic hierarchy and interactive flowchart. |
+| `semantic-review` | Explain any changeset — pull request, ref range, or working tree — as a source-verified semantic hierarchy and interactive flowchart. |
 | `viz-driven-dev` | Build the plot, overlay, or video that would show a feature's effect before implementing it, then regenerate it from real output. |
 | `wow-addon-dev` | Build, debug, package, and publish retail World of Warcraft addons under the taint and secret-value fences. |
 
@@ -31,16 +31,18 @@ gate alone when a repo has no model reviewer at all.
 [`references/traps.md`](skills/review-loop/references/traps.md) catalogues the
 failure modes that produce a green check while reviewing nothing.
 
-## Semantic PR review
+## Semantic review
 
-`semantic-pr-review` turns one pull request into an architectural walkthrough
-and a self-contained interactive flowchart instead of a file-by-file diff
-summary. It pins the immutable head SHA, derives semantic layers from
-responsibilities rather than directories, and records every runtime handoff
-with its transferred DTOs, optionality, containers, and evidence.
+`semantic-review` turns one changeset into an architectural walkthrough and a
+self-contained interactive flowchart instead of a file-by-file diff summary.
+The changeset can be a GitHub pull request, a branch or ref comparison, a
+commit range, or the staged and unstaged work in a checkout. It pins the
+immutable analyzed SHA, derives semantic layers from responsibilities rather
+than directories, and records every runtime handoff with its transferred DTOs,
+optionality, containers, and evidence.
 
-The skill is deliberately host-neutral. It uses any available read-only GitHub
-integration, CLI, or local Git ref, and it requires no companion skill or
+The skill is deliberately host-neutral. A local changeset needs Git alone; a
+pull request uses any available read-only GitHub integration, CLI, or Git ref, and it requires no companion skill or
 visualization surface: filesystem access, Python 3, Git, and a browser are
 enough. A code graph such as Graphify is used only as an optional navigation
 fast path, never as a source of truth.
@@ -261,7 +263,7 @@ Examples:
 ./install.sh --agent claude
 
 # Install one skill only.
-./install.sh --skill semantic-pr-review
+./install.sh --skill semantic-review
 
 # Install shared skills into a repository.
 ./install.sh --scope project --project-dir /path/to/repo

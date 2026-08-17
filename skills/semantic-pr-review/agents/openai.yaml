@@ -1,4 +1,0 @@
-interface:
-  display_name: "Semantic PR Review"
-  short_description: "Build portable, snapshot-verified PR flows"
-  default_prompt: "Use $semantic-pr-review to pull this PR, pin its head SHA, explain every semantic layer, and use the bundled scripts to build a self-contained interactive flowchart whose handoffs and source excerpts verify against that exact snapshot."

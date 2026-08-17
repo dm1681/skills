@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render a PR explorer fragment in a self-contained standalone wrapper."""
+"""Render a changeset explorer fragment in a self-contained standalone wrapper."""
 
 from __future__ import annotations
 
@@ -90,7 +90,7 @@ def main() -> int:
     parser.add_argument(
         "--title",
         required=True,
-        help="Document title, including the PR number",
+        help="Document title, including the changeset identifier",
     )
     parser.add_argument(
         "--stylesheet",
