@@ -78,6 +78,21 @@ class MattSkillsTests(unittest.TestCase):
                 INSTALLER.matt_skill_sources(checkout),
             )
 
+    def test_a_nested_skill_is_ignored_whatever_the_walk_order(self) -> None:
+        """A directory sorting before SKILL.md must not shadow its own skill.
+
+        Path order is not ancestor-first: `Examples/` sorts ahead of `SKILL.md`
+        on POSIX, and every nested name does on Windows, where paths compare as
+        one case-folded string rather than component by component.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            checkout = Path(directory)
+            write_upstream(checkout, "engineering/tdd", "engineering/tdd/Examples/tdd")
+            self.assertEqual(
+                [checkout / "skills" / "engineering" / "tdd"],
+                INSTALLER.matt_skill_sources(checkout),
+            )
+
     def test_two_categories_claiming_one_name_stop_the_install(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             checkout = Path(directory)

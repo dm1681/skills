@@ -442,7 +442,14 @@ def matt_skill_sources(checkout: Path) -> list[Path]:
             f"{MATT_SKILLS_SOURCE} checkout has no skills/ directory: {checkout}"
         )
     sources: dict[str, Path] = {}
-    for entrypoint in sorted(root.rglob("SKILL.md")):
+    # Shallowest first, so a skill is always seen before anything nested inside
+    # it. Plain path order does not guarantee that: it puts `tdd/SKILL.md`
+    # before `tdd/references/tdd/SKILL.md` on POSIX and after it on Windows,
+    # where paths compare as one case-folded string rather than by component.
+    walked = sorted(
+        root.rglob("SKILL.md"), key=lambda path: (len(path.parts), path.parts)
+    )
+    for entrypoint in walked:
         skill_dir = entrypoint.parent
         relative = skill_dir.relative_to(root)
         if any(part in MATT_SKILLS_SKIP for part in relative.parts):
