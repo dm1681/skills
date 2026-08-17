@@ -160,11 +160,76 @@ class MattSkillsTests(unittest.TestCase):
             with self.assertRaisesRegex(INSTALLER.InstallError, "no skills/ directory"):
                 INSTALLER.matt_skill_sources(Path(directory))
 
+    @unittest.skipIf(INSTALLER.shutil.which("git") is None, "git is not installed")
+    def test_a_rewriting_gitattributes_is_caught_against_a_real_checkout(self) -> None:
+        """The one test that runs git for real, because mocks cannot show this.
+
+        A `.gitattributes` carrying `eol=crlf` outranks the config the checkout
+        passes, and `git status` still calls the result clean. Built from a
+        local repository, so it needs no network.
+        """
+        git = INSTALLER.shutil.which("git")
+        with tempfile.TemporaryDirectory() as directory:
+            upstream = Path(directory) / "upstream"
+            (upstream / "skills" / "engineering" / "tdd").mkdir(parents=True)
+            (upstream / ".gitattributes").write_text("* text eol=crlf\n", encoding="utf-8")
+            (upstream / "skills" / "engineering" / "tdd" / "SKILL.md").write_text(
+                "---\nname: tdd\n---\nbody\n", encoding="utf-8", newline="\n"
+            )
+            for command in (
+                [git, "init", "--quiet", "--template="],
+                [git, "config", "user.email", "test@example.com"],
+                [git, "config", "user.name", "Test"],
+                [git, "-c", "core.safecrlf=false", "add", "--all"],
+                [git, "commit", "--quiet", "--message", "upstream"],
+            ):
+                INSTALLER._run(command, upstream, INSTALLER.MATT_SKILLS_GIT_ENV)
+
+            checkout = Path(directory) / "checkout"
+            checkout.mkdir()
+            commands = INSTALLER.matt_skills_fetch_commands("HEAD", git)
+            commands[1] = [git, "fetch", "--quiet", "--depth", "1", str(upstream), "HEAD"]
+            for command in commands:
+                INSTALLER._run(command, checkout, INSTALLER.MATT_SKILLS_GIT_ENV)
+
+            self.assertEqual("", INSTALLER.matt_skills_worktree_changes(checkout, git))
+            self.assertEqual(
+                ["skills/engineering/tdd/SKILL.md"],
+                INSTALLER.matt_skills_content_mismatches(checkout, git),
+            )
+
+    @unittest.skipIf(INSTALLER.shutil.which("git") is None, "git is not installed")
+    def test_an_untouched_real_checkout_reports_no_mismatch(self) -> None:
+        git = INSTALLER.shutil.which("git")
+        with tempfile.TemporaryDirectory() as directory:
+            upstream = Path(directory) / "upstream"
+            (upstream / "skills" / "engineering" / "tdd").mkdir(parents=True)
+            (upstream / "skills" / "engineering" / "tdd" / "SKILL.md").write_text(
+                "---\nname: tdd\n---\nbody\n", encoding="utf-8", newline="\n"
+            )
+            for command in (
+                [git, "init", "--quiet", "--template="],
+                [git, "config", "user.email", "test@example.com"],
+                [git, "config", "user.name", "Test"],
+                [git, "-c", "core.safecrlf=false", "add", "--all"],
+                [git, "commit", "--quiet", "--message", "upstream"],
+            ):
+                INSTALLER._run(command, upstream, INSTALLER.MATT_SKILLS_GIT_ENV)
+
+            checkout = Path(directory) / "checkout"
+            checkout.mkdir()
+            commands = INSTALLER.matt_skills_fetch_commands("HEAD", git)
+            commands[1] = [git, "fetch", "--quiet", "--depth", "1", str(upstream), "HEAD"]
+            for command in commands:
+                INSTALLER._run(command, checkout, INSTALLER.MATT_SKILLS_GIT_ENV)
+
+            self.assertEqual([], INSTALLER.matt_skills_content_mismatches(checkout, git))
+
     def test_install_fetches_then_copies_to_exact_resolved_root(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory).resolve() / ".agents" / "skills"
 
-            def fake_run(command: list[str], cwd: Path) -> None:
+            def fake_run(command: list[str], cwd: Path, env=None) -> None:
                 if command[1] != "fetch":
                     return
                 write_upstream(cwd, "engineering/setup-matt-pocock-skills")
@@ -176,6 +241,9 @@ class MattSkillsTests(unittest.TestCase):
                 ),
                 mock.patch.object(
                     INSTALLER, "matt_skills_worktree_changes", return_value=""
+                ),
+                mock.patch.object(
+                    INSTALLER, "matt_skills_content_mismatches", return_value=[]
                 ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run) as run,
             ):
@@ -196,7 +264,7 @@ class MattSkillsTests(unittest.TestCase):
             base = Path(directory).resolve()
             roots = [base / ".agents" / "skills", base / ".claude" / "skills"]
 
-            def fake_run(command: list[str], cwd: Path) -> None:
+            def fake_run(command: list[str], cwd: Path, env=None) -> None:
                 if command[1] == "fetch":
                     write_upstream(
                         cwd, "engineering/setup-matt-pocock-skills", "productivity/teach"
@@ -209,6 +277,9 @@ class MattSkillsTests(unittest.TestCase):
                 ),
                 mock.patch.object(
                     INSTALLER, "matt_skills_worktree_changes", return_value=""
+                ),
+                mock.patch.object(
+                    INSTALLER, "matt_skills_content_mismatches", return_value=[]
                 ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
@@ -225,7 +296,7 @@ class MattSkillsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory).resolve() / ".agents" / "skills"
 
-            def fake_run(command: list[str], cwd: Path) -> None:
+            def fake_run(command: list[str], cwd: Path, env=None) -> None:
                 if command[1] == "fetch":
                     write_upstream(cwd, "engineering/tdd")
 
@@ -238,6 +309,9 @@ class MattSkillsTests(unittest.TestCase):
                 ),
                 mock.patch.object(
                     INSTALLER, "matt_skills_worktree_changes", return_value=""
+                ),
+                mock.patch.object(
+                    INSTALLER, "matt_skills_content_mismatches", return_value=[]
                 ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
@@ -316,7 +390,7 @@ class MattSkillsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory).resolve() / "skills"
 
-            def fake_run(command: list[str], cwd: Path) -> None:
+            def fake_run(command: list[str], cwd: Path, env=None) -> None:
                 if command[1] == "fetch":
                     write_upstream(cwd, "engineering/setup-matt-pocock-skills")
 
@@ -325,6 +399,9 @@ class MattSkillsTests(unittest.TestCase):
                 mock.patch.object(INSTALLER, "matt_skills_head", return_value="f" * 40),
                 mock.patch.object(
                     INSTALLER, "matt_skills_worktree_changes", return_value=""
+                ),
+                mock.patch.object(
+                    INSTALLER, "matt_skills_content_mismatches", return_value=[]
                 ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
@@ -343,7 +420,7 @@ class MattSkillsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory).resolve() / "skills"
 
-            def fake_run(command: list[str], cwd: Path) -> None:
+            def fake_run(command: list[str], cwd: Path, env=None) -> None:
                 if command[1] == "fetch":
                     write_upstream(cwd, "engineering/setup-matt-pocock-skills")
 
@@ -352,6 +429,9 @@ class MattSkillsTests(unittest.TestCase):
                 mock.patch.object(INSTALLER, "matt_skills_head", return_value="f" * 40),
                 mock.patch.object(
                     INSTALLER, "matt_skills_worktree_changes", return_value=""
+                ),
+                mock.patch.object(
+                    INSTALLER, "matt_skills_content_mismatches", return_value=[]
                 ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
@@ -372,7 +452,7 @@ class MattSkillsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory).resolve() / "skills"
 
-            def fake_run(command: list[str], cwd: Path) -> None:
+            def fake_run(command: list[str], cwd: Path, env=None) -> None:
                 if command[1] == "fetch":
                     write_upstream(cwd, "engineering/setup-matt-pocock-skills")
 
@@ -404,7 +484,7 @@ class MattSkillsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory).resolve() / "skills"
 
-            def fake_run(command: list[str], cwd: Path) -> None:
+            def fake_run(command: list[str], cwd: Path, env=None) -> None:
                 if command[1] == "fetch":
                     write_upstream(cwd, "engineering/setup-matt-pocock-skills")
 
@@ -429,11 +509,128 @@ class MattSkillsTests(unittest.TestCase):
                         emit=lambda _: None,
                     )
 
+    def test_rewritten_bytes_stop_the_install(self) -> None:
+        """A `.gitattributes` `eol` setting outranks the checkout's config.
+
+        Git reports such a checkout as clean, because it applies the same
+        attribute when comparing back, so only the raw bytes give it away.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory).resolve() / "skills"
+
+            def fake_run(command: list[str], cwd: Path, env=None) -> None:
+                if command[1] == "fetch":
+                    write_upstream(cwd, "engineering/setup-matt-pocock-skills")
+
+            with (
+                mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
+                mock.patch.object(
+                    INSTALLER,
+                    "matt_skills_head",
+                    return_value=INSTALLER.MATT_SKILLS_COMMIT,
+                ),
+                mock.patch.object(
+                    INSTALLER, "matt_skills_worktree_changes", return_value=""
+                ),
+                mock.patch.object(
+                    INSTALLER,
+                    "matt_skills_content_mismatches",
+                    return_value=["skills/engineering/tdd/SKILL.md"],
+                ),
+                mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
+            ):
+                with self.assertRaisesRegex(INSTALLER.InstallError, "does not hold the bytes"):
+                    INSTALLER.install_matt_skills(
+                        ["claude"],
+                        [destination],
+                        force=False,
+                        dry_run=False,
+                        emit=lambda _: None,
+                    )
+            self.assertFalse(destination.exists())
+
+    def test_unverifiable_bytes_stop_the_install(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory).resolve() / "skills"
+
+            def fake_run(command: list[str], cwd: Path, env=None) -> None:
+                if command[1] == "fetch":
+                    write_upstream(cwd, "engineering/setup-matt-pocock-skills")
+
+            with (
+                mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
+                mock.patch.object(
+                    INSTALLER,
+                    "matt_skills_head",
+                    return_value=INSTALLER.MATT_SKILLS_COMMIT,
+                ),
+                mock.patch.object(
+                    INSTALLER, "matt_skills_worktree_changes", return_value=""
+                ),
+                mock.patch.object(
+                    INSTALLER, "matt_skills_content_mismatches", return_value=None
+                ),
+                mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
+            ):
+                with self.assertRaisesRegex(INSTALLER.InstallError, "could not confirm"):
+                    INSTALLER.install_matt_skills(
+                        ["claude"],
+                        [destination],
+                        force=False,
+                        dry_run=False,
+                        emit=lambda _: None,
+                    )
+
+    def test_git_is_never_left_waiting_for_credentials(self) -> None:
+        """An installer that asks for a password waits forever; nobody is there.
+
+        The fetch carries the environment that turns a 401 into an immediate
+        failure, both for the terminal prompt and for an askpass helper, which
+        opens a dialog even where no terminal could have asked.
+        """
+        self.assertEqual(
+            {"GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "echo"},
+            INSTALLER.MATT_SKILLS_GIT_ENV,
+        )
+        seen: list = []
+
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory).resolve() / "skills"
+
+            def fake_run(command: list[str], cwd: Path, env=None) -> None:
+                seen.append(env)
+                if command[1] == "fetch":
+                    write_upstream(cwd, "engineering/setup-matt-pocock-skills")
+
+            with (
+                mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
+                mock.patch.object(
+                    INSTALLER,
+                    "matt_skills_head",
+                    return_value=INSTALLER.MATT_SKILLS_COMMIT,
+                ),
+                mock.patch.object(
+                    INSTALLER, "matt_skills_worktree_changes", return_value=""
+                ),
+                mock.patch.object(
+                    INSTALLER, "matt_skills_content_mismatches", return_value=[]
+                ),
+                mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
+            ):
+                INSTALLER.install_matt_skills(
+                    ["claude"],
+                    [destination],
+                    force=False,
+                    dry_run=False,
+                    emit=lambda _: None,
+                )
+        self.assertEqual([INSTALLER.MATT_SKILLS_GIT_ENV] * 3, seen)
+
     def test_an_unverifiable_pin_stops_the_default_install(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory).resolve() / "skills"
 
-            def fake_run(command: list[str], cwd: Path) -> None:
+            def fake_run(command: list[str], cwd: Path, env=None) -> None:
                 if command[1] == "fetch":
                     write_upstream(cwd, "engineering/setup-matt-pocock-skills")
 
@@ -442,6 +639,9 @@ class MattSkillsTests(unittest.TestCase):
                 mock.patch.object(INSTALLER, "matt_skills_head", return_value=""),
                 mock.patch.object(
                     INSTALLER, "matt_skills_worktree_changes", return_value=""
+                ),
+                mock.patch.object(
+                    INSTALLER, "matt_skills_content_mismatches", return_value=[]
                 ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
@@ -529,7 +729,7 @@ class ModelInvocationTests(unittest.TestCase):
         """The refresh overwrites the frontmatter edit; the record restores it."""
         INSTALLER.record_model_decisions([self.root], {"grill-with-docs": "enabled"})
 
-        def fake_run(command: list, cwd: Path) -> None:
+        def fake_run(command: list, cwd: Path, env=None) -> None:
             if command[1] != "fetch":
                 return
             upstream = cwd / "skills" / "engineering"
@@ -539,10 +739,13 @@ class ModelInvocationTests(unittest.TestCase):
         with (
             mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
             mock.patch.object(
-                    INSTALLER, "matt_skills_head", return_value=INSTALLER.MATT_SKILLS_COMMIT
-                ),
+                INSTALLER, "matt_skills_head", return_value=INSTALLER.MATT_SKILLS_COMMIT
+            ),
             mock.patch.object(
                 INSTALLER, "matt_skills_worktree_changes", return_value=""
+            ),
+            mock.patch.object(
+                INSTALLER, "matt_skills_content_mismatches", return_value=[]
             ),
             mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
         ):

@@ -58,6 +58,11 @@ MATT_SKILLS_COMMIT = "6acc160e4e0cd062dbbbd7a1b26ae92855edf07e"
 # path component only, so a skill that merely has `deprecated` deeper in its
 # path still installs.
 MATT_SKILLS_SKIP = ("deprecated",)
+# A credential prompt inside an installer waits forever: a scripted or cloud run
+# has nobody to answer it, and an askpass helper opens a dialog even where no
+# terminal could have asked. A 401 — a proxy in the way, a repository URL
+# pointing somewhere private — should fail in a second with a message instead.
+MATT_SKILLS_GIT_ENV = {"GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "echo"}
 
 
 class InstallError(RuntimeError):
@@ -310,8 +315,13 @@ def graphify_install_commands(
     return commands
 
 
-def _run(command: list[str], cwd: Path) -> None:
-    result = subprocess.run(command, cwd=cwd, check=False)
+def _run(
+    command: list[str], cwd: Path, env: Optional[Mapping[str, str]] = None
+) -> None:
+    """Run a command, adding `env` on top of the inherited environment."""
+    result = subprocess.run(
+        command, cwd=cwd, check=False, env={**os.environ, **env} if env else None
+    )
     if result.returncode != 0:
         raise InstallError(
             f"command failed with exit code {result.returncode}: {shlex.join(command)}"
@@ -489,6 +499,66 @@ def matt_skills_worktree_changes(
     return result.stdout.strip() if result.returncode == 0 else None
 
 
+def matt_skills_content_mismatches(
+    checkout: Path, executable: str = "git"
+) -> Optional[list[str]]:
+    """Paths whose bytes on disk differ from the commit, or None if unknown.
+
+    `git status` cannot answer this one. A `.gitattributes` in the fetched
+    revision can set `eol`, which outranks the config the checkout passes and
+    rewrites files on the way out — and status still calls the result clean,
+    because it applies that same attribute on the way back in. Hashing the
+    bytes as they actually sit on disk is the one comparison an attribute
+    cannot reach, and it catches any other rewrite for free.
+
+    Symlinks are skipped: hashing one reads whatever it points at rather than
+    the link, and `git status` already covers a changed link.
+    """
+    listing = subprocess.run(
+        [executable, "ls-tree", "-r", "-z", "FETCH_HEAD", "--", "skills/"],
+        cwd=checkout,
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    if listing.returncode != 0:
+        return None
+    expected: dict[str, str] = {}
+    for record in listing.stdout.split("\0"):
+        if not record:
+            continue
+        meta, _, path = record.partition("\t")
+        fields = meta.split()
+        if len(fields) != 3 or not path:
+            return None
+        mode, kind, blob = fields
+        if kind != "blob" or mode == "120000":
+            continue
+        # The batch protocol below is newline-separated, so a newline in a path
+        # would silently verify the wrong file. Nothing upstream has one.
+        if "\n" in path:
+            return None
+        expected[path] = blob
+    if not expected:
+        return None
+    hashed = subprocess.run(
+        [executable, "hash-object", "--no-filters", "--stdin-paths"],
+        cwd=checkout,
+        input="\n".join(expected) + "\n",
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    actual = hashed.stdout.split()
+    if hashed.returncode != 0 or len(actual) != len(expected):
+        return None
+    return sorted(
+        path
+        for (path, blob), found in zip(expected.items(), actual)
+        if blob != found
+    )
+
+
 def _has_ancestor_skill(skill_dir: Path, root: Path) -> bool:
     """Whether a directory sits inside another skill, up to but excluding root.
 
@@ -577,7 +647,7 @@ def install_matt_skills(
     with tempfile.TemporaryDirectory(prefix="mattpocock-skills-") as directory:
         checkout = Path(directory)
         for command in matt_skills_fetch_commands(reference, git):
-            _run(command, checkout)
+            _run(command, checkout, MATT_SKILLS_GIT_ENV)
         head = matt_skills_head(checkout, git)
         if reference == MATT_SKILLS_REF:
             # A tag is a movable label. Checking it against the commit recorded
@@ -607,6 +677,19 @@ def install_matt_skills(
                 f"the {MATT_SKILLS_SOURCE} checkout does not match {reference} — "
                 "a git hook or filter modified it, so nothing was installed. "
                 f"First change: {changes.splitlines()[0].strip()}"
+            )
+        mismatched = matt_skills_content_mismatches(checkout, git)
+        if mismatched is None:
+            raise InstallError(
+                f"could not confirm the {MATT_SKILLS_SOURCE} checkout holds the "
+                f"bytes of {reference}, so nothing was installed"
+            )
+        if mismatched:
+            raise InstallError(
+                f"the {MATT_SKILLS_SOURCE} checkout does not hold the bytes of "
+                f"{reference}: {len(mismatched)} file(s) differ, starting with "
+                f"{mismatched[0]}. A .gitattributes in that revision, or a "
+                "content filter, rewrote them; nothing was installed"
             )
         sources = matt_skill_sources(checkout)
         if not any(source.name == "setup-matt-pocock-skills" for source in sources):
