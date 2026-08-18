@@ -395,6 +395,7 @@ def uninstall_argv(
     *,
     all_skills: bool = False,
     global_instructions: bool = False,
+    olympus: bool = False,
     shims: bool = False,
     external: Sequence[str] = (),
     unrecorded: bool = False,
@@ -420,6 +421,8 @@ def uninstall_argv(
         argv.append("--all")
     if global_instructions:
         argv.append("--global-instructions")
+    if olympus:
+        argv.append("--olympus")
     if shims:
         argv.append("--setup-path")
     for name in external:
@@ -663,11 +666,18 @@ def command_uninstall(args: argparse.Namespace) -> int:
     if args.all and names:
         raise install.InstallError("pass skill names or --all, not both")
     external = list(args.external or [])
-    if not (names or args.all or args.global_instructions or args.shims or external):
+    if not (
+        names
+        or args.all
+        or args.global_instructions
+        or args.olympus
+        or args.shims
+        or external
+    ):
         raise install.InstallError(
             "name at least one skill, or pass --all, --global-instructions, "
-            "--shims, or --external NAME. `skills status` lists what is "
-            "installed and `skills manage` removes it interactively."
+            "--olympus, --shims, or --external NAME. `skills status` lists what "
+            "is installed and `skills manage` removes it interactively."
         )
     return install.main(
         uninstall_argv(
@@ -677,6 +687,7 @@ def command_uninstall(args: argparse.Namespace) -> int:
             args.agent,
             all_skills=args.all,
             global_instructions=args.global_instructions,
+            olympus=args.olympus,
             shims=args.shims,
             external=external,
             unrecorded=args.unrecorded,
@@ -880,6 +891,14 @@ def parser() -> argparse.ArgumentParser:
         "--global-instructions",
         action="store_true",
         help="also remove ~/.agents/AGENTS.md and ~/.claude/CLAUDE.md",
+    )
+    remover.add_argument(
+        "--olympus",
+        action="store_true",
+        help=(
+            "also remove the olympus MCP server from ~/.claude.json, leaving "
+            "every other server there; the reporting skill is removed by name"
+        ),
     )
     remover.add_argument(
         "--shims", action="store_true", help="also remove the `skills` launchers"

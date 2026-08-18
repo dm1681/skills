@@ -167,8 +167,8 @@ directory.
 Passing installer options keeps the command non-interactive, which makes it
 safe for scripts and CI. Use `--interactive` to open the dashboard with preset
 options, or `--non-interactive` to explicitly suppress it. `--graphify`,
-`--matt-skills`, and `--target` are scripted-only; combining them with
-`--interactive` is an error rather than a silent no-op.
+`--matt-skills`, `--olympus`, and `--target` are scripted-only; combining them
+with `--interactive` is an error rather than a silent no-op.
 
 ### Run it from any directory
 
@@ -241,6 +241,13 @@ Useful options:
 --matt-ref REF               tag, branch, or commit of mattpocock/skills to
                              install; defaults to the pinned revision
 --graphify                   install/upgrade Graphify and register its skill
+--olympus                    register the Olympus MCP adapter in ~/.claude.json
+                             and install its reporting skill
+--olympus-path PATH          the Olympus checkout to register; defaults to
+                             $OLYMPUS_CHECKOUT, then the usual locations
+--olympus-url URL            the OLYMPUS_BASE_URL to register
+--olympus-token TOKEN        the bearer credential; prefer the environment
+                             variable of that name over a shell history entry
 --global-instructions [link|copy]
                              install global/AGENTS.md as user-level guidance
                              in ~/.agents/AGENTS.md and ~/.claude/CLAUDE.md
@@ -282,6 +289,9 @@ Examples:
 
 # Install both into one project's Codex skill directory.
 ./install.sh --agent codex --scope project --project-dir /path/to/repo --graphify
+
+# Make this machine able to report to Olympus from any repository.
+./install.sh --olympus
 ```
 
 ### Global (user-level) instructions
@@ -368,6 +378,42 @@ uses the explicit `codex`, `cursor`, `copilot`, or `claude` platform when that
 agent was selected. See [`docs/graphify.md`](docs/graphify.md) for the exact
 command matrix and boundaries.
 
+### Optional Olympus integration
+
+Olympus is the continuity record for work across machines, but the ability to
+talk to it normally lives inside the `dm1681/Olympus` checkout: the MCP adapter
+is code there, the bearer token is in its untracked settings, and the reporting
+skill is one of its own. `--olympus` makes one machine able to report from
+*any* repository:
+
+```sh
+./install.sh --olympus
+./install.sh --olympus --olympus-path ~/code/Olympus --olympus-token "$OLYMPUS_AGENT_TOKEN"
+```
+
+It writes an `olympus` entry into `~/.claude.json` — `node`, an **absolute**
+path to that checkout's built `apps/mcp/dist/index.js`, and the base URL and
+token in its `env` — and installs `olympus-report-progress` through the same
+path as every other skill, so the receipt records it and `skills status`,
+`skills doctor`, and `skills uninstall` all see it. The skill is not vendored
+here; its source of truth is the Olympus checkout.
+
+The checkout is found from `--olympus-path`, then `OLYMPUS_CHECKOUT`, then the
+usual locations, and must contain `apps/mcp`. `dist/` is gitignored, so an
+unbuilt adapter is caught before anything is written and the message names
+`pnpm build`. Nothing connects to Olympus: the base URL resolves only on that
+private network, and a preflight that dialled it would hang on exactly the
+machines that need this most. The token comes from `--olympus-token`, then the
+environment, then the checkout's `.claude/settings.local.json`; without one the
+install still happens and warns that writes will fail `401 UNAUTHORIZED`.
+Rotation is the same command again.
+
+`~/.claude.json` is yours: every other key and every other MCP server is
+preserved, the file is copied into `.skills-backups/` before a write, and one
+that will not parse is refused rather than replaced. See
+[`docs/olympus.md`](docs/olympus.md) for the whole integration, including the
+short "Olympus reporting" section to paste into your global `AGENTS.md`.
+
 ## Uninstall
 
 Removal is the mirror of install and goes through the same code, so the same
@@ -380,6 +426,7 @@ skills uninstall NAME               # one skill, from this project's roots
 skills uninstall NAME --user        # ...machine-wide instead
 skills uninstall --all              # every skill recorded in those roots
 skills uninstall --global-instructions   # the two managed home files
+skills uninstall --olympus          # the olympus MCP server registration
 skills uninstall --shims            # the `skills` launchers
 skills uninstall --external matt-skills  # what this collection recorded placing
 skills uninstall NAME --dry-run     # print what would happen, write nothing
@@ -407,6 +454,10 @@ What comes back afterwards:
 - A shim written from another checkout is left alone. `--shims --add-path`
   also removes the `PATH` line this collection appended, after copying the
   profile into `.skills-backups/`.
+- `--olympus` removes only the `olympus` entry from `~/.claude.json`, after
+  copying the file aside; every other server stays, and a config that will not
+  parse is refused rather than rewritten. The reporting skill goes the ordinary
+  way, `skills uninstall olympus-report-progress`.
 - `graphify` cannot be removed here: its own CLI placed the skill. The command
   prints what to run instead — `uv tool uninstall graphifyy`, then graphify's
   own CLI for the registered skill directory.
