@@ -7,6 +7,36 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Added
 
+- `./install.sh --olympus`: the Olympus integration, installable on a machine
+  rather than trapped in one checkout. It writes an `olympus` entry into
+  `~/.claude.json` — `node`, an **absolute** path to that checkout's built
+  `apps/mcp/dist/index.js`, and `OLYMPUS_BASE_URL` plus `OLYMPUS_AGENT_TOKEN`
+  in its `env` — so a session in any repository can report, and installs
+  `olympus-report-progress` through the ordinary `install_one` path, recorded
+  with `origin: olympus` so status, doctor, and uninstall all see it. The skill
+  is not vendored here: its source of truth is the Olympus checkout, and the
+  tracked `.mcp.json` there keeps its relative path, which is correct on every
+  machine rather than on one. The checkout comes from `--olympus-path`, then
+  `OLYMPUS_CHECKOUT`, then the conventional locations, and must hold `apps/mcp`
+  — a path you named that fails that check is an error, not a fall-through to
+  the probe. `dist/` is gitignored, so an unbuilt adapter is caught before
+  anything is written, with `pnpm build` in the message rather than a
+  connect-time failure that names nothing. Nothing dials the server: the base
+  URL resolves only on that private network, so it is printed with that caveat
+  instead of hung on. The token comes from `--olympus-token`, then the
+  environment, then the checkout's `.claude/settings.local.json`, parsed
+  defensively; without one the install still happens and warns that writes will
+  fail `401 UNAUTHORIZED`, and a rotation is the same command again. It reaches
+  `~/.claude.json` and nothing else — never this repository, never a receipt,
+  never the output. Every other key and every other MCP server survives the
+  merge, the file is copied into `.skills-backups/claude-config/` first, and one
+  that will not parse is refused byte-for-byte rather than replaced.
+  `skills uninstall --olympus` (or `./install.sh --uninstall --olympus`) is the
+  mirror: same refusal, same backup, and only the `olympus` entry goes.
+  [`docs/olympus.md`](docs/olympus.md) documents it, including the short
+  "Olympus reporting" section to paste into a global `AGENTS.md` —
+  `global/AGENTS.md` itself is untouched, so the tools and the habit stay
+  separately installable.
 - Uninstall, everywhere install already is: `skills uninstall NAME` / `--all`
   / `--global-instructions` / `--shims` / `--external NAME`, `skills status`
   for what is installed and where, `skills manage` for the dashboard's new

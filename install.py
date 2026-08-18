@@ -740,6 +740,489 @@ def install_matt_skills(
             apply_model_decisions(destination_root, emit)
 
 
+# -- Olympus ----------------------------------------------------------------
+#
+# Olympus is the continuity record for work across machines, and the ability to
+# talk to it is code in the dm1681/Olympus checkout rather than a published
+# package. So what this collection installs is a *registration*: an absolute
+# path to that checkout's built adapter, written into ~/.claude.json at user
+# scope, plus the reporting skill through the ordinary install path. The
+# checkout's own `.mcp.json` keeps its relative path — that file is tracked and
+# shared, and an absolute path in it is correct on exactly one machine.
+
+
+OLYMPUS_SOURCE = "dm1681/Olympus"
+OLYMPUS_SERVER = "olympus"
+OLYMPUS_SKILL = "olympus-report-progress"
+# The adapter, and the directory that identifies a checkout as Olympus at all.
+# dist/ is gitignored, so a fresh clone has the second and not the first.
+OLYMPUS_ADAPTER = ("apps", "mcp", "dist", "index.js")
+OLYMPUS_MARKER = ("apps", "mcp")
+OLYMPUS_CHECKOUT_ENV = "OLYMPUS_CHECKOUT"
+OLYMPUS_TOKEN_ENV = "OLYMPUS_AGENT_TOKEN"
+OLYMPUS_URL_ENV = "OLYMPUS_BASE_URL"
+OLYMPUS_DEFAULT_URL = "http://hades.nord:4317"
+OLYMPUS_LAN_URL = "http://192.168.0.52:4317"
+# Both spellings, because the machines that report today disagree about the
+# capital and only a case-insensitive filesystem forgives that.
+OLYMPUS_CANDIDATES = (
+    ("projects", "olympus"),
+    ("projects", "Olympus"),
+    ("olympus",),
+    ("Olympus",),
+)
+CLAUDE_CONFIG_NAME = ".claude.json"
+
+
+def claude_config_path(home: Path) -> Path:
+    return home.expanduser() / CLAUDE_CONFIG_NAME
+
+
+def read_claude_config(path: Path) -> dict:
+    """The parsed ~/.claude.json, or {} when there is none.
+
+    A file that will not parse is a refusal rather than an empty dict. It holds
+    every MCP server the user has registered and a good deal else besides;
+    starting from {} because a comma is missing would take all of it with the
+    next write.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {}
+    except (OSError, UnicodeDecodeError) as exc:
+        raise InstallError(f"{path} could not be read ({exc}); nothing was changed")
+    try:
+        loaded = json.loads(text)
+    except ValueError as exc:
+        raise InstallError(
+            f"{path} is not valid JSON ({exc}). It holds every MCP server you "
+            "have registered, so nothing was changed — fix the file, or move it "
+            "aside, and rerun"
+        )
+    if not isinstance(loaded, dict):
+        raise InstallError(f"{path} is not a JSON object; nothing was changed")
+    return loaded
+
+
+def looks_like_olympus(path: Path) -> bool:
+    return path.joinpath(*OLYMPUS_MARKER).is_dir()
+
+
+def olympus_candidates(home: Path) -> list[Path]:
+    """The conventional checkout locations, in probe order."""
+    base = home.expanduser()
+    return [base.joinpath(*parts) for parts in OLYMPUS_CANDIDATES]
+
+
+def olympus_checkout(
+    explicit: Optional[Path] = None,
+    env: Optional[Mapping[str, str]] = None,
+    home: Optional[Path] = None,
+) -> Path:
+    """Where the Olympus checkout is: named, configured, or in a usual place.
+
+    The adapter is code in that checkout rather than a package, so a path that
+    resolves to nothing registers cleanly and then fails at MCP connect time
+    with MODULE_NOT_FOUND — after the handshake, where the error names neither
+    this installer nor the missing directory. Every candidate is therefore
+    checked for `apps/mcp` first, and a path the caller *named* that fails that
+    check is an error rather than a fall-through to the probe, which would hide
+    the typo behind somebody else's checkout.
+    """
+    environment = os.environ if env is None else env
+    base = Path.home() if home is None else home
+    for candidate, source in (
+        (explicit, "--olympus-path"),
+        (environment.get(OLYMPUS_CHECKOUT_ENV), OLYMPUS_CHECKOUT_ENV),
+    ):
+        if not candidate:
+            continue
+        path = Path(candidate).expanduser()
+        if not path.is_dir():
+            raise InstallError(
+                f"{source} names a directory that does not exist: {path}"
+            )
+        if not looks_like_olympus(path):
+            raise InstallError(
+                f"{source} does not look like an {OLYMPUS_SOURCE} checkout — "
+                f"no apps/mcp directory in {path}"
+            )
+        return path.resolve()
+    for path in olympus_candidates(base):
+        if looks_like_olympus(path):
+            return path.resolve()
+    raise InstallError(
+        f"no {OLYMPUS_SOURCE} checkout found in "
+        + ", ".join(str(path) for path in olympus_candidates(base))
+        + f". Name it with --olympus-path PATH, or set {OLYMPUS_CHECKOUT_ENV}"
+    )
+
+
+def olympus_adapter(checkout: Path) -> Path:
+    return checkout.joinpath(*OLYMPUS_ADAPTER)
+
+
+def require_olympus_adapter(checkout: Path) -> Path:
+    """The built adapter, or the exact command that produces it.
+
+    Checked here rather than left to the MCP host, which reports a missing
+    entrypoint as an adapter that never connects and every `olympus_*` tool
+    silently absent.
+    """
+    adapter = olympus_adapter(checkout)
+    if adapter.is_file():
+        return adapter
+    raise InstallError(
+        f"the Olympus MCP adapter is not built: {adapter} is missing. "
+        f"run: pnpm build   (in {checkout}); dist/ is gitignored, so a fresh "
+        "clone has no adapter until it is built"
+    )
+
+
+def olympus_skill_source(checkout: Path) -> Path:
+    """The reporting skill inside the checkout that owns it.
+
+    Not vendored into this repository on purpose: it is maintained next to the
+    server whose API it calls, and a copy here would be a second version of it
+    to keep honest.
+    """
+    source = checkout / ".claude" / "skills" / OLYMPUS_SKILL
+    if not (source / "SKILL.md").is_file():
+        raise InstallError(
+            f"{checkout} carries no {OLYMPUS_SKILL} skill "
+            f"({source / 'SKILL.md'} is missing); update that checkout and rerun"
+        )
+    return source
+
+
+def _settings_env_blocks(data: object) -> list:
+    """Every `env` mapping a Claude settings file might carry.
+
+    Two shapes are in the wild — a top-level `env`, and one per entry under
+    `mcpServers` — and a machine that already reports may use either.
+    """
+    if not isinstance(data, dict):
+        return []
+    blocks = []
+    top = data.get("env")
+    if isinstance(top, dict):
+        blocks.append(top)
+    servers = data.get("mcpServers")
+    if isinstance(servers, dict):
+        for server in servers.values():
+            if isinstance(server, dict) and isinstance(server.get("env"), dict):
+                blocks.append(server["env"])
+    return blocks
+
+
+def olympus_token_from_settings(checkout: Path) -> Optional[str]:
+    """OLYMPUS_AGENT_TOKEN out of a checkout's .claude/settings.local.json.
+
+    Read-only and defensive: that file is untracked, belongs to the checkout,
+    and is where a machine that already reports keeps the token. Anything
+    unexpected in it means "no token found" rather than an error — an install
+    without one still works, and says what it costs.
+    """
+    path = checkout / ".claude" / "settings.local.json"
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeDecodeError):
+        return None
+    for block in _settings_env_blocks(loaded):
+        value = block.get(OLYMPUS_TOKEN_ENV)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def olympus_token(
+    explicit: Optional[str] = None,
+    checkout: Optional[Path] = None,
+    env: Optional[Mapping[str, str]] = None,
+) -> tuple:
+    """(token, where it came from). No token is a supported outcome.
+
+    The source is a description for a human, never the value: nothing this
+    installer prints, records, or backs up outside ~/.claude.json may carry
+    the secret itself.
+    """
+    environment = os.environ if env is None else env
+    if explicit and explicit.strip():
+        return explicit.strip(), "--olympus-token"
+    from_env = environment.get(OLYMPUS_TOKEN_ENV)
+    if from_env and from_env.strip():
+        return from_env.strip(), f"the {OLYMPUS_TOKEN_ENV} environment variable"
+    if checkout is not None:
+        from_settings = olympus_token_from_settings(checkout)
+        if from_settings:
+            return from_settings, str(checkout / ".claude" / "settings.local.json")
+    return None, "nowhere"
+
+
+def olympus_base_url(
+    explicit: Optional[str] = None,
+    checkout: Optional[Path] = None,
+    env: Optional[Mapping[str, str]] = None,
+) -> str:
+    """The origin to register, preferring what the checkout already says.
+
+    Reading the checkout's tracked `.mcp.json` keeps one source of truth per
+    deployment: whoever repoints Olympus edits it there, and the next install
+    on this machine follows without a flag.
+    """
+    environment = os.environ if env is None else env
+    if explicit and explicit.strip():
+        return explicit.strip()
+    from_env = environment.get(OLYMPUS_URL_ENV)
+    if from_env and from_env.strip():
+        return from_env.strip()
+    if checkout is not None:
+        try:
+            loaded = json.loads((checkout / ".mcp.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError, UnicodeDecodeError):
+            loaded = None
+        servers = loaded.get("mcpServers") if isinstance(loaded, dict) else None
+        entry = servers.get(OLYMPUS_SERVER) if isinstance(servers, dict) else None
+        block = entry.get("env") if isinstance(entry, dict) else None
+        value = block.get(OLYMPUS_URL_ENV) if isinstance(block, dict) else None
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return OLYMPUS_DEFAULT_URL
+
+
+def olympus_server_entry(
+    checkout: Path, base_url: str, token: Optional[str] = None
+) -> dict:
+    """The `mcpServers.olympus` block to write, absolute path and all.
+
+    Forward slashes even on Windows: node accepts them everywhere a path is
+    expected, and a JSON string full of escaped backslashes is unreadable to
+    whoever opens the file next. The token key is absent rather than empty when
+    none was resolved, so a later run that finds one adds it instead of leaving
+    an empty credential the adapter would forward.
+    """
+    env = {OLYMPUS_URL_ENV: base_url}
+    if token:
+        env[OLYMPUS_TOKEN_ENV] = token
+    return {
+        "command": "node",
+        "args": [olympus_adapter(checkout).as_posix()],
+        "env": env,
+    }
+
+
+def olympus_backup_path(home: Path) -> Path:
+    """Where a copy of ~/.claude.json goes before it is rewritten.
+
+    Anchored on a notional "claude-config" root inside the home rather than on
+    the file's own directory, which *is* the home: backup_path writes beside
+    its root, and that would drop the copy next to the home directory.
+    """
+    return backup_path(home.expanduser() / "claude-config", CLAUDE_CONFIG_NAME)
+
+
+def _private(path: Path) -> None:
+    """Best-effort 0600 on a file that may hold the agent token.
+
+    Windows honours only the read-only bit here, which is why this is best
+    effort and not a guarantee the caller may rely on.
+    """
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def _backup_claude_config(home: Path) -> Optional[Path]:
+    """Copy the live config aside, if there is one, and return where.
+
+    Copied rather than moved: the file is the user's, holds every other server
+    they have registered, and must not spend even a moment absent.
+    """
+    path = claude_config_path(home)
+    if not path.is_file():
+        return None
+    backup = olympus_backup_path(home)
+    backup.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(str(path), str(backup))
+    _private(backup)
+    return backup
+
+
+def _write_claude_config(path: Path, data: dict, fresh: bool) -> None:
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    if fresh:
+        # Only a file this run created: an existing one carries whatever
+        # permissions its owner chose, and tightening them is not this
+        # installer's call to make.
+        _private(temporary)
+    os.replace(temporary, path)
+
+
+def register_olympus_mcp(home: Path, entry: dict, dry_run: bool = False) -> str:
+    """Merge one `olympus` server into ~/.claude.json, keeping everything else.
+
+    Every other key and every other server survives; an `olympus` entry that is
+    already there is replaced, which is what makes a token rotation a re-run.
+    """
+    home = home.expanduser()
+    path = claude_config_path(home)
+    data = read_claude_config(path)
+    servers = data.get("mcpServers")
+    if servers is not None and not isinstance(servers, dict):
+        raise InstallError(
+            f"{path} has a non-object 'mcpServers' key; nothing was changed"
+        )
+    servers = dict(servers) if isinstance(servers, dict) else {}
+    replacing = OLYMPUS_SERVER in servers
+    if servers.get(OLYMPUS_SERVER) == entry:
+        return f"unchanged  {OLYMPUS_SERVER} in {path}"
+    exists = path.is_file()
+    if dry_run:
+        verb = "would replace" if replacing else "would register"
+        backup = olympus_backup_path(home) if exists else None
+        return f"{verb} {OLYMPUS_SERVER} in {path}" + (
+            f"; backup {backup}" if backup else ""
+        )
+
+    home.mkdir(parents=True, exist_ok=True)
+    backup = _backup_claude_config(home)
+    servers[OLYMPUS_SERVER] = entry
+    data["mcpServers"] = servers
+    _write_claude_config(path, data, fresh=not exists)
+    record_entry(
+        home,
+        str(path),
+        "mcp-server",
+        origin=OLYMPUS_SERVER,
+        backup=backup,
+        # A backup taken before this collection had ever registered here is the
+        # configuration the user had; one taken over our own entry is not.
+        foreign=None if backup is None else not replacing,
+    )
+    verb = "replaced" if replacing else "registered"
+    return f"{verb:<10} {OLYMPUS_SERVER} in {path}" + (
+        f" (backup: {backup})" if backup else ""
+    )
+
+
+def unregister_olympus_mcp(home: Path, dry_run: bool = False) -> str:
+    """Drop the `olympus` server and nothing else.
+
+    Same refusal and the same backup as the install: a config that will not
+    parse is left byte-identical, because the way to remove one server is
+    never to lose the rest.
+    """
+    home = home.expanduser()
+    path = claude_config_path(home)
+    if not path.is_file():
+        return f"absent     {path}"
+    data = read_claude_config(path)
+    servers = data.get("mcpServers")
+    if not isinstance(servers, dict) or OLYMPUS_SERVER not in servers:
+        return f"absent     {OLYMPUS_SERVER} in {path}"
+    if dry_run:
+        return (
+            f"would remove {OLYMPUS_SERVER} from {path}; "
+            f"back up to {olympus_backup_path(home)}"
+        )
+    backup = _backup_claude_config(home)
+    data["mcpServers"] = {
+        name: value for name, value in servers.items() if name != OLYMPUS_SERVER
+    }
+    _write_claude_config(path, data, fresh=False)
+    forget_entry(home, str(path), False)
+    return f"removed    {OLYMPUS_SERVER} from {path} (backup: {backup})"
+
+
+def olympus_notes(base_url: str, token: Optional[str], token_source: str) -> list[str]:
+    """The lines an install prints after the writes are done."""
+    lines = [
+        f"{OLYMPUS_URL_ENV}: {base_url} — the adapter resolves it at connect "
+        "time, not here, so a machine off the network registers instead of "
+        "hanging.",
+    ]
+    if base_url == OLYMPUS_DEFAULT_URL:
+        lines.append(
+            "That host resolves only on the private network (LAN fallback "
+            f"{OLYMPUS_LAN_URL}); reaching it from outside is blocked on "
+            f"{OLYMPUS_SOURCE}#69. Point it elsewhere with --olympus-url."
+        )
+    if token:
+        lines.append(
+            f"{OLYMPUS_TOKEN_ENV}: taken from {token_source}, and written "
+            "nowhere but that config."
+        )
+    else:
+        lines.append(
+            f"WARNING: no {OLYMPUS_TOKEN_ENV} was found, and the server has "
+            "enforced bearer auth since 2026-08-13, so every /api/agent/v1 "
+            "write will fail with 401 UNAUTHORIZED. Rerun with --olympus-token "
+            f"VALUE, or with {OLYMPUS_TOKEN_ENV} set, once you have it — a "
+            "rotation is the same rerun."
+        )
+    lines.append(
+        "Reporting is a habit as well as a tool: docs/olympus.md carries a "
+        'short "Olympus reporting" section to paste into your global AGENTS.md.'
+    )
+    return lines
+
+
+def install_olympus(
+    roots: Sequence[Path],
+    home: Path,
+    *,
+    checkout: Optional[Path] = None,
+    token: Optional[str] = None,
+    base_url: Optional[str] = None,
+    force: bool = False,
+    dry_run: bool = False,
+    emit: Callable[[str], None] = print,
+    env: Optional[Mapping[str, str]] = None,
+) -> None:
+    """Register the adapter at user scope and install the reporting skill.
+
+    Nothing here connects to Olympus. A preflight that dialled the server would
+    hang on every machine off the meshnet, which is most of the ones that need
+    this most; what can be checked locally — the checkout, the built adapter,
+    the skill — is checked, and the rest is printed for the reader to judge.
+
+    The registration is user-scoped whatever `--scope` says, because that is the
+    whole point: a session in *any* repository has to find the adapter. Only the
+    skill follows the resolved roots.
+    """
+    home = home.expanduser()
+    resolved = olympus_checkout(checkout, env, home)
+    require_olympus_adapter(resolved)
+    source = olympus_skill_source(resolved)
+    url = olympus_base_url(base_url, resolved, env)
+    secret, source_of_token = olympus_token(token, resolved, env)
+
+    emit(f"{OLYMPUS_SOURCE} checkout: {resolved}")
+    emit(register_olympus_mcp(home, olympus_server_entry(resolved, url, secret), dry_run))
+    for root in roots:
+        emit(install_one(source, root, "copy", force, dry_run, origin=OLYMPUS_SERVER))
+        record_root(home, root, dry_run)
+    for line in olympus_notes(url, secret, source_of_token):
+        emit(line)
+
+
+def uninstall_olympus(home: Path, dry_run: bool = False) -> list[str]:
+    """Remove the registration only; the skill goes the ordinary way.
+
+    The skill was installed through install_one and is in the ledger with
+    origin=olympus, so `skills uninstall` already removes it with the same
+    backup and restore guarantees as anything else. A second removal path here
+    would only be a second thing to keep honest.
+    """
+    return [
+        unregister_olympus_mcp(home, dry_run),
+        f"the skill is removed the ordinary way: skills uninstall {OLYMPUS_SKILL}",
+    ]
+
+
 MODEL_INVOCATION_KEY = "disable-model-invocation"
 MODEL_DECISIONS_FILE = ".skills-model-invocation.json"
 
@@ -2225,6 +2708,44 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="install or upgrade graphifyy with uv and register its skill for selected agents",
     )
+    result.add_argument(
+        "--olympus",
+        action="store_true",
+        help=(
+            "register the Olympus MCP adapter in ~/.claude.json at user scope "
+            "and install its reporting skill, so a session in any repository "
+            "can report progress; with --uninstall, remove that registration"
+        ),
+    )
+    result.add_argument(
+        "--olympus-path",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            f"with --olympus: the {OLYMPUS_SOURCE} checkout to register "
+            f"(default: ${OLYMPUS_CHECKOUT_ENV}, then the usual locations)"
+        ),
+    )
+    result.add_argument(
+        "--olympus-url",
+        default=None,
+        metavar="URL",
+        help=(
+            f"with --olympus: the {OLYMPUS_URL_ENV} to register (default: that "
+            "environment variable, then the checkout's own .mcp.json)"
+        ),
+    )
+    result.add_argument(
+        "--olympus-token",
+        default=None,
+        metavar="TOKEN",
+        help=(
+            f"with --olympus: the {OLYMPUS_TOKEN_ENV} bearer credential. Prefer "
+            "the environment variable of that name — a command line lands in "
+            "shell history"
+        ),
+    )
     matt_skills = result.add_mutually_exclusive_group()
     matt_skills.add_argument(
         "--matt-skills",
@@ -2325,8 +2846,8 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "remove instead of install; --skill/--agent/--scope/--project-dir/"
-            "--target/--global-instructions/--matt-skills/--graphify/--setup-path "
-            "select what goes"
+            "--target/--global-instructions/--matt-skills/--graphify/--olympus/"
+            "--setup-path select what goes"
         ),
     )
     result.add_argument(
@@ -2383,6 +2904,7 @@ def open_dashboard(args: argparse.Namespace) -> int:
         (args.matt_ref is not None, "--matt-ref"),
         (args.target is not None, "--target"),
         (args.global_instructions is not None, "--global-instructions"),
+        (args.olympus, "--olympus"),
     ):
         if option:
             raise InstallError(
@@ -2442,6 +2964,16 @@ def execute_install(args: argparse.Namespace, selected: list[str]) -> None:
             print,
             home=args.home,
         )
+    if args.olympus:
+        install_olympus(
+            roots,
+            args.home,
+            checkout=args.olympus_path,
+            token=args.olympus_token,
+            base_url=args.olympus_url,
+            force=args.force,
+            dry_run=args.dry_run,
+        )
     if args.matt_skills and not args.dry_run:
         print(
             "Next: run /setup-matt-pocock-skills once inside the target "
@@ -2476,6 +3008,9 @@ def execute_uninstall(args: argparse.Namespace, selected: list) -> None:
     roots = stage_roots(args, args.scope)
     restore = not args.no_restore
     keep_backup = not args.no_backup
+    if args.olympus:
+        for message in uninstall_olympus(args.home, args.dry_run):
+            print(message)
     for name, wanted in (("graphify", args.graphify), ("matt-skills", args.matt_skills)):
         if not wanted:
             continue
@@ -2518,12 +3053,14 @@ def uninstall_main(args: argparse.Namespace) -> int:
         args.global_instructions is not None
         or bool(args.matt_skills)
         or args.graphify
+        or args.olympus
         or args.setup_path
     )
     if not (args.skill or args.all or others):
         raise InstallError(
             "--uninstall needs to know what to remove: --skill NAME, --all, "
-            "--global-instructions, --matt-skills, --graphify, or --setup-path"
+            "--global-instructions, --matt-skills, --graphify, --olympus, or "
+            "--setup-path"
         )
     if args.skill and args.all:
         raise InstallError("pass --skill or --all, not both")
@@ -2637,6 +3174,23 @@ def main(argv: Optional[list[str]] = None) -> int:
         ):
             if flag and not args.uninstall:
                 raise InstallError(f"{flag_name} only applies to --uninstall")
+        for flag, flag_name in (
+            (args.olympus_path is not None, "--olympus-path"),
+            (args.olympus_url is not None, "--olympus-url"),
+            (args.olympus_token is not None, "--olympus-token"),
+        ):
+            if not flag:
+                continue
+            if not args.olympus:
+                raise InstallError(
+                    f"{flag_name} only applies to --olympus; add --olympus to "
+                    "register that checkout"
+                )
+            if args.uninstall:
+                raise InstallError(
+                    f"{flag_name} configures a registration, and --uninstall "
+                    "--olympus removes whichever one is there; drop it"
+                )
         if args.uninstall:
             # Ahead of the --setup-path branch: under --uninstall that flag
             # selects the shims for removal rather than asking for them.
