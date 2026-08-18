@@ -230,6 +230,28 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Fixed
 
+- The `semantic-review` explorer's source-excerpt hover card is readable and
+  reachable again. Multi-line tooltip prose was rendered as bare text nodes
+  into a container with no white-space handling, so a bullet list authored as
+  `- one\n- two` collapsed onto one run-on line; prose now goes through a
+  `.prx-tooltip-copy` container styled `white-space: pre-line`, and the text is
+  normalized first — each line trimmed, leading, trailing, and repeated blank
+  lines dropped — so a single-line tooltip gains no blank space and inline
+  `<code>` runs and the `pre-wrap` code preview are untouched. The card also
+  closed while the pointer travelled into it, which made the source link
+  unclickable: a flowchart packs triggers edge to edge, so crossing the 8px gap
+  meant crossing *another* trigger, and every `pointerover` re-rendered and
+  re-positioned the card out from under the pointer — reproduced in Chromium as
+  the card swapping to the intervening edge's content three 6px steps into the
+  trip. The gap is now part of the card, bridged by a `::before` strip on the
+  side the card was placed; a different trigger takes an open card over only
+  after the pointer settles on it for 160 ms, and that pending swap is
+  cancelled the moment the pointer leaves; re-entering the trigger that already
+  owns the visible card no longer re-renders it; and dismissal grace went from
+  180 ms to 320 ms, which is what an unhurried pointer actually needs. Keyboard
+  focus still opens the card immediately and Escape still closes it. The
+  artifact validator gained guards for all four, so a future edit that drops
+  one fails the build rather than the reader's mouse.
 - A skill with no `agents/openai.yaml` describes itself in the dashboard and the
   cloud offer instead of reading "Bundled in this collection." `skill_summary`
   falls back to the SKILL.md frontmatter `description`, cut at its first clause:

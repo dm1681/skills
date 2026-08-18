@@ -55,7 +55,36 @@ The tooltip must:
 - cancel its delayed dismissal when the pointer enters the tooltip
 - dismiss after leaving both trigger and tooltip, on Escape, and on resize
 - preserve keyboard-focus behavior through `aria-describedby`
+- render authored line breaks in its prose, one line per line
 - remain supplementary to the persistent click-selected detail area
+
+`pointer-events: auto` alone does not make a card reachable. A flowchart packs
+triggers edge to edge, so the pointer travelling from a node into its card
+crosses the gap and, underneath it, another trigger — and a card that re-renders
+for every trigger swept over is gone before the reader arrives at its source
+link. Three rules keep the trip survivable, and all three are needed:
+
+- **Bridge the gap.** Give the card an invisible strip (a `::before`) covering
+  the gap on the side it was placed, so the gap is part of the card's hit area
+  and nothing underneath can claim the pointer. Record the side on the card
+  when positioning it.
+- **Make a new trigger earn the card.** While a card is open, a different
+  trigger takes it over only after the pointer settles there for ~150 ms.
+  Cancel that pending swap as soon as the pointer leaves. Keyboard focus swaps
+  immediately — a focus move is always deliberate.
+- **Do not reposition on re-entry.** Re-entering the trigger that already owns
+  the visible card cancels the dismissal and returns; re-rendering and
+  re-measuring moves the card out from under the pointer.
+
+Give dismissal roughly 300 ms of grace: 180 ms is shorter than an unhurried
+pointer takes to cross a gap it has to aim at.
+
+Tooltip prose is line-oriented — a lead sentence and often `- ` bullets. Set
+`white-space: pre-line` on the prose container, not on the card, so the code
+preview keeps its own `pre-wrap` and inline `<code>` runs keep wrapping
+normally. Normalize the text before rendering it: trim each line and drop
+leading, trailing, and repeated blank lines, or a stray newline in the model
+becomes blank space in the card.
 
 ## Edge contracts
 
@@ -176,10 +205,11 @@ Assert that:
 11. the orientation block, analyzed SHA, node/edge change-status encoding, and status legend are present
 12. long code identifiers do not clip, overflow, or break at arbitrary characters
 13. every node has a source-backed `code_preview` whose source index resolves
-14. node tooltips remain open while entered, code can be selected, and the linked file/range opens the configured target without replacing the chart
-15. the code surface uses Catppuccin Mocha with distinguishable syntax categories, and the page never renders light
-16. every displayed excerpt, label, immutable URL, and optional Cursor target verifies against the same analyzed snapshot (`pr.evidence_sha` when set, otherwise `pr.head_sha`)
-17. the standalone page populates its orientation title and applies non-default computed styles to its primary controls
-18. Previous, Next, and node selection visibly change which node is highlighted, compared as computed style rather than as an ARIA attribute alone
-19. nodes the changeset changed are distinguishable from context nodes in the default full-path view, not only after switching to the delta view
-20. a build that omitted editor links states so on the page, and every affected node still offers its immutable GitHub link
+14. node tooltips remain open while entered, code can be selected, and the linked file/range opens the configured target without replacing the chart — travel from the node into the card in small steps, over whatever trigger sits between them, and confirm the card still belongs to the node you started on
+15. multi-line tooltip prose renders one line per line, and a single-line tooltip gains no blank line
+16. the code surface uses Catppuccin Mocha with distinguishable syntax categories, and the page never renders light
+17. every displayed excerpt, label, immutable URL, and optional Cursor target verifies against the same analyzed snapshot (`pr.evidence_sha` when set, otherwise `pr.head_sha`)
+18. the standalone page populates its orientation title and applies non-default computed styles to its primary controls
+19. Previous, Next, and node selection visibly change which node is highlighted, compared as computed style rather than as an ARIA attribute alone
+20. nodes the changeset changed are distinguishable from context nodes in the default full-path view, not only after switching to the delta view
+21. a build that omitted editor links states so on the page, and every affected node still offers its immutable GitHub link

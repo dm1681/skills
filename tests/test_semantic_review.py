@@ -266,6 +266,37 @@ class SemanticReviewPackagingTests(unittest.TestCase):
         self.assertIn("__PR_EXPLORER_ROOT_ID__", template)
         self.assertIn("__PR_EXPLORER_DATA__", template)
 
+    def test_template_keeps_the_hover_card_readable_and_reachable(self) -> None:
+        """Pin the two things a browser check caught and a static read cannot.
+
+        Both are load-bearing and invisible in a diff: tooltip prose is
+        authored as lines, so collapsing whitespace runs bullet lists
+        together; and the gap between a trigger and its card must belong to
+        the card, or a trigger crossed on the way in steals the pointer
+        before the reader reaches the source link.
+        """
+        template = (SKILL_ROOT / "assets" / "pr-explorer-template.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertRegex(
+            template,
+            r"\.prx-tooltip-copy\s*\{[^}]*white-space:\s*pre-line",
+            "tooltip prose must preserve authored line breaks",
+        )
+        self.assertRegex(
+            template,
+            r"\.prx-rich-tooltip\[data-prx-side\]::before\s*\{",
+            "the card needs a hover bridge across the gap to its trigger",
+        )
+        for side in ("above", "below"):
+            self.assertRegex(
+                template,
+                rf"\.prx-rich-tooltip\[data-prx-side=\"{side}\"\]::before\s*\{{",
+                f"the hover bridge must cover a card placed {side} its trigger",
+            )
+        self.assertIn("TOOLTIP_SWAP_DELAY_MS", template)
+        self.assertIn("TOOLTIP_HIDE_GRACE_MS", template)
+
 
 @unittest.skipIf(shutil.which("git") is None, "requires Git for snapshot fixtures")
 class SemanticReviewPipelineTests(unittest.TestCase):
