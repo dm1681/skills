@@ -355,8 +355,17 @@ def _check_quality_contract(text: str) -> list[str]:
         ),
         "normal word breaking": re.compile(r"word-break:\s*normal"),
         "normal overflow wrapping": re.compile(r"overflow-wrap:\s*normal"),
+        # Tooltip prose must reach the card through the backtick-to-<code>
+        # renderer, whether it is written straight into the card or through
+        # the line-preserving prose wrapper.
         "rich tooltip code rendering": re.compile(
-            r"renderCodeAware\(\s*richTooltip"
+            r"renderCodeAware\(\s*richTooltip|renderTooltipProse\("
+        ),
+        # Tooltip prose is authored as lines; collapsing them runs bullet
+        # lists together on one line.
+        "line-preserving tooltip prose": re.compile(
+            r"\.[\w-]*tooltip-copy\s*\{[^}]*white-space:\s*pre-line",
+            re.DOTALL,
         ),
         "rich tooltip code styling": re.compile(
             r"\.[\w-]*rich-tooltip[^{]*code\s*\{"
@@ -372,6 +381,16 @@ def _check_quality_contract(text: str) -> list[str]:
         ),
         "tooltip hover persistence": re.compile(
             r"richTooltip\.addEventListener\([\"']pointerenter[\"']"
+        ),
+        # The gap between trigger and card has to belong to the card, or
+        # whatever sits under it steals the pointer on the way in.
+        "tooltip hover bridge": re.compile(
+            r"\.[\w-]*rich-tooltip\[data-prx-side[^{]*\]::before\s*\{"
+        ),
+        # A trigger merely swept over en route to an open card must not take
+        # the card over before the pointer settles on it.
+        "tooltip trigger settle delay": re.compile(
+            r"TOOLTIP_SWAP_DELAY_MS"
         ),
         "tooltip source target": re.compile(
             r"sourceLabel\.target\s*=\s*[\"']_blank[\"']"

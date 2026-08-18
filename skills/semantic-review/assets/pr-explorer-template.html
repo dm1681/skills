@@ -236,6 +236,32 @@
       display: none;
     }
 
+    /* Hover bridge: an invisible strip covering the 8px gap between the
+       trigger and the card, so the pointer never leaves the card's hit area
+       on the way in and no element underneath the gap can claim it. */
+    #__PR_EXPLORER_ROOT_ID__ .prx-rich-tooltip[data-prx-side]::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 10px;
+      pointer-events: auto;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-rich-tooltip[data-prx-side="above"]::before {
+      top: 100%;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-rich-tooltip[data-prx-side="below"]::before {
+      bottom: 100%;
+    }
+
+    /* Tooltip prose is line-oriented: bullet lists in `purpose` or `evidence`
+       must render one line per line rather than collapsing into a run-on. */
+    #__PR_EXPLORER_ROOT_ID__ .prx-tooltip-copy {
+      white-space: pre-line;
+    }
+
     #__PR_EXPLORER_ROOT_ID__ .prx-rich-tooltip > code,
     #__PR_EXPLORER_ROOT_ID__ .prx-tooltip-copy code {
       white-space: normal;
@@ -541,6 +567,14 @@
       let view = "full";
       let activeTooltipTrigger = null;
       let tooltipHideTimer = null;
+      let tooltipSwapTimer = null;
+      let pendingTooltipTrigger = null;
+      // The pointer needs time to cross the gap between a trigger and its
+      // card. Dismissal waits out an unhurried travel, and a trigger merely
+      // crossed on the way to an open card has to be settled on before it
+      // takes the card over.
+      const TOOLTIP_HIDE_GRACE_MS = 320;
+      const TOOLTIP_SWAP_DELAY_MS = 160;
 
       function appendSemanticCode(target, value) {
         const code = document.createElement("code");
@@ -574,6 +608,28 @@
               target.append(document.createTextNode(part));
             }
           });
+      }
+
+      function renderTooltipProse(target, value) {
+        // Tooltip prose is authored as lines: a lead sentence and, often,
+        // "- " bullets. `white-space: pre-line` on `.prx-tooltip-copy` keeps
+        // those line breaks, so normalize the text first — trim each line and
+        // drop leading, trailing, and repeated blank lines — or a stray
+        // newline in the model shows up as blank space in the card.
+        const lines = String(value == null ? "" : value)
+          .replace(/\r\n?/g, "\n")
+          .split("\n")
+          .map((line) => line.trim());
+        while (lines.length && !lines[0]) lines.shift();
+        while (lines.length && !lines[lines.length - 1]) lines.pop();
+        renderCodeAware(target, lines.join("\n").replace(/\n{3,}/g, "\n\n"));
+      }
+
+      function tooltipCopy(text) {
+        const copy = document.createElement("div");
+        copy.className = "prx-tooltip-copy";
+        renderTooltipProse(copy, text);
+        return copy;
       }
 
       const pythonKeywords = new Set([
@@ -763,13 +819,11 @@
         if (!node || !preview) return false;
         richTooltip.replaceChildren();
 
-        const copy = document.createElement("div");
-        copy.className = "prx-tooltip-copy";
-        renderCodeAware(
-          copy,
-          `${node.change_status} · ${node.purpose} Receives: ${node.receives}. Sends: ${node.sends}.`
+        richTooltip.append(
+          tooltipCopy(
+            `${node.change_status} · ${node.purpose}\nReceives: ${node.receives}. Sends: ${node.sends}.`
+          )
         );
-        richTooltip.append(copy);
 
         const previewArea = document.createElement("div");
         previewArea.className = "prx-tooltip-code";
@@ -851,7 +905,7 @@
         button.dataset.prNode = node.id;
         button.dataset.changeStatus = node.change_status;
         button.dataset.prxTooltip =
-          `${node.purpose} Receives: ${node.receives}. Sends: ${node.sends}.`;
+          `${node.purpose}\nReceives: ${node.receives}. Sends: ${node.sends}.`;
         button.setAttribute("aria-pressed", String(node.id === activeNode));
         systemStyle(button, node.system);
 
@@ -1118,15 +1172,6 @@
         }
       }
 
-      function hideRichTooltip() {
-        if (tooltipHideTimer !== null) {
-          window.clearTimeout(tooltipHideTimer);
-          tooltipHideTimer = null;
-        }
-        activeTooltipTrigger = null;
-        richTooltip.hidden = true;
-      }
-
       function cancelRichTooltipHide() {
         if (tooltipHideTimer !== null) {
           window.clearTimeout(tooltipHideTimer);
@@ -1134,9 +1179,53 @@
         }
       }
 
+      function cancelRichTooltipSwap() {
+        if (tooltipSwapTimer !== null) {
+          window.clearTimeout(tooltipSwapTimer);
+          tooltipSwapTimer = null;
+        }
+        pendingTooltipTrigger = null;
+      }
+
+      function hideRichTooltip() {
+        cancelRichTooltipHide();
+        cancelRichTooltipSwap();
+        activeTooltipTrigger = null;
+        richTooltip.hidden = true;
+        richTooltip.removeAttribute("data-prx-side");
+      }
+
       function scheduleRichTooltipHide() {
         cancelRichTooltipHide();
-        tooltipHideTimer = window.setTimeout(hideRichTooltip, 180);
+        tooltipHideTimer = window.setTimeout(
+          hideRichTooltip,
+          TOOLTIP_HIDE_GRACE_MS
+        );
+      }
+
+      // Pointer entry point. A card already open belongs to the reader
+      // travelling toward it: re-entering its own trigger must not reposition
+      // it, and another trigger swept over on the way only takes it over once
+      // the pointer settles there.
+      function requestRichTooltip(trigger) {
+        if (trigger === activeTooltipTrigger && !richTooltip.hidden) {
+          cancelRichTooltipHide();
+          cancelRichTooltipSwap();
+          return;
+        }
+        if (activeTooltipTrigger && !richTooltip.hidden) {
+          if (trigger === pendingTooltipTrigger) return;
+          cancelRichTooltipSwap();
+          pendingTooltipTrigger = trigger;
+          tooltipSwapTimer = window.setTimeout(() => {
+            tooltipSwapTimer = null;
+            pendingTooltipTrigger = null;
+            showRichTooltip(trigger);
+          }, TOOLTIP_SWAP_DELAY_MS);
+          return;
+        }
+        cancelRichTooltipSwap();
+        showRichTooltip(trigger);
       }
 
       function showRichTooltip(trigger) {
@@ -1144,9 +1233,10 @@
         const tooltipText = trigger.dataset.prxTooltip;
         if (!tooltipText && !nodeId) return;
         cancelRichTooltipHide();
+        cancelRichTooltipSwap();
         activeTooltipTrigger = trigger;
         if (!nodeId || !renderNodeTooltip(nodeId)) {
-          renderCodeAware(richTooltip, tooltipText);
+          richTooltip.replaceChildren(tooltipCopy(tooltipText));
         }
         richTooltip.hidden = false;
         richTooltip.style.visibility = "hidden";
@@ -1165,27 +1255,36 @@
           Math.min(root.clientWidth - tooltipRect.width - 4, horizontalCenter)
         );
         const above = triggerRect.top - rootRect.top - tooltipRect.height - 8;
-        const top =
-          above >= 4
-            ? above
-            : triggerRect.bottom - rootRect.top + 8;
+        const placeAbove = above >= 4;
+        const top = placeAbove ? above : triggerRect.bottom - rootRect.top + 8;
 
         richTooltip.style.left = `${left}px`;
         richTooltip.style.top = `${top}px`;
+        // The side drives the hover bridge — the invisible strip that makes
+        // the 8px gap part of the card, so nothing underneath it can steal
+        // the pointer on its way in.
+        richTooltip.dataset.prxSide = placeAbove ? "above" : "below";
         richTooltip.style.visibility = "visible";
       }
 
       root.addEventListener("pointerover", (event) => {
         const trigger = event.target.closest?.("[data-prx-tooltip]");
         if (trigger) {
-          showRichTooltip(trigger);
+          requestRichTooltip(trigger);
         } else if (richTooltip.contains(event.target)) {
           cancelRichTooltipHide();
+          cancelRichTooltipSwap();
         }
       });
       root.addEventListener("pointerout", (event) => {
-        if (!activeTooltipTrigger) return;
         const destination = event.relatedTarget;
+        if (
+          pendingTooltipTrigger &&
+          !(destination && pendingTooltipTrigger.contains(destination))
+        ) {
+          cancelRichTooltipSwap();
+        }
+        if (!activeTooltipTrigger) return;
         if (
           destination &&
           (activeTooltipTrigger.contains(destination) ||
@@ -1206,7 +1305,10 @@
           scheduleRichTooltipHide();
         }
       });
-      richTooltip.addEventListener("pointerenter", cancelRichTooltipHide);
+      richTooltip.addEventListener("pointerenter", () => {
+        cancelRichTooltipHide();
+        cancelRichTooltipSwap();
+      });
       richTooltip.addEventListener("pointerleave", scheduleRichTooltipHide);
       root.addEventListener("keydown", (event) => {
         if (event.key === "Escape") hideRichTooltip();
