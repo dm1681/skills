@@ -32,6 +32,42 @@ The template applies code formatting differently depending on the field. Getting
 | `node.purpose`, `receives`, `sends`, `role`, `connection`, `tradeoff`, `edge.transformation`, `edge.evidence`, `evidence_rail[].evidence` | **Backticks encouraged.** The rich-tooltip renderer converts them into real `<code>` elements. |
 | `edge.transfer`, `edge.optional`, `edge.containers` | **No backticks.** The template already code-wraps each list item; adding your own leaves an unpaired delimiter at each end of the joined run. |
 
+## What a node tooltip says, in order
+
+A node's hover card reads as four things, and the model supplies them from
+three fields:
+
+1. **The summary** — the first line of `purpose`. What this node does,
+   independent of the PR.
+2. **The change** — `change_note` when present, otherwise a sentence derived
+   from `change_status`.
+3. **The detail** — every remaining line of `purpose`, so bullets land here.
+4. **The handoff** — `Receives: … Sends: …`, built from those two fields.
+
+```json
+"change_status": "added",
+"change_note": "Split the old inline branch into a registry lookup.",
+"purpose": "Normalizes every inbound request before dispatch.\n- validates the `token`\n- refreshes metadata"
+```
+
+`change_note` is optional. Without it the line falls back to the status:
+
+| `change_status` | Sentence |
+| --- | --- |
+| `added` | Added in this pull request. |
+| `modified` | Modified in this pull request. |
+| `removed` | Removed in this pull request. |
+| `context` | Unchanged context. |
+
+End the summary as a sentence, not with a colon. The change sentence now sits
+between it and the bullets, so a trailing `:` points at the wrong line.
+
+Write one when the status word is too blunt to be useful — "added" says
+nothing about *what* was introduced, and this line is the one a reader uses to
+decide whether the node is worth opening. It takes backticks like the other
+prose fields, and it must be a non-empty string when present; the scaffold
+rejects anything else rather than rendering a blank line.
+
 ## Markdown excerpts render as markdown
 
 A `code_preview` with `"language": "markdown"` is drawn as the document it is —

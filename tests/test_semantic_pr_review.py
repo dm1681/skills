@@ -172,6 +172,54 @@ def _model(head_sha: str) -> dict[str, object]:
     }
 
 
+class NodeChangeNoteTests(unittest.TestCase):
+    """The optional per-node sentence describing what the PR did."""
+
+    def scaffold(self):
+        spec = importlib.util.spec_from_file_location(
+            "scaffold_pr_explorer", SCRIPTS / "scaffold_pr_explorer.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def errors_for(self, value) -> list:
+        module = self.scaffold()
+        model = json.loads(json.dumps(_model("0" * 40)))
+        model["nodes"][0]["change_note"] = value
+        return [e for e in module._validate_model(model) if "change_note" in e]
+
+    def test_it_is_optional(self) -> None:
+        module = self.scaffold()
+        model = json.loads(json.dumps(_model("0" * 40)))
+        self.assertEqual(
+            [], [e for e in module._validate_model(model) if "change_note" in e]
+        )
+
+    def test_a_sentence_is_accepted(self) -> None:
+        self.assertEqual([], self.errors_for("Split the branch into a lookup."))
+
+    def test_empty_or_non_string_is_rejected(self) -> None:
+        """An empty note renders as a blank line, a non-string as [object Object]."""
+        for value in ("", "   ", 123, None, ["a"]):
+            with self.subTest(value=value):
+                self.assertTrue(self.errors_for(value))
+
+    def test_the_template_falls_back_to_a_sentence_per_status(self) -> None:
+        """Every status maps to a sentence, so the line is never a bare word."""
+        template = (
+            ROOT
+            / "skills"
+            / "semantic-pr-review"
+            / "assets"
+            / "pr-explorer-template.html"
+        ).read_text(encoding="utf-8")
+        for status in ("added", "modified", "removed", "context"):
+            self.assertIn(f"{status}:", template)
+        self.assertIn("changeSentence", template)
+        self.assertIn("node.change_note", template)
+
+
 class SemanticPrReviewPackagingTests(unittest.TestCase):
     def test_skill_metadata_matches_its_directory_and_agent_interface(self) -> None:
         entrypoint = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")

@@ -1048,6 +1048,20 @@
         }
       }
 
+      // What the PR did to a node, as a sentence. A node may override it with
+      // `change_note` when the status word is too blunt to be useful -- "added"
+      // says nothing about what was actually introduced.
+      const changeSentences = {
+        added: "Added in this pull request.",
+        modified: "Modified in this pull request.",
+        removed: "Removed in this pull request.",
+        context: "Unchanged context.",
+      };
+
+      function changeSentence(status) {
+        return changeSentences[status] || "Unchanged context.";
+      }
+
       function previewSource(node) {
         return node.sources[node.code_preview.source_index] || null;
       }
@@ -1064,16 +1078,26 @@
 
         const copy = document.createElement("div");
         copy.className = "prx-tooltip-copy";
-        const purposeText = String(node.purpose || "");
-        const handoffText = `Receives: ${node.receives}. Sends: ${node.sends}.`;
-        // A multi-line purpose ends on a bullet, and the handoff sentence
-        // must not ride on that list item, so it gets a line of its own.
-        // Single-line purposes keep the original one-paragraph wording.
+        // The copy reads as four things in order: what this node does, what
+        // the PR did to it, the detail behind that, and what crosses the
+        // boundary. The change used to be a bare status word prefixed onto the
+        // summary with a middot, which read as a label rather than a sentence
+        // and left the summary and the first bullet sharing a line.
+        const purposeLines = String(node.purpose || "").trim().split("\n");
+        const summary = purposeLines[0].trim();
+        const detail = purposeLines.slice(1);
+        const changeLine =
+          String(node.change_note || "").trim() || changeSentence(node.change_status);
         renderCodeAware(
           copy,
-          purposeText.includes("\n")
-            ? `${node.change_status} · ${purposeText}\n${handoffText}`
-            : `${node.change_status} · ${purposeText} ${handoffText}`
+          [
+            summary,
+            changeLine,
+            ...detail,
+            `Receives: ${node.receives}. Sends: ${node.sends}.`,
+          ]
+            .filter(Boolean)
+            .join("\n")
         );
         richTooltip.append(copy);
 
