@@ -1,0 +1,10 @@
+interface:
+  display_name: "Olympus: Report Progress"
+  short_description: "Report a checkout and session update to Olympus"
+  default_prompt: "Use $olympus-report-progress to upsert this repository's checkout, resolve its Olympus Project, and append a Session Update saying what changed, what blocked, where you stopped, and what comes next."
+install:
+  # Useless without a reachable Olympus server, so list it in the wizard
+  # without pre-checking it for a machine-wide install. A user who runs
+  # Olympus installs it with --user deliberately; everyone else does not
+  # carry it into unrelated sessions.
+  global_default: false

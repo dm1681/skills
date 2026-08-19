@@ -7,6 +7,24 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Added
 
+- `olympus-report-progress`, vendored from the Olympus repository
+  (`.claude/skills/olympus-report-progress/SKILL.md` at commit `252f467`) and
+  otherwise byte-for-byte identical to it. Olympus skills are normally thin
+  wrappers over versioned repo docs; this one is the documented exception,
+  because the sessions that most need it run in unrelated repositories where
+  those docs do not exist, so it carries its whole spec inline. That makes it
+  869 lines against a 150-line entrypoint budget, and `validate_repo.py` warns
+  about it — the warning is correct and the length is deliberate. A note at the
+  top of the file names its upstream and the re-sync rule, because a second copy
+  drifts and nothing else would say so. It declares `global_default: false`: it
+  is designed to run in arbitrary repositories, but does nothing without a
+  reachable Olympus server, so it stays selectable rather than pre-selected. It
+  prefers an MCP adapter and falls back to plain HTTP, so the installer
+  registers no MCP server and gains no MCP awareness.
+  `tests/test_validate_repo.py` previously asserted that no shipped skill
+  warns at all; it now names this one exception and still fails on a warning
+  from anything else, including a description warning from this skill.
+
 - The dashboard lists `matt-skills` as an external tool row. Selecting it
   unfolds the installed skills that ship `disable-model-invocation`, each
   toggleable between hidden and model-visible; choices are recorded in
