@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -144,6 +145,47 @@ class VendoredDriftTests(unittest.TestCase):
         noteless = directory / "SKILL.md"
         noteless.write_text("---\nname: x\n---\n\n# body\n", encoding="utf-8")
         self.assertIsNone(install.vendored_upstream_text(noteless))
+
+
+class OriginStatusTests(unittest.TestCase):
+    """Whether the checkout trails its remote, and whether that is knowable."""
+
+    def test_an_unpacked_archive_is_unknown_not_behind(self) -> None:
+        """A release archive has no .git, and that is not a finding.
+
+        Reporting it as `behind` made every archive install fail the check
+        forever while being perfectly current, which is the one place a
+        SessionStart hook or CI job would gate on the exit code.
+        """
+        directory = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, directory, ignore_errors=True)
+        status = install.checkout_behind_origin(directory)
+        self.assertEqual(install.ORIGIN_UNKNOWN, status.state)
+        self.assertIn("archive", status.detail)
+
+    def test_unknown_does_not_count_as_work(self) -> None:
+        directory = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, directory, ignore_errors=True)
+        home = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, home, ignore_errors=True)
+        with unittest.mock.patch.object(
+            install,
+            "checkout_behind_origin",
+            lambda *a, **k: install.OriginStatus(install.ORIGIN_UNKNOWN, "no idea"),
+        ):
+            _, pending = install.status_lines([home], check_origin=True)
+        self.assertFalse(pending)
+
+    def test_behind_does_count_as_work(self) -> None:
+        home = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, home, ignore_errors=True)
+        with unittest.mock.patch.object(
+            install,
+            "checkout_behind_origin",
+            lambda *a, **k: install.OriginStatus(install.ORIGIN_BEHIND, "3 behind"),
+        ):
+            _, pending = install.status_lines([home], check_origin=True)
+        self.assertTrue(pending)
 
 
 class StatusCommandTests(unittest.TestCase):

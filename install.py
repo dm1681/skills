@@ -1171,8 +1171,26 @@ def vendored_status() -> list:
     return problems
 
 
-def checkout_behind_origin(repo: Path = REPO_ROOT) -> Optional[str]:
-    """How far this checkout trails its remote, or None when it is current.
+class OriginStatus(NamedTuple):
+    """Whether the checkout trails its remote, or whether that is knowable.
+
+    `unknown` is deliberately not `behind`. An unpacked release archive has no
+    `.git` at all, and a machine with no route to the remote cannot be asked;
+    reporting either as work to do would mean every such install fails a check
+    forever while being perfectly current.
+    """
+
+    state: str
+    detail: str
+
+
+ORIGIN_CURRENT = "current"
+ORIGIN_BEHIND = "behind"
+ORIGIN_UNKNOWN = "unknown"
+
+
+def checkout_behind_origin(repo: Path = REPO_ROOT) -> OriginStatus:
+    """How far this checkout trails its remote.
 
     "Up to date with the checkout" is worth nothing if the checkout itself is
     behind: every skill can match a source that is three commits stale. This
@@ -1191,24 +1209,35 @@ def checkout_behind_origin(repo: Path = REPO_ROOT) -> Optional[str]:
             return None
         return result.stdout.strip()
 
+    if git("rev-parse", "--is-inside-work-tree") != "true":
+        return OriginStatus(
+            ORIGIN_UNKNOWN,
+            "not a git checkout, so there is no origin to compare "
+            "(a release archive has none)",
+        )
     branch = git("rev-parse", "--abbrev-ref", "HEAD")
     if not branch or branch == "HEAD":
-        return "checkout is not on a branch, so it has no upstream to compare"
+        return OriginStatus(
+            ORIGIN_UNKNOWN, "checkout is not on a branch, so it has no upstream"
+        )
     if git("fetch", "--quiet", "origin") is None:
-        return "could not reach origin, so staleness is unknown"
+        return OriginStatus(ORIGIN_UNKNOWN, "could not reach origin")
     counts = git("rev-list", "--left-right", "--count", f"{branch}...origin/{branch}")
     if not counts:
-        return f"no origin/{branch} to compare against"
+        return OriginStatus(ORIGIN_UNKNOWN, f"no origin/{branch} to compare against")
     try:
         ahead, behind = (int(part) for part in counts.split())
     except ValueError:
-        return f"could not read how {branch} compares to origin/{branch}"
-    if behind:
-        return (
-            f"{branch} is {behind} commit(s) behind origin/{branch}"
-            f"{f' and {ahead} ahead' if ahead else ''}; `git pull` before installing"
+        return OriginStatus(
+            ORIGIN_UNKNOWN, f"could not read how {branch} compares to origin/{branch}"
         )
-    return None
+    if behind:
+        return OriginStatus(
+            ORIGIN_BEHIND,
+            f"{branch} is {behind} commit(s) behind origin/{branch}"
+            f"{f' and {ahead} ahead' if ahead else ''}; `git pull` before installing",
+        )
+    return OriginStatus(ORIGIN_CURRENT, "up to date with origin")
 
 
 # `--status` found work to do. Distinct from the error codes above on purpose:
@@ -1259,16 +1288,16 @@ def status_lines(
             lines.append(f"  drifted   {problem}")
 
     if check_origin:
-        behind = checkout_behind_origin()
+        origin = checkout_behind_origin()
         lines.append("")
         lines.append("checkout")
-        if behind is None:
-            lines.append("  current   up to date with origin")
-        else:
+        lines.append(f"  {origin.state:<9} {origin.detail}")
+        if origin.state == ORIGIN_BEHIND:
             # A stale checkout makes every "current" above meaningless, so it
             # counts as work even when no installed skill differs from it.
+            # `unknown` does not: not being able to tell is not a finding, and
+            # an archive install would otherwise never report a clean run.
             pending += 1
-            lines.append(f"  behind    {behind}")
 
     lines.append("")
     lines.append(

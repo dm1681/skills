@@ -3,6 +3,21 @@
 All notable changes to this repository are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [10.0.1] - 2026-08-19
+
+### Fixed
+
+- `--status --check-origin` no longer reports an unpacked release archive as
+  work to do. An archive has no `.git`, which the check read as "not on a
+  branch" and counted as `behind`, so every archive install failed the check
+  forever while being perfectly current — in the one place the exit code
+  matters, since a `SessionStart` hook or CI job is what gates on it. Not being
+  able to tell is not a finding: the check now separates `unknown` from
+  `behind`, names why it cannot tell (no `.git`, a detached HEAD, an
+  unreachable remote, no matching remote branch), and only a real `behind`
+  counts. `10.0.0` shipped the defect, and it is reachable only through the
+  opt-in flag; plain `--status` was always correct.
+
 ## [10.0.0] - 2026-08-19
 
 ### Added
