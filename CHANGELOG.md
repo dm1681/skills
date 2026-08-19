@@ -132,50 +132,15 @@ All notable changes to this repository are documented here. Versions follow
   `SkillsApp.external_installers`; a test pins the two together so a registry
   entry with nothing behind it fails in CI rather than at install time.
 
-### Fixed
-
-- `semantic-pr-review` draws a markdown code excerpt as the document it is,
-  rather than as its own markup. A `code_preview` with `"language":
-  "markdown"` now renders headings, bold and italic, inline code, bullet and
-  numbered lists, blockquotes, rules, and fenced code blocks — the fenced
-  blocks highlighted in the fence's own language — so a tooltip pointed at a
-  `.md` file reads as prose instead of as a wall of `#` and `**`. Every other
-  language is untouched and stays raw, highlighted source.
-
-  The excerpt itself does not change: `code_preview.code` still holds the
-  file's bytes and `verify_pr_explorer.py` still compares them to the blob at
-  the pinned commit, so a markdown preview is exactly as source-backed as any
-  other — only the drawing differs. Rendering builds every node through the
-  DOM and never `innerHTML`, so raw HTML inside an excerpt is shown as the
-  literal text it is; a link becomes a link only under `http`, `https`, or
-  `mailto`, and anything else renders as its label. An excerpt is a slice of a
-  file, so a fence it opens but never closes keeps its lines instead of
-  dropping them. Three more verifier guards, checked to fail on a template
-  without the feature, cover the renderer, its stylesheet surface, and the
-  link scheme restriction.
-
-- `semantic-pr-review` renders line breaks and bullets in the rich tooltip's
-  context copy and in the detail panel, instead of collapsing them onto one
-  line. `renderCodeAware` split the value only on backtick runs and appended
-  the rest as a text node, where HTML whitespace rules turn an authored
-  `- one\n- two` into a run-on sentence. Nothing rejected the newline on the
-  way in — the scaffold passes these fields through untouched and validation
-  is silent about them — so the break only ever showed up in a browser.
-  Multi-line values now render one block per line, with `-`, `*`, and a
-  literal bullet promoted to a real bullet whose wrapped text stays aligned.
-  Values with no newline take an early return through the original code path
-  and render byte-identically, so only the broken case changes.
-
-  The blocks are `<span>`s promoted by CSS rather than a `<ul>`: these values
-  land in a `<p>` and in several `<span>`s, where a list or `<div>` is invalid
-  and the HTML parser hoists it out of its container. In a node tooltip a
-  multi-line `purpose` also moves the trailing `Receives: … Sends: …` sentence
-  onto its own line, which otherwise rode on the last bullet.
-  `verify_pr_explorer.py` gains two quality guards, checked to fail on a
-  fragment built before this fix, so a template that loses either the renderer
-  or the stylesheet rule is caught rather than silently regressing.
-
 ### Changed
+
+- A bare `skills` opens the dashboard instead of the guided flow. The step-by
+  -step install used to open whenever the destination had no receipt, so the
+  case where a walkthrough was least wanted — a directory nothing had been
+  installed into, where someone typing `skills` is asking what exists — is
+  exactly the case that got one. `skills` is a question now, and answering it
+  never starts an install. `skills install` into a fresh destination is
+  unchanged, and `--guided` and `G` still ask for the flow deliberately.
 
 - `--matt-skills` fetches `mattpocock/skills` with git instead of shelling out
   to `npx skills@latest`. The upstream CLI only copied files — a checkout and
@@ -225,6 +190,47 @@ All notable changes to this repository are documented here. Versions follow
   still validates.
 
 ### Fixed
+
+- `semantic-pr-review` draws a markdown code excerpt as the document it is,
+  rather than as its own markup. A `code_preview` with `"language":
+  "markdown"` now renders headings, bold and italic, inline code, bullet and
+  numbered lists, blockquotes, rules, and fenced code blocks — the fenced
+  blocks highlighted in the fence's own language — so a tooltip pointed at a
+  `.md` file reads as prose instead of as a wall of `#` and `**`. Every other
+  language is untouched and stays raw, highlighted source.
+
+  The excerpt itself does not change: `code_preview.code` still holds the
+  file's bytes and `verify_pr_explorer.py` still compares them to the blob at
+  the pinned commit, so a markdown preview is exactly as source-backed as any
+  other — only the drawing differs. Rendering builds every node through the
+  DOM and never `innerHTML`, so raw HTML inside an excerpt is shown as the
+  literal text it is; a link becomes a link only under `http`, `https`, or
+  `mailto`, and anything else renders as its label. An excerpt is a slice of a
+  file, so a fence it opens but never closes keeps its lines instead of
+  dropping them. Three more verifier guards, checked to fail on a template
+  without the feature, cover the renderer, its stylesheet surface, and the
+  link scheme restriction.
+
+- `semantic-pr-review` renders line breaks and bullets in the rich tooltip's
+  context copy and in the detail panel, instead of collapsing them onto one
+  line. `renderCodeAware` split the value only on backtick runs and appended
+  the rest as a text node, where HTML whitespace rules turn an authored
+  `- one\n- two` into a run-on sentence. Nothing rejected the newline on the
+  way in — the scaffold passes these fields through untouched and validation
+  is silent about them — so the break only ever showed up in a browser.
+  Multi-line values now render one block per line, with `-`, `*`, and a
+  literal bullet promoted to a real bullet whose wrapped text stays aligned.
+  Values with no newline take an early return through the original code path
+  and render byte-identically, so only the broken case changes.
+
+  The blocks are `<span>`s promoted by CSS rather than a `<ul>`: these values
+  land in a `<p>` and in several `<span>`s, where a list or `<div>` is invalid
+  and the HTML parser hoists it out of its container. In a node tooltip a
+  multi-line `purpose` also moves the trailing `Receives: … Sends: …` sentence
+  onto its own line, which otherwise rode on the last bullet.
+  `verify_pr_explorer.py` gains two quality guards, checked to fail on a
+  fragment built before this fix, so a template that loses either the renderer
+  or the stylesheet rule is caught rather than silently regressing.
 
 - A skill with no `agents/openai.yaml` describes itself in the dashboard and the
   cloud offer instead of reading "Bundled in this collection." `skill_summary`

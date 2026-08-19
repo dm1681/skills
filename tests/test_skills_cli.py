@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 
@@ -66,6 +67,40 @@ class ArgumentTests(unittest.TestCase):
                          ["a", "b"])
         self.assertIn("--force", argv)
         self.assertIn("--dry-run", argv)
+
+
+class BareInvocationTests(unittest.TestCase):
+    """What `skills` on its own does."""
+
+    def run_bare(self, prompt: bool):
+        seen = {}
+
+        def fake_dashboard(project_dir, *args, **kwargs):
+            seen["args"] = args
+            seen["kwargs"] = kwargs
+            return 0
+
+        with unittest.mock.patch.object(skills_cli, "open_dashboard", fake_dashboard):
+            with unittest.mock.patch.object(skills_cli, "can_prompt", lambda: prompt):
+                code = skills_cli.main([])
+        return code, seen
+
+    def test_it_opens_the_dashboard_not_the_guided_flow(self) -> None:
+        """`skills` asks a question; it must not start an install.
+
+        The guided flow used to open whenever the destination had no receipt,
+        so the one case where someone was least likely to want a walkthrough --
+        a directory nothing had been installed into -- is exactly the case that
+        got one.
+        """
+        code, seen = self.run_bare(prompt=True)
+        self.assertEqual(0, code)
+        self.assertIs(False, seen["kwargs"].get("guided"))
+
+    def test_without_a_terminal_it_prints_help(self) -> None:
+        code, seen = self.run_bare(prompt=False)
+        self.assertEqual(2, code)
+        self.assertEqual({}, seen)
 
 
 class ShimTests(unittest.TestCase):

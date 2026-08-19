@@ -115,13 +115,18 @@ copy into an adjacent `.skills-backups/` directory.
 
 ### Guided mode
 
-Installing into a destination for the first time — one with no
+`skills install` into a destination for the first time — one with no
 `.dm1681-skills.json` receipt — opens a four-step flow instead: where to
 install, which skills, copy or link, then a review that spells out every write
 and backup and states plainly that nothing has been written yet. The sidebar
 becomes a step rail; nothing else about the layout moves. Press `G` to switch
 modes at any time, or force either with `skills install --guided` /
 `--no-guided`.
+
+A bare `skills` never starts there. It means "show me what I have", so it
+always opens the dashboard, even in a directory nothing has been installed
+into — which is precisely where being walked through an unrequested install
+was least welcome.
 
 ### What the colours mean
 

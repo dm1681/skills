@@ -520,8 +520,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if getattr(arguments, "handler", None) is None:
             # A bare `skills` in a terminal means "show me what I have"; without
             # one there is nothing to show, so fall back to the help text.
+            # It opens the dashboard, never the guided flow. "Show me what I
+            # have" is a question, and answering a question by walking someone
+            # through an install they did not ask for is the wrong default in
+            # exactly the case it used to trigger: a directory nothing has been
+            # installed into yet. `skills install --guided`, and `G` in the
+            # dashboard, still ask for it deliberately.
             if not raw and can_prompt():
-                return open_dashboard(Path.cwd())
+                return open_dashboard(Path.cwd(), guided=False)
             parser().print_help()
             return 2
         return arguments.handler(arguments)
