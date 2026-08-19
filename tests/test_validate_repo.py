@@ -46,9 +46,24 @@ class SkillWarningTests(unittest.TestCase):
         self.assertEqual([], VALIDATOR.skill_warnings("demo", text))
 
 
+# The one shipped skill allowed to warn. `olympus-report-progress` is vendored
+# from the Olympus repository, and the sessions that load it run in unrelated
+# repositories where Olympus's own docs do not exist -- so it states its whole
+# spec inline and cannot be split into references/ the way the warning
+# suggests. Splitting it would break the case it exists for. Everything else
+# must stay clean, including that skill's description phrasing.
+SELF_CONTAINED_BY_DESIGN = "olympus-report-progress"
+
+
 class ShippedSkillTests(unittest.TestCase):
-    def test_shipped_skills_carry_no_warnings(self) -> None:
-        self.assertEqual([], VALIDATOR.collect_warnings())
+    def test_only_the_off_repo_skill_may_exceed_the_entrypoint_budget(self) -> None:
+        budget_warning = f"skills/{SELF_CONTAINED_BY_DESIGN}/SKILL.md is"
+        unexpected = [
+            warning
+            for warning in VALIDATOR.collect_warnings()
+            if not (warning.startswith(budget_warning) and "budget" in warning)
+        ]
+        self.assertEqual([], unexpected)
 
 
 if __name__ == "__main__":

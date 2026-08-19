@@ -8,6 +8,7 @@ self-contained under [`skills/`](skills/).
 
 | Skill | Purpose |
 | --- | --- |
+| `olympus-report-progress` | Report a repository checkout and append a session update to a running Olympus server, from any repository. |
 | `semantic-pr-review` | Explain a pull request as a source-verified semantic hierarchy and interactive flowchart. |
 | `viz-driven-dev` | Build the plot, overlay, or video that would show a feature's effect before implementing it, then regenerate it from real output. |
 | `wow-addon-dev` | Build, debug, package, and publish retail World of Warcraft addons under the taint and secret-value fences. |
@@ -68,6 +69,33 @@ It catches folder/TOC name mismatches, malformed Interface versions, missing
 listed files, and invalid SavedVariables names. It cannot tell you whether the
 Interface number is current — only the in-game build check can.
 
+## Olympus progress reporting
+
+`olympus-report-progress` reports where an agent session happened and what it
+did to a running [Olympus](https://github.com/dm1681/Olympus) server: it upserts
+the Repository Checkout, resolves the Olympus Project for that repository, and
+appends a short Session Update.
+
+The skill is **vendored** from the Olympus repository
+(`.claude/skills/olympus-report-progress/SKILL.md`, commit `252f467`) rather
+than authored here. Olympus skills are normally thin wrappers over versioned
+repo docs; this one is the documented exception, because the sessions that most
+need it run in *other* repositories where those docs do not exist, so it states
+its whole spec inline. That is also why its `SKILL.md` is far over this repo's
+150-line entrypoint budget and why `validate_repo.py` warns about it: nothing in
+it can be replaced by a link an off-repo agent cannot follow.
+
+Being a second copy, it drifts. A change to the Olympus Agent Interface — MCP
+tool names, `/api/agent/v1` request or response shapes, Session Update fields —
+lands upstream first; re-copy the file afterwards and update the commit named in
+the note at the top of `SKILL.md`.
+
+It needs a reachable Olympus server and nothing else. It prefers an MCP adapter
+registered as `olympus` and falls back to plain HTTP against
+`$OLYMPUS_BASE_URL/api/agent/v1/...`, so it is fully usable with no MCP server
+configured; this installer does not register one. Registering the adapter is a
+manual, optional step in your own agent configuration.
+
 ## Install
 
 Run the installer without options to open the dashboard:
@@ -120,8 +148,10 @@ and explains what to pass instead, rather than defaulting to every skill in
 every root.
 
 Skills that declare `global_default: false` in their `agents/openai.yaml` are
-labelled `repo-level only` on their tile. `wow-addon-dev` is one: a narrow,
-domain-specific skill should not reach every unrelated session.
+labelled `repo-level only` on their tile. `wow-addon-dev` and
+`olympus-report-progress` are the two: a narrow, domain-specific skill, and
+one that does nothing without a server you may not run, should not reach
+every unrelated session.
 
 On Windows PowerShell:
 
