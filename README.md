@@ -201,6 +201,7 @@ skills install NAME       # repo-level install, no paths to type
 skills install NAME --user  # machine-wide instead
 skills list               # what this collection ships
 skills where              # path to the checkout the shims point at
+skills status --user      # what is installed, and what needs updating
 ```
 
 `skills install` defaults to a repo-level install of the current working
@@ -373,6 +374,50 @@ Graphify's generic `agents` platform for the shared `.agents/skills` target and
 uses the explicit `codex`, `cursor`, `copilot`, or `claude` platform when that
 agent was selected. See [`docs/graphify.md`](docs/graphify.md) for the exact
 command matrix and boundaries.
+
+## Checking what needs updating
+
+`skills status` reconciles three things that can disagree: the receipt each
+destination was installed with, the directory as it stands now, and the skills
+this checkout actually ships. Comparing any two of them is what let a skill
+removed from the collection sit in a receipt across two releases without
+anything noticing.
+
+```bash
+skills status --user             # the machine-wide roots
+skills status                    # this project's roots
+skills status --user --check-origin   # ...and whether the checkout itself is behind
+./install.sh --status            # same answer with no `skills` command yet
+```
+
+It reports one state per skill per root:
+
+| State | Meaning |
+| --- | --- |
+| `current` | installed and identical to this checkout |
+| `drifted` | installed but the copy differs — reinstall to update |
+| `missing` | the receipt records it, but nothing is on disk |
+| `orphan` | the receipt records it, but the collection no longer ships it |
+| `untracked` | on disk and current, but absent from the receipt |
+| `mode` | contents match, but a copy sits where the receipt says link (or vice versa) |
+
+A skill that is both untracked and different reports `drifted`: being absent
+from the receipt is bookkeeping, and the difference is the thing a reinstall
+would fix.
+
+Two checks look past this checkout. Vendored skills — copies of files this
+repository does not own — carry the SHA256 of their upstream bytes, so editing
+the copy here instead of upstream is caught with no network and no second
+checkout; the hash is taken over content with line endings normalised, because
+a CRLF checkout would otherwise read as drift on Windows and nowhere else.
+`--check-origin` fetches and reports whether the checkout is behind its remote,
+which is worth knowing before believing anything above it: every skill can
+match a source that is itself three commits stale.
+
+The command needs no `textual` and no terminal, so a `SessionStart` hook or a
+CI job can gate on it. It exits `0` when there is nothing to do and `3` when
+there is — deliberately not `1` or `2`, which already mean the run itself
+failed, so a caller can tell "there is drift" from "the check broke".
 
 ## Sync on another machine
 

@@ -24,6 +24,16 @@ wrappers) installs them locally, `skills_tui.py` is the interactive dashboard,
 
 - Every install path goes through `install.install_one`, so the rules live in
   one place; the TUI never re-implements install logic.
+- The receipt each root carries (`.dm1681-skills.json`) is read back by
+  `install.root_status`, which reconciles it against the directory and against
+  the collection. It was write-only until then, which is how a removed skill
+  stayed in a receipt across two releases. `skills status` / `install.py
+  --status` renders that reconciliation, needs no `textual`, and exits `3` when
+  something needs updating — not `1` or `2`, which already mean the run failed.
+- A vendored skill (`install.VENDORED_SKILLS`) records the SHA256 of its
+  upstream bytes with line endings normalised. Editing the copy here instead of
+  upstream is drift, and the hash is what makes it visible offline. Re-sync
+  upstream first, then update both the copy and its recorded hash.
 - The TUI's colour contract (documented at the top of `skills_tui.py`) is
   load-bearing: one hue means one thing, and red is reserved for failure, so a
   healthy run contains none.

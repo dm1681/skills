@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import filecmp
+import hashlib
 import json
 import os
 import re
@@ -63,6 +64,48 @@ MATT_SKILLS_SKIP = ("deprecated",)
 # terminal could have asked. A 401 — a proxy in the way, a repository URL
 # pointing somewhere private — should fail in a second with a message instead.
 MATT_SKILLS_GIT_ENV = {"GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "echo"}
+# The same reasoning as MATT_SKILLS_GIT_ENV, for the reads `--status` makes.
+# A status check that blocks on a credential prompt is worse than one that
+# cannot reach the network, because the second at least says so and exits.
+STATUS_GIT_ENV = {"GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "echo"}
+RECEIPT_NAME = ".dm1681-skills.json"
+
+# One reconciled answer per skill per root.
+CURRENT = "current"
+DRIFTED = "drifted"
+MISSING = "missing"
+ORPHAN = "orphan"
+UNTRACKED = "untracked"
+MODE_MISMATCH = "mode"
+# Every state except `current` wants a human to do something.
+ACTIONABLE_STATES = (DRIFTED, MISSING, ORPHAN, UNTRACKED, MODE_MISMATCH)
+
+
+class VendoredSkill(NamedTuple):
+    """A bundled skill that is a copy of a file this repository does not own.
+
+    A vendored copy drifts silently: someone edits it here instead of upstream,
+    and nothing says so. The recorded hash is what makes that detectable with
+    no network and no second checkout -- it covers the upstream bytes only, so
+    the provenance note this repository splices in does not change it.
+    """
+
+    skill: str
+    entrypoint: str
+    upstream: str
+    commit: str
+    sha256: str
+
+
+VENDORED_SKILLS = (
+    VendoredSkill(
+        skill="olympus-report-progress",
+        entrypoint="SKILL.md",
+        upstream="dm1681/Olympus .claude/skills/olympus-report-progress/SKILL.md",
+        commit="252f467",
+        sha256="5a2a30d8056ab340cce4f6006050166cd0d9c99b5d69777264c246e7867d3732",
+    ),
+)
 
 
 class InstallError(RuntimeError):
@@ -939,6 +982,303 @@ def write_receipt(root: Path, skills: list[str], mode: str, dry_run: bool) -> No
     os.replace(temporary, root / ".dm1681-skills.json")
 
 
+def read_receipt(root: Path) -> Optional[dict]:
+    """The receipt `root` was installed with, or None when it has none.
+
+    `write_receipt` has recorded one on every install since the first release,
+    but nothing read it back, so a receipt could disagree with the directory
+    beside it indefinitely. Reading it is what turns "what is on disk" into
+    "what was installed, and is it still that".
+    """
+    path = root / RECEIPT_NAME
+    if not path.is_file():
+        return None
+    try:
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return receipt if isinstance(receipt, dict) else None
+
+
+class SkillReport(NamedTuple):
+    name: str
+    state: str
+    detail: str
+
+
+class RootReport(NamedTuple):
+    root: Path
+    receipt_version: Optional[str]
+    receipt_mode: Optional[str]
+    skills: tuple
+    notes: tuple
+
+    @property
+    def managed(self) -> bool:
+        return self.receipt_version is not None
+
+    def actionable(self) -> list:
+        return [item for item in self.skills if item.state in ACTIONABLE_STATES]
+
+
+def root_status(root: Path, bundled: Optional[Iterable[str]] = None) -> RootReport:
+    """Reconcile one destination root against its receipt and this checkout.
+
+    Three sources have to agree: the receipt (what was installed), the
+    directory (what is there now), and the collection (what exists to install).
+    Comparing only two of them is what let a skill removed from the collection
+    sit in a receipt for two releases without anything noticing.
+    """
+    names = sorted(bundled) if bundled is not None else available_skills()
+    known = set(names)
+    receipt = read_receipt(root)
+    recorded = []
+    mode = None
+    version = None
+    if receipt is not None:
+        version = str(receipt.get("version", ""))
+        mode = receipt.get("mode")
+        raw = receipt.get("skills", [])
+        recorded = [str(item) for item in raw] if isinstance(raw, list) else []
+
+    notes = []
+    if receipt is not None and version != VERSION:
+        notes.append(
+            f"receipt records {version or 'no version'}; this checkout is {VERSION}"
+        )
+
+    reports = []
+    seen = set()
+    for name in recorded:
+        seen.add(name)
+        destination = root / name
+        exists = destination.exists() or destination.is_symlink()
+        if name not in known:
+            where = "still on disk" if exists else "already gone"
+            reports.append(
+                SkillReport(name, ORPHAN, f"not in this collection ({where})")
+            )
+            continue
+        if not exists:
+            reports.append(
+                SkillReport(name, MISSING, "recorded installed but not on disk")
+            )
+            continue
+        reports.append(_installed_report(name, destination, mode))
+
+    # A skill can reach a root without a receipt entry: an older release, a
+    # hand copy, or an install that named a different set. It is installed
+    # either way, so it is reported either way.
+    for name in names:
+        if name in seen:
+            continue
+        destination = root / name
+        if not (destination.exists() or destination.is_symlink()):
+            continue
+        installed = _installed_report(name, destination, mode)
+        if receipt is None:
+            reports.append(installed)
+        elif installed.state == CURRENT:
+            reports.append(
+                SkillReport(name, UNTRACKED, "on disk but absent from the receipt")
+            )
+        else:
+            # Being absent from the receipt is bookkeeping; differing from the
+            # checkout is the thing that needs doing. Report the action, and
+            # keep the receipt gap as detail rather than letting it mask this.
+            reports.append(
+                SkillReport(
+                    name,
+                    installed.state,
+                    f"{installed.detail} (also absent from the receipt)",
+                )
+            )
+
+    reports.sort(key=lambda item: item.name)
+    return RootReport(root, version, mode, tuple(reports), tuple(notes))
+
+
+def _installed_report(name: str, destination: Path, mode: Optional[str]) -> SkillReport:
+    """Compare one installed destination against `skills/<name>`."""
+    source = SOURCE_ROOT / name
+    if not trees_equal(destination, source):
+        return SkillReport(name, DRIFTED, "installed copy differs from this checkout")
+    if mode and not destination_matches_mode(destination, mode):
+        actual = "link" if destination.is_symlink() else "copy"
+        return SkillReport(name, MODE_MISMATCH, f"on disk as a {actual}, receipt says {mode}")
+    return SkillReport(name, CURRENT, "matches this checkout")
+
+
+def collection_status(roots: Iterable[Path]) -> list:
+    """One RootReport per root, skipping roots this collection never touched."""
+    bundled = available_skills()
+    reports = []
+    for root in roots:
+        if not root.is_dir() and not (root / RECEIPT_NAME).is_file():
+            continue
+        reports.append(root_status(root, bundled))
+    return reports
+
+
+def _normalized(text: str) -> str:
+    """Content with platform line endings removed.
+
+    A vendored file checked out on Windows and the same file on Linux differ by
+    every line ending, so hashing raw bytes would report drift on one platform
+    and nothing on the other. The hash has to describe content, not checkout.
+    """
+    return text.replace("\r\n", "\n")
+
+
+def vendored_upstream_text(entrypoint: Path) -> Optional[str]:
+    """The vendored file with its provenance note removed, or None.
+
+    None means the note is gone, which is itself the drift: the note is what
+    tells the next reader that editing this copy is the wrong move.
+    """
+    try:
+        content = _normalized(entrypoint.read_text(encoding="utf-8"))
+    except OSError:
+        return None
+    match = re.search(r"\n<!--\n.*?Source of truth.*?\n-->\n", content, re.S)
+    if not match:
+        return None
+    return content[: match.start()] + content[match.end():]
+
+
+def vendored_status() -> list:
+    """One line per vendored skill whose bytes no longer match its upstream."""
+    problems = []
+    for entry in VENDORED_SKILLS:
+        entrypoint = SOURCE_ROOT / entry.skill / entry.entrypoint
+        if not entrypoint.is_file():
+            problems.append(f"{entry.skill}: {entry.entrypoint} is missing")
+            continue
+        upstream = vendored_upstream_text(entrypoint)
+        if upstream is None:
+            problems.append(
+                f"{entry.skill}: provenance note is gone, so the copy no longer "
+                f"names {entry.upstream}"
+            )
+            continue
+        digest = hashlib.sha256(upstream.encode("utf-8")).hexdigest()
+        if digest != entry.sha256:
+            problems.append(
+                f"{entry.skill}: edited here instead of upstream -- re-sync from "
+                f"{entry.upstream} at {entry.commit} (expected {entry.sha256[:12]}, "
+                f"found {digest[:12]})"
+            )
+    return problems
+
+
+def checkout_behind_origin(repo: Path = REPO_ROOT) -> Optional[str]:
+    """How far this checkout trails its remote, or None when it is current.
+
+    "Up to date with the checkout" is worth nothing if the checkout itself is
+    behind: every skill can match a source that is three commits stale. This
+    costs a fetch, so it is opt-in rather than part of the default answer.
+    """
+    def git(*arguments: str) -> Optional[str]:
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(repo), *arguments],
+                capture_output=True,
+                text=True,
+                check=True,
+                env={**os.environ, **STATUS_GIT_ENV},
+            )
+        except (OSError, subprocess.CalledProcessError):
+            return None
+        return result.stdout.strip()
+
+    branch = git("rev-parse", "--abbrev-ref", "HEAD")
+    if not branch or branch == "HEAD":
+        return "checkout is not on a branch, so it has no upstream to compare"
+    if git("fetch", "--quiet", "origin") is None:
+        return "could not reach origin, so staleness is unknown"
+    counts = git("rev-list", "--left-right", "--count", f"{branch}...origin/{branch}")
+    if not counts:
+        return f"no origin/{branch} to compare against"
+    try:
+        ahead, behind = (int(part) for part in counts.split())
+    except ValueError:
+        return f"could not read how {branch} compares to origin/{branch}"
+    if behind:
+        return (
+            f"{branch} is {behind} commit(s) behind origin/{branch}"
+            f"{f' and {ahead} ahead' if ahead else ''}; `git pull` before installing"
+        )
+    return None
+
+
+# `--status` found work to do. Distinct from the error codes above on purpose:
+# a hook needs to tell "the check ran and there is drift" apart from "the check
+# itself broke", and both being 1 would make that impossible.
+STATUS_ACTION_EXIT = 3
+
+
+def status_lines(
+    roots: Iterable[Path],
+    check_origin: bool = False,
+) -> tuple[list[str], bool]:
+    """Rendered status, and whether anything needs a human.
+
+    One function so `install.py --status`, `skills status`, and any hook that
+    wants an answer all describe the same reconciliation rather than three that
+    drift apart.
+    """
+    lines = [f"collection {VERSION} at {REPO_ROOT}"]
+    reports = collection_status(roots)
+    pending = 0
+
+    if not reports:
+        lines.append("")
+        lines.append("no destination root holds skills from this collection")
+    for report in reports:
+        lines.append("")
+        lines.append(str(report.root))
+        if not report.managed:
+            lines.append("  (no receipt; reporting what is on disk)")
+        for note in report.notes:
+            lines.append(f"  ! {note}")
+        actionable = report.actionable()
+        pending += len(actionable)
+        if not report.skills:
+            lines.append("  nothing from this collection is installed here")
+            continue
+        width = max(len(item.name) for item in report.skills)
+        for item in report.skills:
+            lines.append(f"  {item.state:<9} {item.name:<{width}}  {item.detail}")
+
+    vendored = vendored_status()
+    if vendored:
+        pending += len(vendored)
+        lines.append("")
+        lines.append("vendored copies")
+        for problem in vendored:
+            lines.append(f"  drifted   {problem}")
+
+    if check_origin:
+        behind = checkout_behind_origin()
+        lines.append("")
+        lines.append("checkout")
+        if behind is None:
+            lines.append("  current   up to date with origin")
+        else:
+            # A stale checkout makes every "current" above meaningless, so it
+            # counts as work even when no installed skill differs from it.
+            pending += 1
+            lines.append(f"  behind    {behind}")
+
+    lines.append("")
+    lines.append(
+        "nothing to update"
+        if not pending
+        else f"{pending} item(s) need attention"
+    )
+    return lines, bool(pending)
+
+
 def global_instruction_files(home: Path, mode: str) -> list[tuple[Path, str]]:
     """Return the (path, content) pairs that carry the user-level instructions.
 
@@ -1388,6 +1728,16 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--force", action="store_true")
     result.add_argument("--dry-run", action="store_true")
     result.add_argument("--list", action="store_true", help="list bundled skills and exit")
+    result.add_argument(
+        "--status",
+        action="store_true",
+        help="report which managed skills need updating, then exit",
+    )
+    result.add_argument(
+        "--check-origin",
+        action="store_true",
+        help="with --status, also fetch and report whether this checkout is behind",
+    )
     result.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
     return result
 
@@ -1521,6 +1871,14 @@ def main(argv: Optional[list[str]] = None) -> int:
         if args.list:
             print("\n".join(bundled))
             return 0
+        if args.status:
+            # Read-only, and reachable with no terminal: a hook or a CI job is
+            # the caller that most needs this answer.
+            lines, pending = status_lines(
+                stage_roots(args, args.scope), args.check_origin
+            )
+            print("\n".join(lines))
+            return STATUS_ACTION_EXIT if pending else 0
         if args.cloud_offer:
             # Ahead of the dashboard check and the bare-invocation guard: this
             # runs from a hook with no terminal, and silence is a valid answer.
