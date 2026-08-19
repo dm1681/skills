@@ -363,6 +363,15 @@ def _validate_model(model: dict[str, Any]) -> list[str]:
                 f"node {node_id} has invalid change_status: "
                 f"{node['change_status']}"
             )
+        # Optional, and only worth carrying when it says more than the status
+        # word would. An empty string would render as a blank line, and a
+        # non-string as "[object Object]", so neither passes silently.
+        if "change_note" in node:
+            note = node["change_note"]
+            if not isinstance(note, str) or not note.strip():
+                errors.append(
+                    f"node {node_id} change_note must be a non-empty string"
+                )
         if node["system"] not in system_ids:
             errors.append(
                 f"node {node_id} references unknown system: {node['system']}"

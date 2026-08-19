@@ -3,6 +3,35 @@
 All notable changes to this repository are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `code_preview` nodes take an optional `change_note`, a sentence saying what
+  this pull request did to the node. It replaces the derived one, so "added"
+  can read "Split the old inline branch into a registry lookup" instead —
+  the status word says a thing changed, not what the change was, and this is
+  the line a reader uses to decide whether the node is worth opening. It must
+  be a non-empty string when present: an empty one would render as a blank
+  line and a non-string as `[object Object]`, so the scaffold rejects both
+  rather than letting either reach the page.
+
+### Changed
+
+- A node's hover card reads as four things in order — what the node does, what
+  the PR did to it, the detail behind that, then what crosses the boundary.
+  The change used to be a bare status word prefixed onto the summary with a
+  middot (`added · Normalizes every…`), which read as a label rather than a
+  sentence and left the summary sharing a line with the first bullet. The
+  summary is still the first line of `purpose` and the bullets are still the
+  rest of it, so no existing model needs editing; a node with no `change_note`
+  falls back to a sentence per status (`Added in this pull request.`,
+  `Unchanged context.`, and so on) rather than the bare word.
+
+  One authoring consequence: end the summary as a sentence rather than with a
+  colon. The change line now sits between it and the bullets, so a trailing
+  `:` points at the wrong line.
+
 ## [10.0.1] - 2026-08-19
 
 ### Fixed
