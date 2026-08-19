@@ -32,6 +32,66 @@ The template applies code formatting differently depending on the field. Getting
 | `node.purpose`, `receives`, `sends`, `role`, `connection`, `tradeoff`, `edge.transformation`, `edge.evidence`, `evidence_rail[].evidence` | **Backticks encouraged.** The rich-tooltip renderer converts them into real `<code>` elements. |
 | `edge.transfer`, `edge.optional`, `edge.containers` | **No backticks.** The template already code-wraps each list item; adding your own leaves an unpaired delimiter at each end of the joined run. |
 
+## Markdown excerpts render as markdown
+
+A `code_preview` with `"language": "markdown"` is drawn as the document it is —
+headings, bold and italic, inline code, bullet and numbered lists,
+blockquotes, rules, and fenced code blocks (highlighted in the fence's own
+language) — instead of as raw markup. Point a node at a `.md` file and declare
+the language; nothing else is needed.
+
+```json
+"code_preview": { "language": "markdown", "source_index": 0 }
+```
+
+What this does **not** change is the excerpt. `code_preview.code` still holds
+the file's bytes, and `verify_pr_explorer.py` still compares them to the blob
+at the pinned commit, so a markdown preview is exactly as source-backed as a
+Python one. Only the drawing differs.
+
+Two things worth knowing:
+
+- **A link only becomes a link if its scheme is `http`, `https`, or
+  `mailto`.** Anything else — a script scheme, or a relative path with no base
+  to resolve against inside a tooltip — renders as its label text. Raw HTML in
+  the excerpt is inserted as text and never parsed as markup.
+- **An unterminated fence is kept, not dropped.** An excerpt is a slice of a
+  file, so it can open a fence it never closes; the remaining lines render as
+  the code block they are.
+
+Choose another language when the excerpt's *markup* is the point — a PR that
+changes markdown syntax itself is better read as source, since rendering is
+what hides the characters under review.
+
+## Line breaks and bullets
+
+The same fields that take backticks also take line breaks. A field with no
+newline renders as one inline run, exactly as before. Split it across lines and
+each line becomes its own block, with a line that starts `- `, `* `, or a
+literal bullet rendered as a real bullet whose wrapped text stays aligned.
+
+```json
+"purpose": "Normalizes every inbound request:\n- validates the `token`\n- refreshes session metadata"
+```
+
+Backticks still resolve inside a bullet, so the two features compose.
+
+Two constraints worth knowing, because neither is obvious from the rendered
+page:
+
+- **The blocks are styled `<span>`s, not a `<ul>`.** These values land in a
+  `<p>` and in several `<span>`s, where a `<ul>` or `<div>` is invalid and the
+  HTML parser hoists it out of its container, breaking the layout. Phrasing
+  content promoted to a block by CSS is the only structure valid in all of
+  them.
+- **Blank lines are dropped, and each line is trimmed.** Indent the JSON
+  string however you like; spacing between blocks comes from the stylesheet,
+  not from the authored whitespace.
+
+In a node tooltip, a multi-line `purpose` also pushes the trailing
+`Receives: … Sends: …` sentence onto its own line, so it never rides on the
+last bullet. A single-line `purpose` keeps the original one-paragraph wording.
+
 ## Validate before you render
 
 Run the scaffold in check mode while authoring. It reports every violation in one pass — missing fields, unknown systems, unresolved path nodes, missing edges, preview length, and line width — without writing an artifact:

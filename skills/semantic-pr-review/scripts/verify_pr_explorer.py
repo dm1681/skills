@@ -361,7 +361,24 @@ def _check_quality_contract(text: str) -> list[str]:
         "rich tooltip code styling": re.compile(
             r"\.[\w-]*rich-tooltip[^{]*code\s*\{"
         ),
+        # A text node collapses newlines, so authored bullets would render as
+        # one run-on line. Both halves are required: the renderer that splits
+        # the lines, and the rule that makes the spans behave as blocks.
+        "prose line rendering": re.compile(r"prx-prose-bullet[\"']\s*:\s*[\"']prx-prose-line"),
+        "prose line styling": re.compile(
+            r"\.[\w-]*prose-bullet\s*\{|\.[\w-]*prose-line,",
+        ),
         "code preview block": re.compile(r"\.[\w-]*code-preview\s*\{"),
+        # A .md excerpt renders as the document it is rather than as its own
+        # markup. Both halves are required: the renderer, and the surface it
+        # draws onto. The excerpt itself is untouched -- byte equality against
+        # the blob is checked separately, on code_preview.code.
+        "markdown excerpt rendering": re.compile(r"renderMarkdownExcerpt\("),
+        "markdown excerpt styling": re.compile(
+            r"\.[\w-]*markdown-preview\s*\{"
+        ),
+        # A link in an excerpt must not be able to carry a script scheme.
+        "markdown link scheme guard": re.compile(r"https\?:.{0,20}mailto:"),
         "Catppuccin Mocha code surface": re.compile(
             r"--ctp-base:\s*#1e1e2e\b"
         ),

@@ -243,6 +243,31 @@
       word-break: normal;
     }
 
+    #__PR_EXPLORER_ROOT_ID__ .prx-prose-line,
+    #__PR_EXPLORER_ROOT_ID__ .prx-prose-bullet {
+      display: block;
+      margin-top: 4px;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-prose-line:first-child,
+    #__PR_EXPLORER_ROOT_ID__ .prx-prose-bullet:first-child {
+      margin-top: 0;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-prose-bullet {
+      position: relative;
+      padding-left: 1.1em;
+    }
+
+    /* Absolute marker rather than text-indent: a bullet that wraps keeps every
+       continuation line aligned with the first character, not the marker. */
+    #__PR_EXPLORER_ROOT_ID__ .prx-prose-bullet::before {
+      content: "\2022";
+      position: absolute;
+      left: 0.2em;
+      color: var(--muted-foreground);
+    }
+
     #__PR_EXPLORER_ROOT_ID__ .prx-tooltip-code {
       display: grid;
       gap: 6px;
@@ -298,6 +323,98 @@
       border: 0;
       white-space: inherit;
       font: inherit;
+    }
+
+    /* Same surface as .prx-code-preview, but deliberately not that class:
+       it carries `code { display: block }`, which would break inline code
+       spans out onto their own line inside prose. */
+    #__PR_EXPLORER_ROOT_ID__ .prx-markdown-preview {
+      display: grid;
+      gap: 6px;
+      margin: 0;
+      padding: 10px;
+      color: var(--ctp-text);
+      background: var(--ctp-base);
+      border: 1px solid var(--ctp-surface-0);
+      border-radius: var(--radius);
+      text-align: left;
+      cursor: text;
+      overflow-wrap: normal;
+      word-break: normal;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-md-heading {
+      color: var(--ctp-blue);
+      font-weight: 600;
+      line-height: 1.3;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-md-heading[data-level="1"] {
+      font-size: 1.15em;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-md-heading[data-level="2"] {
+      font-size: 1.08em;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-md-item {
+      display: flex;
+      gap: 0.5em;
+      align-items: baseline;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-md-item[data-indent="1"] {
+      padding-left: 1.2em;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-md-item[data-indent="2"] {
+      padding-left: 2.4em;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-md-item[data-indent="3"] {
+      padding-left: 3.6em;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-md-marker {
+      flex: none;
+      color: var(--ctp-overlay-0);
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-md-quote {
+      padding-left: 0.7em;
+      border-left: 2px solid var(--ctp-surface-1);
+      font-style: italic;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-md-code {
+      margin: 0;
+      padding: 8px;
+      color: var(--ctp-text);
+      background: var(--ctp-surface-0);
+      border-radius: calc(var(--radius) * 0.6);
+      white-space: pre-wrap;
+      overflow-wrap: normal;
+      word-break: normal;
+      tab-size: 2;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-md-code code {
+      padding: 0;
+      background: transparent;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-md-link {
+      color: var(--ctp-sapphire);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    #__PR_EXPLORER_ROOT_ID__ .prx-markdown-preview hr {
+      width: 100%;
+      height: 1px;
+      margin: 2px 0;
+      background: var(--ctp-surface-1);
+      border: 0;
     }
 
     #__PR_EXPLORER_ROOT_ID__ .prx-token-keyword {
@@ -562,8 +679,9 @@
         target.append(code);
       }
 
-      function renderCodeAware(target, value) {
-        target.replaceChildren();
+      const bulletMarker = /^[-*•]\s+/;
+
+      function appendInlineCodeAware(target, value) {
         String(value || "")
           .split(/(`[^`]+`)/g)
           .filter(Boolean)
@@ -574,6 +692,32 @@
               target.append(document.createTextNode(part));
             }
           });
+      }
+
+      function renderCodeAware(target, value) {
+        target.replaceChildren();
+        const text = String(value || "");
+        // Single-line values render exactly as they always have: inline nodes
+        // appended straight onto the target, with no wrapper element.
+        if (!text.includes("\n")) {
+          appendInlineCodeAware(target, text);
+          return;
+        }
+        // Multi-line prose needs real line breaks -- a text node collapses
+        // newlines, so an authored bullet list arrives as one run-on line.
+        // The structure has to stay phrasing content: these targets include a
+        // <p> and several <span>s, where a <ul> or <div> is invalid and the
+        // parser hoists it out of its container. Spans promoted to blocks by
+        // .prx-prose-line / .prx-prose-bullet are valid in all three.
+        text.split("\n").forEach((rawLine) => {
+          const line = rawLine.trim();
+          if (!line) return;
+          const bullet = bulletMarker.test(line);
+          const row = document.createElement("span");
+          row.className = bullet ? "prx-prose-bullet" : "prx-prose-line";
+          appendInlineCodeAware(row, bullet ? line.replace(bulletMarker, "") : line);
+          target.append(row);
+        });
       }
 
       const pythonKeywords = new Set([
@@ -749,6 +893,161 @@
         }
       }
 
+      // ---- Markdown excerpt rendering ------------------------------------
+      // A .md excerpt is prose, and showing its raw markers makes the tooltip
+      // read like source rather than like the document under review. Rendered
+      // here rather than by a library because the page must stay
+      // self-contained, and the subset a 12-line excerpt can hold is small.
+      // Every node is built through the DOM and never innerHTML, so raw HTML
+      // inside an excerpt renders as the literal text it is.
+
+      const mdInline =
+        /(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\*[^*\n]+\*|_[^_\n]+_|\[[^\]]+\]\((?:[^()\s]|\([^()\s]*\))+\))/g;
+      const mdLink = /^\[([^\]]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)$/;
+
+      // Only schemes that cannot execute script. A relative link inside an
+      // excerpt has no base to resolve against, so it stays plain text rather
+      // than becoming a link that goes nowhere.
+      function mdHref(url) {
+        return /^(?:https?:\/\/|mailto:)/i.test(url) ? url : "";
+      }
+
+      function appendMarkdownInline(target, value) {
+        String(value || "")
+          .split(mdInline)
+          .filter(Boolean)
+          .forEach((part) => {
+            if (part.length > 1 && part.startsWith("`") && part.endsWith("`")) {
+              appendSemanticCode(target, part.slice(1, -1));
+              return;
+            }
+            const strong =
+              (part.startsWith("**") && part.endsWith("**")) ||
+              (part.startsWith("__") && part.endsWith("__"));
+            if (strong && part.length > 4) {
+              const node = document.createElement("strong");
+              appendMarkdownInline(node, part.slice(2, -2));
+              target.append(node);
+              return;
+            }
+            const emphasis =
+              (part.startsWith("*") && part.endsWith("*")) ||
+              (part.startsWith("_") && part.endsWith("_"));
+            if (emphasis && part.length > 2) {
+              const node = document.createElement("em");
+              appendMarkdownInline(node, part.slice(1, -1));
+              target.append(node);
+              return;
+            }
+            const link = mdLink.exec(part);
+            if (link) {
+              const href = mdHref(link[2]);
+              const node = document.createElement(href ? "a" : "span");
+              if (href) {
+                node.href = href;
+                node.target = "_blank";
+                node.rel = "noopener";
+                node.className = "prx-md-link";
+              }
+              appendMarkdownInline(node, link[1]);
+              target.append(node);
+              return;
+            }
+            target.append(document.createTextNode(part));
+          });
+      }
+
+      function renderMarkdownExcerpt(target, source) {
+        const lines = String(source).split("\n");
+        let index = 0;
+        while (index < lines.length) {
+          const raw = lines[index];
+          const line = raw.trim();
+
+          // An excerpt is a slice of a file, so a fence it opens may never
+          // close. An unterminated fence runs to the end rather than dropping
+          // the lines it holds.
+          const fence = /^(?:```|~~~)\s*([A-Za-z0-9_+-]*)\s*$/.exec(line);
+          if (fence) {
+            const body = [];
+            index += 1;
+            while (
+              index < lines.length &&
+              !/^(?:```|~~~)\s*$/.test(lines[index].trim())
+            ) {
+              body.push(lines[index]);
+              index += 1;
+            }
+            index += 1;
+            const pre = document.createElement("pre");
+            pre.className = "prx-md-code";
+            const code = document.createElement("code");
+            appendHighlightedCode(code, body.join("\n"), fence[1].toLowerCase());
+            pre.append(code);
+            target.append(pre);
+            continue;
+          }
+
+          if (!line) {
+            index += 1;
+            continue;
+          }
+
+          if (/^(?:-{3,}|\*{3,}|_{3,})$/.test(line)) {
+            target.append(document.createElement("hr"));
+            index += 1;
+            continue;
+          }
+
+          const heading = /^(#{1,6})\s+(.*)$/.exec(line);
+          if (heading) {
+            const node = document.createElement("div");
+            node.className = "prx-md-heading";
+            node.dataset.level = String(heading[1].length);
+            appendMarkdownInline(node, heading[2]);
+            target.append(node);
+            index += 1;
+            continue;
+          }
+
+          const quote = /^>\s?(.*)$/.exec(line);
+          if (quote) {
+            const node = document.createElement("div");
+            node.className = "prx-md-quote";
+            appendMarkdownInline(node, quote[1]);
+            target.append(node);
+            index += 1;
+            continue;
+          }
+
+          const bullet = /^[-*+]\s+(.*)$/.exec(line);
+          const ordered = /^(\d+)[.)]\s+(.*)$/.exec(line);
+          if (bullet || ordered) {
+            const node = document.createElement("div");
+            node.className = "prx-md-item";
+            const indent = raw.length - raw.replace(/^\s+/, "").length;
+            if (indent >= 2) {
+              node.dataset.indent = String(Math.min(3, Math.floor(indent / 2)));
+            }
+            const marker = document.createElement("span");
+            marker.className = "prx-md-marker";
+            marker.textContent = ordered ? `${ordered[1]}.` : "\u2022";
+            const body = document.createElement("span");
+            appendMarkdownInline(body, ordered ? ordered[2] : bullet[1]);
+            node.append(marker, body);
+            target.append(node);
+            index += 1;
+            continue;
+          }
+
+          const paragraph = document.createElement("div");
+          paragraph.className = "prx-md-line";
+          appendMarkdownInline(paragraph, line);
+          target.append(paragraph);
+          index += 1;
+        }
+      }
+
       function previewSource(node) {
         return node.sources[node.code_preview.source_index] || null;
       }
@@ -765,9 +1064,16 @@
 
         const copy = document.createElement("div");
         copy.className = "prx-tooltip-copy";
+        const purposeText = String(node.purpose || "");
+        const handoffText = `Receives: ${node.receives}. Sends: ${node.sends}.`;
+        // A multi-line purpose ends on a bullet, and the handoff sentence
+        // must not ride on that list item, so it gets a line of its own.
+        // Single-line purposes keep the original one-paragraph wording.
         renderCodeAware(
           copy,
-          `${node.change_status} · ${node.purpose} Receives: ${node.receives}. Sends: ${node.sends}.`
+          purposeText.includes("\n")
+            ? `${node.change_status} · ${purposeText}\n${handoffText}`
+            : `${node.change_status} · ${purposeText} ${handoffText}`
         );
         richTooltip.append(copy);
 
@@ -802,13 +1108,24 @@
         }
         labelRow.append(heading, sourceLabel);
 
-        const pre = document.createElement("pre");
-        pre.className = "prx-code-preview";
-        const code = document.createElement("code");
-        code.className = `language-${preview.language}`;
-        appendHighlightedCode(code, preview.code, preview.language);
-        pre.append(code);
-        previewArea.append(labelRow, pre);
+        // A markdown excerpt renders as the document it is. Every other
+        // language stays raw, syntax-highlighted source. The excerpt itself is
+        // unchanged either way -- verification compares code_preview.code
+        // against the blob, which this only affects the display of.
+        let previewBlock;
+        if (preview.language === "markdown") {
+          previewBlock = document.createElement("div");
+          previewBlock.className = "prx-markdown-preview";
+          renderMarkdownExcerpt(previewBlock, preview.code);
+        } else {
+          previewBlock = document.createElement("pre");
+          previewBlock.className = "prx-code-preview";
+          const code = document.createElement("code");
+          code.className = `language-${preview.language}`;
+          appendHighlightedCode(code, preview.code, preview.language);
+          previewBlock.append(code);
+        }
+        previewArea.append(labelRow, previewBlock);
         richTooltip.append(previewArea);
         return true;
       }
