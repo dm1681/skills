@@ -7,6 +7,40 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Added
 
+- `skills status`, and `install.py --status` behind it, answering which
+  installed skills need updating. It reconciles three things that can
+  disagree — the receipt a root was installed with, the directory as it stands
+  now, and what this checkout ships — and reports `current`, `drifted`,
+  `missing`, `orphan`, `untracked`, or `mode` per skill per root. Comparing
+  only two of them is what let `orchestrate-olympus` sit in a receipt for two
+  releases after the collection stopped shipping it, and let a root claim an
+  install that was not on disk. A skill that is both untracked and different
+  reports `drifted`: the receipt gap is bookkeeping, and the difference is what
+  a reinstall fixes.
+
+  The receipt was write-only before this. `write_receipt` had recorded one on
+  every install since the first release and nothing ever read it back, so a
+  receipt could contradict the directory beside it indefinitely; `read_receipt`
+  and `root_status` are what turn "what is on disk" into "what was installed,
+  and is it still that". The command needs no `textual` and no terminal, so a
+  `SessionStart` hook or a CI job can gate on it, and it exits `3` when there
+  is work — deliberately not `1` or `2`, which already mean the run itself
+  failed, so a caller can tell drift from a broken check.
+
+- Two checks that look past this checkout. A vendored skill now records the
+  SHA256 of its upstream bytes, so editing the copy here instead of upstream is
+  caught with no network and no second checkout — the failure the provenance
+  note warns against but nothing could detect, since the existing test only
+  asserted the note exists. The hash is taken over content with line endings
+  normalised: the same file measures 45,958 bytes on Windows and fewer on
+  Linux, so hashing raw bytes would have reported drift on one platform and
+  nothing on the other. `--check-origin` fetches and reports whether the
+  checkout trails its remote, which every other answer depends on — a skill
+  that matches a three-commit-stale source is not up to date in any useful
+  sense. It is opt-in because it costs a fetch, and it fails soft with a stated
+  reason on a detached HEAD or an unreachable remote rather than hanging on a
+  credential prompt.
+
 - `olympus-report-progress`, vendored from the Olympus repository
   (`.claude/skills/olympus-report-progress/SKILL.md` at commit `252f467`) and
   otherwise byte-for-byte identical to it. Olympus skills are normally thin

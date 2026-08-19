@@ -302,6 +302,23 @@ def command_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_status(args: argparse.Namespace) -> int:
+    """Report which managed skills need updating.
+
+    Deliberately dependency-free: this is the answer a SessionStart hook or a
+    CI job wants, and neither has a terminal for the dashboard nor a reason to
+    need `textual` installed.
+    """
+    scope = "user" if args.user else "project"
+    project_dir = args.project_dir.expanduser().resolve()
+    roots = install.resolve_roots(
+        args.agent, scope, Path.home(), project_dir, None
+    )
+    lines, pending = install.status_lines(roots, args.check_origin)
+    print("\n".join(lines))
+    return install.STATUS_ACTION_EXIT if pending else 0
+
+
 def command_where(args: argparse.Namespace) -> int:
     print(REPO_ROOT)
     return 0
@@ -450,6 +467,30 @@ def parser() -> argparse.ArgumentParser:
 
     where = subcommands.add_parser("where", help="print this checkout's path")
     where.set_defaults(handler=command_where)
+
+    status = subcommands.add_parser(
+        "status",
+        help="report which installed skills differ from this checkout",
+    )
+    status.add_argument(
+        "--user",
+        action="store_true",
+        help="check the machine-wide roots instead of this project's",
+    )
+    status.add_argument(
+        "--agent",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="limit the check to one agent's skill directory",
+    )
+    status.add_argument("--project-dir", type=Path, default=Path.cwd())
+    status.add_argument(
+        "--check-origin",
+        action="store_true",
+        help="also fetch and report whether this checkout is behind origin",
+    )
+    status.set_defaults(handler=command_status)
 
     setup = subcommands.add_parser(
         "setup-path", help="write launcher shims so `skills` works from any directory"
