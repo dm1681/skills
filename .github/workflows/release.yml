@@ -64,7 +64,12 @@ jobs:
           set -euo pipefail
           root="skills-${VERSION}"
           mkdir -p "dist/staging/${root}"
-          cp -R skills docs install.py install.sh install.ps1 pyproject.toml uv.lock .python-version VERSION CHANGELOG.md README.md RELEASING.md "dist/staging/${root}/"
+          # Everything a documented command touches at runtime. `skills_cli.py`
+          # and `skills_tui.py` are imported by `install.py --setup-path` and the
+          # dashboard, `global/` is read by `--global-instructions`, and
+          # `scripts/` holds the SessionStart hook `--cloud-bootstrap` registers.
+          # Omitting any of them leaves an archive whose installer half-works.
+          cp -R skills docs scripts global install.py install.sh install.ps1 skills_cli.py skills_tui.py pyproject.toml uv.lock .python-version VERSION CHANGELOG.md README.md RELEASING.md AGENTS.md CLAUDE.md "dist/staging/${root}/"
           tar -C dist/staging -czf "dist/${root}.tar.gz" "$root"
           (cd dist/staging && zip -qr "../${root}.zip" "$root")
           (cd dist && sha256sum "${root}.tar.gz" "${root}.zip" > SHA256SUMS)

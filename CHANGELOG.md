@@ -191,6 +191,20 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Fixed
 
+- The published `.tar.gz` and `.zip` contain the files their own installer
+  imports. The release workflow copies an explicit allow-list, and it was never
+  updated when `9.0.0` added the `skills` command, so three documented paths
+  crashed for anyone who downloaded an archive instead of cloning:
+  `install.py --setup-path` imports `skills_cli`, which was not there and
+  raised `ModuleNotFoundError` — the very command that exists so `skills` can
+  be bootstrapped on a machine without it; `--global-instructions` reads
+  `global/AGENTS.md`, which was not there; and `--cloud-bootstrap` registered a
+  SessionStart hook pointing at `scripts/cloud-session-start.sh`, which was not
+  there, so the hook failed every session. `skills_cli.py`, `skills_tui.py`,
+  `global/`, `scripts/`, and the two agent guides are now packaged, and the
+  list carries a comment saying what the rule is, since an allow-list silently
+  goes stale exactly this way.
+
 - `semantic-pr-review` draws a markdown code excerpt as the document it is,
   rather than as its own markup. A `code_preview` with `"language":
   "markdown"` now renders headings, bold and italic, inline code, bullet and
