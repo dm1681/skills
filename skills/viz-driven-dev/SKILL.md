@@ -1,6 +1,7 @@
 ---
 name: viz-driven-dev
 description: Hypothesis-first visualization workflow for feature development - build the plot, overlay, rendered artifact, or video that would show the feature's effect before implementing it, then regenerate the same artifact from real output to confirm or refute the hypothesis. Use when building or changing a feature whose effect can be seen or watched - signals over time, overlays on media, spatial or sequential behavior, state evolution, or any before/after comparison.
+version: 1.0.0
 ---
 
 # Visualization-driven development

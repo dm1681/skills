@@ -6,3 +6,11 @@ dist/
 *.tmp
 .venv/
 .claude/worktrees/
+
+# Skills installed into this checkout while testing. `install.py` writes these
+# roots like any other destination, receipt and backups included, so a test
+# install here would otherwise be staged as source.
+.agents/
+.claude/skills/
+.claude/.skills-backups/
+*.graphify-bak

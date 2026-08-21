@@ -132,19 +132,30 @@ was least welcome.
 
 Colour is information, not decoration, and one hue means one thing everywhere:
 
+The four hues a state can take run along one valence ramp:
+
+```
+grey  ──▶  green  ──▶  peach  ──▶  red
+nothing    a gain     destructive   failure
+happens               (recoverable)
+```
+
 | Hue | Meaning |
 | --- | --- |
 | mauve | your selection, focus, and the active step — never data |
-| blue | an additive install; nothing existing is lost |
-| peach | a replacement; the old copy is backed up first |
-| green | already identical to this checkout; nothing will happen |
+| grey | up to date; selecting it writes nothing |
+| green | an install; a write that only adds, and nothing existing is lost |
+| peach | a replacement *or* a removal; the old copy is backed up first |
+| red | failure, so a healthy run is provably red-free |
 | teal | a location — paths, roots, scope |
 | yellow | allowed, but probably not what you want |
-| red | failure, so a healthy run is provably red-free |
+| blue | a version that is settled — it matches, or it is the only one there is |
 
 A skill's state is painted in the colour of the *consequence* of selecting it,
 so the hue carries unchanged from the state pill to the action verb to the
-review step. Counting the peach tells you how many overwrites are queued.
+review step. Counting the peach tells you how many overwrites and removals are
+queued — and an aggregate is green only when the promise holds of the whole
+plan, so one removal in it turns the total peach.
 
 The dashboard needs a real terminal. A pty-based shell — Git Bash or mintty on
 Windows — hides the terminal from Python, so run `install.ps1` from PowerShell
@@ -178,8 +189,8 @@ directory.
 Passing installer options keeps the command non-interactive, which makes it
 safe for scripts and CI. Use `--interactive` to open the dashboard with preset
 options, or `--non-interactive` to explicitly suppress it. `--graphify`,
-`--matt-skills`, and `--target` are scripted-only; combining them with
-`--interactive` is an error rather than a silent no-op.
+`--matt-skills`, `--pstack`, and `--target` are scripted-only; combining them
+with `--interactive` is an error rather than a silent no-op.
 
 ### Run it from any directory
 
@@ -206,7 +217,9 @@ skills install NAME       # repo-level install, no paths to type
 skills install NAME --user  # machine-wide instead
 skills list               # what this collection ships
 skills where              # path to the checkout the shims point at
-skills status --user      # what is installed, and what needs updating
+skills status --user      # what is installed here, and what needs updating
+skills status --all       # every root on this machine, project and user alike
+skills uninstall NAME     # remove it, backing the old copy up first
 ```
 
 `skills install` defaults to a repo-level install of the current working
@@ -252,6 +265,11 @@ Useful options:
 --no-matt-skills             skip Matt Pocock skills (the default)
 --matt-ref REF               tag, branch, or commit of mattpocock/skills to
                              install; defaults to the pinned revision
+--pstack                     install all pstack skills for chosen agents
+--no-pstack                  skip pstack skills (the default)
+--pstack-ref REF             tag, branch, or commit of cursor/plugins to
+                             install pstack from; defaults to the pinned
+                             revision
 --graphify                   install/upgrade Graphify and register its skill
 --global-instructions [link|copy]
                              install global/AGENTS.md as user-level guidance
@@ -348,6 +366,40 @@ exact commit by passing its SHA. After installation, run
 `/setup-matt-pocock-skills` once inside the target repository. See
 [`docs/matt-pocock-skills.md`](docs/matt-pocock-skills.md) for what is installed
 and the operational boundary.
+
+### Optional pstack skills
+
+[`pstack`](https://github.com/cursor/plugins/tree/main/pstack) is a Cursor
+plugin shipping rigorous agent workflows (`poteto-mode`, `architect`,
+`interrogate`, `why`) and 21 `principle-*` skills. No skill in this collection
+requires them, so nothing installs them by default and nothing prompts for a
+third-party download. Like graphify and matt-skills, pstack appears as a row
+under the dashboard's **External tools** group, which fetches it only when
+selected.
+
+Opt in explicitly with `--pstack`. It needs `git` and nothing else, and runs
+the same pinned fetch, byte verification, and copy that `--matt-skills` does —
+one implementation, parameterized. Two differences follow from pstack living
+inside a monorepo: the byte check is scoped to `pstack/`, and discovery is
+rooted at `pstack/skills/` so a sibling plugin can never be picked up.
+
+`cursor/plugins` publishes no tags, so the pin is a bare commit with nothing
+readable in it. The plugin's own manifest supplies the readable half:
+`PSTACK_VERSION` records the release that commit ships, and a default install
+stops if the two have come apart. Track upstream instead with `--pstack-ref
+main`, or pin an exact commit by passing its SHA.
+
+pstack and `mattpocock/skills` both ship `tdd` and `teach`, and mean different
+things by them. A skill root is one flat directory, so the second install stops
+and names the conflict rather than letting one silently replace the other;
+`--force` accepts the replacement and backs the old copy up, and `--uninstall`
+clears the other copy's claim if you would rather remove it. 39 of pstack's 44
+skills install hidden from the model — each collection's dashboard row unfolds
+the skills that collection installed, or `--enable-skill NAME` from a script.
+
+After installation, run `/setup-pstack` once inside the target repository. See
+[`docs/pstack.md`](docs/pstack.md) for what is installed, what is deliberately
+left out, and where being a Cursor plugin shows.
 
 ### Optional Graphify installation
 

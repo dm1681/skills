@@ -86,6 +86,7 @@ What it offers:
 | user-level instructions | `install.sh --global-instructions` |
 | graphify (needs `uv`) | `install.sh --graphify` |
 | mattpocock/skills (needs `git`) | `install.sh --matt-skills` |
+| pstack (needs `git`) | `install.sh --pstack` |
 
 Two things the offer is careful about:
 

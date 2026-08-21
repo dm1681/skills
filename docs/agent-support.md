@@ -26,3 +26,8 @@ For the optional Graphify package and its separate platform mapping, see
 
 For the optional Matt Pocock workflows and their upstream CLI mapping, see
 [`matt-pocock-skills.md`](matt-pocock-skills.md).
+
+For the optional pstack plugin — which shares that fetch pipeline, and shares
+two skill names with it — see [`pstack.md`](pstack.md). Neither optional
+collection carries agent-specific content: every selected root receives the
+same files, so nothing in the matrix above changes when one is installed.

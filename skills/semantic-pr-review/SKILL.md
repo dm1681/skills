@@ -1,6 +1,7 @@
 ---
 name: semantic-pr-review
 description: Pull and explain a GitHub pull request as a source-referenced hierarchy and interactive semantic flowchart with complete execution branches, DTO-labeled handoffs, source-excerpt hover cards, and code-linked details. Use when a user wants to understand a PR, trace its architectural layers, compare execution strategies, inspect boundary or ownership shifts, or receive a standalone interactive walkthrough instead of a flat diff summary.
+version: 1.0.0
 ---
 
 # Semantic PR Review
