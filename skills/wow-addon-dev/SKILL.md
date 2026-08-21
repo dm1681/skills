@@ -1,6 +1,7 @@
 ---
 name: wow-addon-dev
 description: Build, debug, package, and publish World of Warcraft retail addons - TOC manifests, the event and widget model, SavedVariables, taint and secure templates, the Midnight-era "secret value" restrictions on combat data, Ace3 and the library ecosystem, and BigWigs-packager CI. Use when writing or reviewing Lua for a WoW addon, editing a .toc file, working under Interface/AddOns, debugging taint or "action blocked" errors, judging whether an addon idea is still possible on modern retail, or publishing to CurseForge, Wago, or WoWInterface.
+version: 1.0.0
 ---
 
 # Retail WoW addon development

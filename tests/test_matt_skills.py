@@ -183,19 +183,19 @@ class MattSkillsTests(unittest.TestCase):
                 [git, "-c", "core.safecrlf=false", "add", "--all"],
                 [git, "commit", "--quiet", "--message", "upstream"],
             ):
-                INSTALLER._run(command, upstream, INSTALLER.MATT_SKILLS_GIT_ENV)
+                INSTALLER._run(command, upstream, INSTALLER.UPSTREAM_GIT_ENV)
 
             checkout = Path(directory) / "checkout"
             checkout.mkdir()
             commands = INSTALLER.matt_skills_fetch_commands("HEAD", git)
             commands[1] = [git, "fetch", "--quiet", "--depth", "1", str(upstream), "HEAD"]
             for command in commands:
-                INSTALLER._run(command, checkout, INSTALLER.MATT_SKILLS_GIT_ENV)
+                INSTALLER._run(command, checkout, INSTALLER.UPSTREAM_GIT_ENV)
 
-            self.assertEqual("", INSTALLER.matt_skills_worktree_changes(checkout, git))
+            self.assertEqual("", INSTALLER.checkout_worktree_changes(checkout, git))
             self.assertEqual(
                 ["skills/engineering/tdd/SKILL.md"],
-                INSTALLER.matt_skills_content_mismatches(checkout, git),
+                INSTALLER.checkout_content_mismatches(checkout, git),
             )
 
     @unittest.skipIf(INSTALLER.shutil.which("git") is None, "git is not installed")
@@ -214,16 +214,16 @@ class MattSkillsTests(unittest.TestCase):
                 [git, "-c", "core.safecrlf=false", "add", "--all"],
                 [git, "commit", "--quiet", "--message", "upstream"],
             ):
-                INSTALLER._run(command, upstream, INSTALLER.MATT_SKILLS_GIT_ENV)
+                INSTALLER._run(command, upstream, INSTALLER.UPSTREAM_GIT_ENV)
 
             checkout = Path(directory) / "checkout"
             checkout.mkdir()
             commands = INSTALLER.matt_skills_fetch_commands("HEAD", git)
             commands[1] = [git, "fetch", "--quiet", "--depth", "1", str(upstream), "HEAD"]
             for command in commands:
-                INSTALLER._run(command, checkout, INSTALLER.MATT_SKILLS_GIT_ENV)
+                INSTALLER._run(command, checkout, INSTALLER.UPSTREAM_GIT_ENV)
 
-            self.assertEqual([], INSTALLER.matt_skills_content_mismatches(checkout, git))
+            self.assertEqual([], INSTALLER.checkout_content_mismatches(checkout, git))
 
     def test_install_fetches_then_copies_to_exact_resolved_root(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -237,13 +237,13 @@ class MattSkillsTests(unittest.TestCase):
             with (
                 mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
                 mock.patch.object(
-                    INSTALLER, "matt_skills_head", return_value=INSTALLER.MATT_SKILLS_COMMIT
+                    INSTALLER, "checkout_head", return_value=INSTALLER.MATT_SKILLS_COMMIT
                 ),
                 mock.patch.object(
-                    INSTALLER, "matt_skills_worktree_changes", return_value=""
+                    INSTALLER, "checkout_worktree_changes", return_value=""
                 ),
                 mock.patch.object(
-                    INSTALLER, "matt_skills_content_mismatches", return_value=[]
+                    INSTALLER, "checkout_content_mismatches", return_value=[]
                 ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run) as run,
             ):
@@ -273,13 +273,13 @@ class MattSkillsTests(unittest.TestCase):
             with (
                 mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
                 mock.patch.object(
-                    INSTALLER, "matt_skills_head", return_value=INSTALLER.MATT_SKILLS_COMMIT
+                    INSTALLER, "checkout_head", return_value=INSTALLER.MATT_SKILLS_COMMIT
                 ),
                 mock.patch.object(
-                    INSTALLER, "matt_skills_worktree_changes", return_value=""
+                    INSTALLER, "checkout_worktree_changes", return_value=""
                 ),
                 mock.patch.object(
-                    INSTALLER, "matt_skills_content_mismatches", return_value=[]
+                    INSTALLER, "checkout_content_mismatches", return_value=[]
                 ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
@@ -289,7 +289,7 @@ class MattSkillsTests(unittest.TestCase):
             for root in roots:
                 self.assertEqual(
                     ["setup-matt-pocock-skills", "teach"],
-                    sorted(path.name for path in root.iterdir()),
+                    sorted(path.name for path in root.iterdir() if path.is_dir()),
                 )
 
     def test_an_upstream_layout_change_is_reported_not_half_installed(self) -> None:
@@ -304,14 +304,14 @@ class MattSkillsTests(unittest.TestCase):
                 mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
                 mock.patch.object(
                     INSTALLER,
-                    "matt_skills_head",
+                    "checkout_head",
                     return_value=INSTALLER.MATT_SKILLS_COMMIT,
                 ),
                 mock.patch.object(
-                    INSTALLER, "matt_skills_worktree_changes", return_value=""
+                    INSTALLER, "checkout_worktree_changes", return_value=""
                 ),
                 mock.patch.object(
-                    INSTALLER, "matt_skills_content_mismatches", return_value=[]
+                    INSTALLER, "checkout_content_mismatches", return_value=[]
                 ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
@@ -396,12 +396,12 @@ class MattSkillsTests(unittest.TestCase):
 
             with (
                 mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
-                mock.patch.object(INSTALLER, "matt_skills_head", return_value="f" * 40),
+                mock.patch.object(INSTALLER, "checkout_head", return_value="f" * 40),
                 mock.patch.object(
-                    INSTALLER, "matt_skills_worktree_changes", return_value=""
+                    INSTALLER, "checkout_worktree_changes", return_value=""
                 ),
                 mock.patch.object(
-                    INSTALLER, "matt_skills_content_mismatches", return_value=[]
+                    INSTALLER, "checkout_content_mismatches", return_value=[]
                 ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
@@ -426,12 +426,12 @@ class MattSkillsTests(unittest.TestCase):
 
             with (
                 mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
-                mock.patch.object(INSTALLER, "matt_skills_head", return_value="f" * 40),
+                mock.patch.object(INSTALLER, "checkout_head", return_value="f" * 40),
                 mock.patch.object(
-                    INSTALLER, "matt_skills_worktree_changes", return_value=""
+                    INSTALLER, "checkout_worktree_changes", return_value=""
                 ),
                 mock.patch.object(
-                    INSTALLER, "matt_skills_content_mismatches", return_value=[]
+                    INSTALLER, "checkout_content_mismatches", return_value=[]
                 ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
@@ -460,12 +460,12 @@ class MattSkillsTests(unittest.TestCase):
                 mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
                 mock.patch.object(
                     INSTALLER,
-                    "matt_skills_head",
+                    "checkout_head",
                     return_value=INSTALLER.MATT_SKILLS_COMMIT,
                 ),
                 mock.patch.object(
                     INSTALLER,
-                    "matt_skills_worktree_changes",
+                    "checkout_worktree_changes",
                     return_value=" M skills/engineering/tdd/SKILL.md",
                 ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
@@ -492,11 +492,11 @@ class MattSkillsTests(unittest.TestCase):
                 mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
                 mock.patch.object(
                     INSTALLER,
-                    "matt_skills_head",
+                    "checkout_head",
                     return_value=INSTALLER.MATT_SKILLS_COMMIT,
                 ),
                 mock.patch.object(
-                    INSTALLER, "matt_skills_worktree_changes", return_value=None
+                    INSTALLER, "checkout_worktree_changes", return_value=None
                 ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
@@ -526,15 +526,15 @@ class MattSkillsTests(unittest.TestCase):
                 mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
                 mock.patch.object(
                     INSTALLER,
-                    "matt_skills_head",
+                    "checkout_head",
                     return_value=INSTALLER.MATT_SKILLS_COMMIT,
                 ),
                 mock.patch.object(
-                    INSTALLER, "matt_skills_worktree_changes", return_value=""
+                    INSTALLER, "checkout_worktree_changes", return_value=""
                 ),
                 mock.patch.object(
                     INSTALLER,
-                    "matt_skills_content_mismatches",
+                    "checkout_content_mismatches",
                     return_value=["skills/engineering/tdd/SKILL.md"],
                 ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
@@ -561,14 +561,14 @@ class MattSkillsTests(unittest.TestCase):
                 mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
                 mock.patch.object(
                     INSTALLER,
-                    "matt_skills_head",
+                    "checkout_head",
                     return_value=INSTALLER.MATT_SKILLS_COMMIT,
                 ),
                 mock.patch.object(
-                    INSTALLER, "matt_skills_worktree_changes", return_value=""
+                    INSTALLER, "checkout_worktree_changes", return_value=""
                 ),
                 mock.patch.object(
-                    INSTALLER, "matt_skills_content_mismatches", return_value=None
+                    INSTALLER, "checkout_content_mismatches", return_value=None
                 ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
@@ -590,7 +590,7 @@ class MattSkillsTests(unittest.TestCase):
         """
         self.assertEqual(
             {"GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "echo"},
-            INSTALLER.MATT_SKILLS_GIT_ENV,
+            INSTALLER.UPSTREAM_GIT_ENV,
         )
         seen: list = []
 
@@ -606,14 +606,14 @@ class MattSkillsTests(unittest.TestCase):
                 mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
                 mock.patch.object(
                     INSTALLER,
-                    "matt_skills_head",
+                    "checkout_head",
                     return_value=INSTALLER.MATT_SKILLS_COMMIT,
                 ),
                 mock.patch.object(
-                    INSTALLER, "matt_skills_worktree_changes", return_value=""
+                    INSTALLER, "checkout_worktree_changes", return_value=""
                 ),
                 mock.patch.object(
-                    INSTALLER, "matt_skills_content_mismatches", return_value=[]
+                    INSTALLER, "checkout_content_mismatches", return_value=[]
                 ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
@@ -624,7 +624,7 @@ class MattSkillsTests(unittest.TestCase):
                     dry_run=False,
                     emit=lambda _: None,
                 )
-        self.assertEqual([INSTALLER.MATT_SKILLS_GIT_ENV] * 3, seen)
+        self.assertEqual([INSTALLER.UPSTREAM_GIT_ENV] * 3, seen)
 
     def test_an_unverifiable_pin_stops_the_default_install(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -636,12 +636,12 @@ class MattSkillsTests(unittest.TestCase):
 
             with (
                 mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
-                mock.patch.object(INSTALLER, "matt_skills_head", return_value=""),
+                mock.patch.object(INSTALLER, "checkout_head", return_value=""),
                 mock.patch.object(
-                    INSTALLER, "matt_skills_worktree_changes", return_value=""
+                    INSTALLER, "checkout_worktree_changes", return_value=""
                 ),
                 mock.patch.object(
-                    INSTALLER, "matt_skills_content_mismatches", return_value=[]
+                    INSTALLER, "checkout_content_mismatches", return_value=[]
                 ),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
@@ -739,13 +739,13 @@ class ModelInvocationTests(unittest.TestCase):
         with (
             mock.patch.object(INSTALLER.shutil, "which", return_value="/tools/git"),
             mock.patch.object(
-                INSTALLER, "matt_skills_head", return_value=INSTALLER.MATT_SKILLS_COMMIT
+                INSTALLER, "checkout_head", return_value=INSTALLER.MATT_SKILLS_COMMIT
             ),
             mock.patch.object(
-                INSTALLER, "matt_skills_worktree_changes", return_value=""
+                INSTALLER, "checkout_worktree_changes", return_value=""
             ),
             mock.patch.object(
-                INSTALLER, "matt_skills_content_mismatches", return_value=[]
+                INSTALLER, "checkout_content_mismatches", return_value=[]
             ),
             mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
         ):

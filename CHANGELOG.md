@@ -7,6 +7,97 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Added
 
+- Skills carry a `version:` in their frontmatter, and the dashboard shows it.
+  A row states the checkout's version, or `installed → checkout` when the two
+  differ, and marks the case the field exists to expose: contents that changed
+  while the version did not. The validator requires the key and, when git can
+  resolve the last release tag, fails a skill whose files moved without its
+  version moving — a version nobody bumps lies confidently, so it is enforced
+  rather than remembered. Vendored skills carry none by design: the recorded
+  SHA256 covers their frontmatter, so a key added here would read as upstream
+  drift, and they display as `vendored`.
+- `skills uninstall NAME` (and `install.py --uninstall`) removes an installed
+  skill, backing it up to `.skills-backups/` first and clearing every record of
+  it — the receipt, the external-ownership manifest, and any visibility choice
+  made about it. `--all` clears everything this collection installed in a root
+  and `--orphans` clears only the entries whose skills have left the
+  collection, which is the state that previously sat in a receipt with no
+  command able to remove it. It refuses a directory no record claims and that
+  differs from this checkout, so it is safe to point at a shared root, and it
+  never removes the root itself.
+- Every install records the root it touched in `~/.dm1681-skills-roots.json`,
+  and `skills status --all` reconciles every root on the machine — project and
+  user scope together — instead of only the one you are standing in. A name
+  present in more than one root is reported as `shadowed` when the copies are
+  identical and `divergent` when they are not; only the latter is actionable,
+  because a machine-wide install produces identical copies on purpose. Which
+  copy an agent actually reads is the harness's rule, so the report names every
+  root involved and never claims a winner. The index is a cache: it holds no
+  skill names, deleting it costs nothing, and a failure to write it can never
+  fail an install.
+- `u` in the dashboard checks whether this checkout trails origin, per skill.
+  It costs a fetch, so it is opt-in and threaded rather than run at startup,
+  and a check that could not reach an answer is shown as unknown rather than
+  as up to date.
+
+### Changed
+
+- The dashboard's colour contract is now one valence ramp: grey means nothing
+  happens, green an install, peach a replacement or a removal, red a failure.
+  Green previously meant "already up to date" and blue meant "install", so the
+  hue that reads as success was attached to the row where nothing happens;
+  blue now carries a skill's version instead. An aggregate — the review's write
+  total, the key that commits the plan — is green only when every write in the
+  plan is additive.
+
+- `--pstack` installs the [pstack](https://github.com/cursor/plugins/tree/main/pstack)
+  plugin's 44 skills — `poteto-mode`, `architect`, `interrogate`, `why`, and 21
+  `principle-*` skills — as a second optional external collection beside
+  `mattpocock/skills`, with `--pstack-ref` to name a revision and a `pstack`
+  row in the dashboard. It ships inside a monorepo and publishes no tags, which
+  is the whole difference: the pin is a bare commit with nothing readable in
+  it, so `PSTACK_VERSION` records the release that commit's plugin manifest
+  declares and a default install stops if the two have come apart. The byte
+  verification is scoped to `pstack/` so an unrelated plugin's `.gitattributes`
+  cannot fail the install, and discovery is rooted at `pstack/skills/` so a
+  sibling plugin's skills can never be picked up. `automations/benny/` and the
+  top-level `agents/` are left out on purpose — the first sits outside the
+  manifest's own `./skills/` pointer, and the second is a Cursor subagent
+  directory this installer has no root for. See
+  [`docs/pstack.md`](docs/pstack.md).
+- A root now records which external collection placed which skills, in
+  `.skills-external.json` beside its receipt. Nothing in a skill directory says
+  where it came from, and two collections that both hide most of what they ship
+  need that answer: `mattpocock/skills` hides 20 of its 35 and pstack 39 of its
+  44, so without it each dashboard row would list the union and unhiding under
+  one would silently unhide the other's skills.
+- Installing a collection over a name another one already owns stops and names
+  it, rather than replacing it silently. pstack and `mattpocock/skills` both
+  ship `tdd` and `teach` and disagree about what they mean, and the failure is
+  semantic rather than mechanical: nothing errors, and an agent asked for `tdd`
+  just runs the other workflow. Every root is checked before any root is
+  written, so a conflict in the second leaves the first untouched. Attribution
+  falls back to the collection's marker directory where no record exists — the
+  commonest starting state is a root installed by a release that never wrote
+  one, and trusting the record alone would fail open on exactly that upgrade
+  path, copying most of a collection before `install_one` refused on a name it
+  could not explain.
+
+  `--force` accepts the replacement and backs the old copy up, and `--uninstall`
+  is the other way out: a skill an external collection placed through this
+  installer now counts as this installer's to remove, and removing it clears
+  the ownership with it, so the advice the error prints actually works.
+  Ownership otherwise moves with the files, so the winner's own next update is
+  an update rather than a conflict with itself, and a visibility choice
+  recorded against the losing collection is dropped rather than re-applied —
+  the name now means a different skill.
+
+  Refusing a conflict is separate from `--force`, because the dashboard passes
+  `force=True` so an external row can offer "update". That offer is to refresh
+  one collection, not to take a name from another, so the dashboard now refuses
+  cross-collection replacement and surfaces it as a failure while still
+  updating its own files.
+
 - `code_preview` nodes take an optional `change_note`, a sentence saying what
   this pull request did to the node. It replaces the derived one, so "added"
   can read "Split the old inline branch into a registry lookup" instead —
@@ -17,6 +108,15 @@ All notable changes to this repository are documented here. Versions follow
   rather than letting either reach the page.
 
 ### Changed
+
+- The mattpocock/skills fetch is now one parameterized pipeline shared with
+  pstack rather than a single-collection path: `install_upstream` takes an
+  `UpstreamCollection`, and the three verification helpers lost their
+  `matt_skills_` prefix (`checkout_head`, `checkout_worktree_changes`,
+  `checkout_content_mismatches`, the last of which takes the path prefix to
+  compare). `install_matt_skills` keeps its signature. The verification is
+  subtle enough — a rewriting `.gitattributes` that one copy catches and the
+  other does not — that a second hand-written copy of it would have drifted.
 
 - A node's hover card reads as four things in order — what the node does, what
   the PR did to it, the detail behind that, then what crosses the boundary.

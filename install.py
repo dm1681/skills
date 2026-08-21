@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Iterable, Mapping, NamedTuple, Optional, TextIO
@@ -59,16 +60,77 @@ MATT_SKILLS_COMMIT = "6acc160e4e0cd062dbbbd7a1b26ae92855edf07e"
 # path component only, so a skill that merely has `deprecated` deeper in its
 # path still installs.
 MATT_SKILLS_SKIP = ("deprecated",)
+
+PSTACK_SOURCE = "cursor/plugins pstack"
+PSTACK_REPO = "https://github.com/cursor/plugins.git"
+# pstack lives inside a monorepo of Cursor plugins, so the fetch lands the whole
+# repository and everything below is relative to this one directory. At depth 1
+# that costs about nine megabytes, which is cheaper than teaching the fetch to
+# do a partial clone and having the verification below reason about a tree it
+# only half has.
+PSTACK_SUBDIR = "pstack"
+# The same pin as mattpocock/skills, reached the other way round. That
+# repository publishes tags, so the tag is what a human reads and the commit
+# beside it is what actually pins. cursor/plugins publishes none, so the ref
+# *is* a commit and the pair collapses -- which leaves nothing readable saying
+# which pstack this is. The plugin states its own version in its manifest, so
+# that is what the default install checks: the commit says the fetch landed
+# where it was told, and the version says the thing that landed is the release
+# this repository documents. Update the three together.
+PSTACK_REF = "51a96e0dd838404da19ba83dc70aa21eef71f868"
+PSTACK_COMMIT = PSTACK_REF
+PSTACK_VERSION = "0.14.1"
+PSTACK_MANIFEST = ".cursor-plugin/plugin.json"
+# `plugin.json` points its own installer at `./skills/` and nothing else, so
+# that is what installs here. `automations/benny/` holds three more skills
+# outside that pointer; they drive a Slack-and-tracker pipeline that only works
+# once its services are configured, and installing them would place three
+# skills upstream's own consumers never get. Named here rather than left
+# implicit so the day the manifest grows a second pointer is a decision.
+PSTACK_SKIP = ("deprecated",)
 # A credential prompt inside an installer waits forever: a scripted or cloud run
 # has nobody to answer it, and an askpass helper opens a dialog even where no
 # terminal could have asked. A 401 — a proxy in the way, a repository URL
 # pointing somewhere private — should fail in a second with a message instead.
-MATT_SKILLS_GIT_ENV = {"GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "echo"}
-# The same reasoning as MATT_SKILLS_GIT_ENV, for the reads `--status` makes.
+UPSTREAM_GIT_ENV = {"GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "echo"}
+# The same reasoning as UPSTREAM_GIT_ENV, for the reads `--status` makes.
 # A status check that blocks on a credential prompt is worse than one that
 # cannot reach the network, because the second at least says so and exits.
 STATUS_GIT_ENV = {"GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "echo"}
+# ...and a wall-clock bound, because the env vars only stop a *prompt*. A fetch
+# over an ssh remote whose host blackholes packets — a dropped VPN, a captive
+# portal — neither prompts nor fails; it waits. That wait lands on a worker
+# thread the interpreter joins at exit, so an unbounded one leaves a dashboard
+# spinning "checking origin…" and the process alive after quit. Bounded, the
+# same case degrades to the honest answer the status side already has a word
+# for: unknown.
+STATUS_GIT_TIMEOUT = 20.0
 RECEIPT_NAME = ".dm1681-skills.json"
+# The machine-wide index of every root an install has ever touched, kept in the
+# home directory because that is the one place a project-scoped install can
+# still write to. It is a cache and never a source of truth: every root carries
+# its own receipt, and this file only says where to look. Delete it and nothing
+# breaks -- a scoped `--status` answers exactly as before, and the next install
+# writes the entry back.
+ROOTS_INDEX_NAME = ".dm1681-skills-roots.json"
+# The receipt's vocabulary, not the design sketch's `version`: this file has no
+# collection version in it, and one key named `version` meaning "schema" here
+# while it means "which release installed this" in the receipt beside it is the
+# kind of near-miss that gets read wrong once and then trusted.
+ROOTS_INDEX_SCHEMA = 1
+# How long a writer waits for another writer's lock on the roots index before
+# writing anyway. Short because the operation it guards is a few milliseconds
+# of JSON, and giving up is deliberately harmless: writing unlocked is exactly
+# the behaviour that existed before the lock, whose worst outcome is a lost
+# entry the next install rewrites. Blocking an install on a stale lock file
+# left by a killed process would be the worse failure.
+ROOTS_INDEX_LOCK_SECONDS = 2.0
+# The frontmatter key a skill states its own version in. The installed copy at
+# ~/.claude/skills/<name>/SKILL.md carries no git history and no VERSION file,
+# so a field inside the file is the only version that survives the copy -- and
+# comparing an installed version against the checkout's is what tells "you have
+# an older release" apart from "somebody edited the installed copy".
+SKILL_VERSION_KEY = "version"
 
 # One reconciled answer per skill per root.
 CURRENT = "current"
@@ -77,8 +139,23 @@ MISSING = "missing"
 ORPHAN = "orphan"
 UNTRACKED = "untracked"
 MODE_MISMATCH = "mode"
-# Every state except `current` wants a human to do something.
-ACTIONABLE_STATES = (DRIFTED, MISSING, ORPHAN, UNTRACKED, MODE_MISMATCH)
+
+# One name installed in more than one root. Not per-root states: neither root
+# is wrong on its own, and the finding only exists once every root is in view,
+# which is what the roots index makes possible.
+SHADOWED = "shadowed"
+DIVERGENT = "divergent"
+# An indexed root whose directory is gone -- a deleted project, an unplugged
+# volume. A prune offer, never an error, for the same reason `read_receipt`
+# returns None instead of raising: the index is allowed to be out of date.
+VANISHED = "vanished"
+
+# Every state except `current` wants a human to do something. `shadowed` is
+# excluded deliberately: a machine-wide install puts identical copies in
+# .agents and .claude *by design*, so a flag that fired on every duplicate
+# would fire on every healthy machine and mean nothing. Only `divergent`
+# changes what an agent actually reads, so only `divergent` is work.
+ACTIONABLE_STATES = (DRIFTED, MISSING, ORPHAN, UNTRACKED, MODE_MISMATCH, DIVERGENT)
 
 
 class VendoredSkill(NamedTuple):
@@ -146,6 +223,16 @@ EXTERNAL_TOOLS = (
         requires="git",
         marker="setup-matt-pocock-skills",
     ),
+    ExternalTool(
+        name="pstack",
+        summary="pstack rigorous agent workflows and coding principles",
+        origin=(
+            "the pstack plugin in cursor/plugins on GitHub, cloned at a pinned "
+            "ref and copied in"
+        ),
+        requires="git",
+        marker="setup-pstack",
+    ),
 )
 EXTERNAL_NAMES = tuple(tool.name for tool in EXTERNAL_TOOLS)
 
@@ -201,10 +288,21 @@ def frontmatter_value(entrypoint: Path, key: str) -> str:
     Deliberately naive about YAML: the frontmatter this repo validates is one
     `key: value` per line, and taking a dependency to read three lines would
     cost every scripted path its dependency-free promise.
+
+    A file that cannot be read is "" -- the same answer as a file with no such
+    key -- and not an exception. The paths that ask this walk *installed*
+    roots, which are shared with tools this collection does not manage: one
+    latin-1 byte or one file mode 000 in `~/.claude/skills` would otherwise
+    take down every caller that merely wanted a version, the dashboard's first
+    frame included. Same posture as `read_receipt`: unreadable is unknown.
     """
     if not entrypoint.is_file():
         return ""
-    lines = entrypoint.read_text(encoding="utf-8").splitlines()
+    try:
+        text = entrypoint.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return ""
+    lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         return ""
     for line in lines[1:]:
@@ -224,6 +322,35 @@ def skill_frontmatter_description(name: str) -> str:
     interface file.
     """
     return frontmatter_value(SOURCE_ROOT / name / "SKILL.md", "description")
+
+
+def skill_version(skill_dir: Path) -> str:
+    """The version a skill declares in its own SKILL.md, or "".
+
+    Takes a directory rather than a name because both copies matter and only
+    one of them lives in this checkout: the question worth answering is how the
+    *installed* `~/.claude/skills/<name>` compares to `skills/<name>`, and the
+    installed copy has neither git history nor a VERSION file beside it.
+
+    Empty is a real answer, not a failure. A skill that predates the field, and
+    every vendored copy (see `skill_is_vendored`), has no version to state, and
+    a caller that treats "" as 0.0.0 would report those as older than
+    everything rather than as unknown.
+    """
+    return frontmatter_value(skill_dir / "SKILL.md", SKILL_VERSION_KEY)
+
+
+def skill_is_vendored(name: str) -> bool:
+    """Whether a bundled skill is a copy of a file this repository does not own.
+
+    A vendored skill has no local version by design: its frontmatter is inside
+    the bytes `vendored_status` hashes, so adding a `version:` key here would
+    register as upstream drift and break the one check that makes a silent edit
+    to a vendored copy visible. Callers ask this so they can say "vendored" —
+    pinned by hash, versioned upstream — instead of reporting a missing version
+    as unknown and inviting somebody to fill it in.
+    """
+    return any(vendored.skill == name for vendored in VENDORED_SKILLS)
 
 
 def skill_summary(name: str) -> str:
@@ -322,6 +449,29 @@ def resolve_roots(
         if root not in roots:
             roots.append(root)
     return roots
+
+
+def root_agent(root: Path) -> str:
+    """Which agent convention a resolved root follows, or "".
+
+    `resolve_roots` builds one path per agent and then dedupes them into a flat
+    list, so by the time an installer holds a root the agent that produced it
+    is gone. Re-deriving it from the path keeps that rule in one place instead
+    of threading a second, parallel list of names through every caller for the
+    two to fall out of step -- under this convention the directory *is* the
+    answer.
+
+    A `--target` root that follows no convention has no agent to name, and ""
+    says so. Guessing `claude` there would record a fact nobody established
+    into an index whose whole value is that it only says where to look.
+    """
+    if root.name != "skills":
+        return ""
+    if root.parent.name == ".claude":
+        return "claude"
+    if root.parent.name == ".agents":
+        return "universal"
+    return ""
 
 
 def graphify_platforms(values: Iterable[str]) -> list[str]:
@@ -441,8 +591,9 @@ def install_graphify(
         emit(message)
 
 
-def matt_skills_fetch_commands(
-    ref: str = MATT_SKILLS_REF,
+def upstream_fetch_commands(
+    repo: str,
+    ref: str,
     executable: str = "git",
 ) -> list[list[str]]:
     """Shallow-fetch exactly one upstream revision into an empty directory.
@@ -468,7 +619,7 @@ def matt_skills_fetch_commands(
     """
     return [
         [executable, "init", "--quiet", "--template="],
-        [executable, "fetch", "--quiet", "--depth", "1", MATT_SKILLS_REPO, ref],
+        [executable, "fetch", "--quiet", "--depth", "1", repo, ref],
         [
             executable,
             "-c",
@@ -485,17 +636,31 @@ def matt_skills_fetch_commands(
     ]
 
 
-def require_git() -> str:
+def matt_skills_fetch_commands(
+    ref: str = MATT_SKILLS_REF,
+    executable: str = "git",
+) -> list[list[str]]:
+    return upstream_fetch_commands(MATT_SKILLS_REPO, ref, executable)
+
+
+def pstack_fetch_commands(
+    ref: str = PSTACK_REF,
+    executable: str = "git",
+) -> list[list[str]]:
+    return upstream_fetch_commands(PSTACK_REPO, ref, executable)
+
+
+def require_git(flag: str) -> str:
     executable = shutil.which("git")
     if executable:
         return executable
     raise InstallError(
-        "--matt-skills requires git; install it from "
+        f"{flag} requires git; install it from "
         "https://git-scm.com/downloads and rerun"
     )
 
 
-def matt_skills_head(checkout: Path, executable: str = "git") -> str:
+def checkout_head(checkout: Path, executable: str = "git") -> str:
     """The full commit a checkout landed on, or "" when git cannot say.
 
     Two jobs: verifying that the pinned tag still points where this repository
@@ -512,7 +677,7 @@ def matt_skills_head(checkout: Path, executable: str = "git") -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
-def matt_skills_worktree_changes(
+def checkout_worktree_changes(
     checkout: Path, executable: str = "git"
 ) -> Optional[str]:
     """What the checkout holds beyond the commit it fetched, or None if unknown.
@@ -542,8 +707,8 @@ def matt_skills_worktree_changes(
     return result.stdout.strip() if result.returncode == 0 else None
 
 
-def matt_skills_content_mismatches(
-    checkout: Path, executable: str = "git"
+def checkout_content_mismatches(
+    checkout: Path, executable: str = "git", prefix: str = "skills/"
 ) -> Optional[list[str]]:
     """Paths whose bytes on disk differ from the commit, or None if unknown.
 
@@ -556,9 +721,15 @@ def matt_skills_content_mismatches(
 
     Symlinks are skipped: hashing one reads whatever it points at rather than
     the link, and `git status` already covers a changed link.
+
+    `prefix` narrows the comparison to the part of the revision that will
+    actually be copied. It is the whole point for a collection that lives in a
+    subdirectory of a monorepo: hashing every blob in cursor/plugins would
+    check thousands of files that no install can reach, and an unrelated
+    plugin's `.gitattributes` would then be able to stop a pstack install.
     """
     listing = subprocess.run(
-        [executable, "ls-tree", "-r", "-z", "FETCH_HEAD", "--", "skills/"],
+        [executable, "ls-tree", "-r", "-z", "FETCH_HEAD", "--", prefix],
         cwd=checkout,
         check=False,
         text=True,
@@ -618,7 +789,12 @@ def _has_ancestor_skill(skill_dir: Path, root: Path) -> bool:
     return False
 
 
-def matt_skill_sources(checkout: Path) -> list[Path]:
+def collection_skill_sources(
+    checkout: Path,
+    source: str,
+    subdir: str = "",
+    skip: tuple = (),
+) -> list[Path]:
     """Every skill directory in an upstream checkout, flattened by name.
 
     Upstream files skills under `skills/<category>/<name>/`, and every consumer
@@ -630,17 +806,23 @@ def matt_skill_sources(checkout: Path) -> list[Path]:
     directories in the checkout but one destination on Windows and on a stock
     macOS filesystem — the collision has to be caught before the second copy
     quietly replaces the first.
+
+    `subdir` is the directory inside the checkout that holds the collection,
+    empty when the repository *is* the collection. A monorepo plugin sets it,
+    and `skills/` is still looked for underneath — the walk is rooted at the
+    collection, so a sibling plugin's skills can never be picked up by it.
     """
-    root = checkout / "skills"
+    base = checkout / subdir if subdir else checkout
+    root = base / "skills"
     if not root.is_dir():
         raise InstallError(
-            f"{MATT_SKILLS_SOURCE} checkout has no skills/ directory: {checkout}"
+            f"{source} checkout has no skills/ directory: {base}"
         )
     sources: dict[str, Path] = {}
     for entrypoint in sorted(root.rglob("SKILL.md")):
         skill_dir = entrypoint.parent
         relative = skill_dir.relative_to(root)
-        if relative.parts and relative.parts[0] in MATT_SKILLS_SKIP:
+        if relative.parts and relative.parts[0] in skip:
             continue
         # A skill may ship further SKILL.md files under references/; only the
         # outermost one names an installable skill.
@@ -649,11 +831,589 @@ def matt_skill_sources(checkout: Path) -> list[Path]:
         claimed = sources.get(skill_dir.name.casefold())
         if claimed is not None:
             raise InstallError(
-                f"{MATT_SKILLS_SOURCE} has two skills named {skill_dir.name}: "
+                f"{source} has two skills named {skill_dir.name}: "
                 f"{claimed.relative_to(checkout)} and {relative}"
             )
         sources[skill_dir.name.casefold()] = skill_dir
     return [sources[name] for name in sorted(sources)]
+
+
+def matt_skill_sources(checkout: Path) -> list[Path]:
+    return collection_skill_sources(
+        checkout, MATT_SKILLS_SOURCE, "", MATT_SKILLS_SKIP
+    )
+
+
+def pstack_skill_sources(checkout: Path) -> list[Path]:
+    return collection_skill_sources(
+        checkout, PSTACK_SOURCE, PSTACK_SUBDIR, PSTACK_SKIP
+    )
+
+
+class UpstreamCollection(NamedTuple):
+    """A third-party skill collection this installer fetches rather than owns.
+
+    `ExternalTool` describes a row on the dashboard; this describes how to go
+    and get one. They are separate because a row exists for graphify too, and
+    graphify has its own CLI — there is nothing here to fetch.
+
+    Both collections in this tuple are pinned, verified, and copied by exactly
+    the same code. That is deliberate: the verification below is subtle enough
+    that a second hand-written copy of it would drift, and a rewriting
+    `.gitattributes` that one copy caught and the other did not is precisely
+    the failure nobody would notice until it shipped.
+    """
+
+    tool: str
+    source: str
+    repo: str
+    ref: str
+    commit: str
+    marker: str
+    noun: str
+    flag: str
+    ref_flag: str
+    pin_constant: str
+    verify_prefix: str
+    tmp_prefix: str
+    subdir: str = ""
+    skip: tuple = ()
+    manifest: str = ""
+    version: str = ""
+
+
+MATT_SKILLS = UpstreamCollection(
+    tool="matt-skills",
+    source=MATT_SKILLS_SOURCE,
+    repo=MATT_SKILLS_REPO,
+    ref=MATT_SKILLS_REF,
+    commit=MATT_SKILLS_COMMIT,
+    marker="setup-matt-pocock-skills",
+    noun="Matt Pocock skills",
+    flag="--matt-skills",
+    ref_flag="--matt-ref",
+    pin_constant="MATT_SKILLS_COMMIT",
+    verify_prefix="skills/",
+    tmp_prefix="mattpocock-skills-",
+    skip=MATT_SKILLS_SKIP,
+)
+
+PSTACK = UpstreamCollection(
+    tool="pstack",
+    source=PSTACK_SOURCE,
+    repo=PSTACK_REPO,
+    ref=PSTACK_REF,
+    commit=PSTACK_COMMIT,
+    marker="setup-pstack",
+    noun="pstack skills",
+    flag="--pstack",
+    ref_flag="--pstack-ref",
+    pin_constant="PSTACK_REF",
+    # The whole plugin, not just its skills/: the manifest checked below sits
+    # outside skills/, and a version this install trusts has to be covered by
+    # the same hash comparison as the files it describes. Sibling plugins in
+    # the monorepo stay outside it, so their churn cannot fail a pstack
+    # install.
+    verify_prefix=f"{PSTACK_SUBDIR}/",
+    tmp_prefix="pstack-skills-",
+    subdir=PSTACK_SUBDIR,
+    skip=PSTACK_SKIP,
+    manifest=PSTACK_MANIFEST,
+    version=PSTACK_VERSION,
+)
+
+UPSTREAM_COLLECTIONS = (MATT_SKILLS, PSTACK)
+
+
+def declared_version(checkout: Path, subdir: str, manifest: str) -> str:
+    """The version a fetched collection declares for itself, or "".
+
+    The readable half of a pin whose ref is a bare commit. cursor/plugins
+    publishes no tags, so `PSTACK_REF` says nothing a human can check against a
+    release note; the plugin manifest is where upstream writes the number it
+    ships under. Absent, unreadable, or malformed all answer "" rather than
+    raising, because the caller decides whether that is fatal — it is for the
+    default pin, and it is not for `--pstack-ref main`.
+    """
+    path = (checkout / subdir if subdir else checkout) / manifest
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return ""
+    version = loaded.get("version") if isinstance(loaded, dict) else None
+    return version if isinstance(version, str) else ""
+
+
+EXTERNAL_MANIFEST_FILE = ".skills-external.json"
+EXTERNAL_MANIFEST_SCHEMA = 1
+
+
+def read_external_manifest(root: Path) -> dict:
+    """tool -> the skill names that tool last installed into this root.
+
+    A root is one flat directory and nothing in a skill directory records where
+    it came from, so without this file the only way to attribute an installed
+    skill to the collection that placed it is to guess by name. That guess was
+    survivable while one external tool hid skills from the model; pstack hides
+    39 of the 44 it ships, so two rows would each claim the other's skills and
+    the review screen would offer to unhide skills its row never installed.
+
+    Missing or malformed reads as "nothing recorded" rather than raising: this
+    is a record of what happened, and a root written by an older release simply
+    has not got one.
+    """
+    record = root / EXTERNAL_MANIFEST_FILE
+    try:
+        loaded = json.loads(record.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return {}
+    tools = loaded.get("tools") if isinstance(loaded, dict) else None
+    if not isinstance(tools, dict):
+        return {}
+    return {
+        name: entry
+        for name, entry in tools.items()
+        if isinstance(entry, dict) and isinstance(entry.get("skills"), list)
+    }
+
+
+def external_skill_names(root: Path, tool: str) -> list[str]:
+    """The skills one external tool installed into one root, newest record."""
+    entry = read_external_manifest(root).get(tool)
+    return sorted(str(name) for name in entry["skills"]) if entry else []
+
+
+def record_external_install(
+    root: Path, tool: str, names: Iterable[str], reference: str, head: str
+) -> None:
+    """Record which skills an external tool just placed in this root.
+
+    Beside the receipt and with the same reasoning: the receipt says what this
+    collection put here, and this says what somebody else's collection put here
+    on this collection's behalf. Kept as one file per root rather than one per
+    tool so a root carries a single answer to "who put this here", and rewritten
+    whole for the tool that just ran — an update that drops a skill upstream
+    should drop it here too, which is the bug the receipt reconciliation exists
+    to catch for bundled skills.
+    """
+    taken = sorted(names)
+    existing = read_external_manifest(root)
+    # Ownership moves with the files. A forced install over another
+    # collection's copy of `tdd` leaves that copy replaced on disk, so leaving
+    # the old owner's claim in place would make its own next *update* look like
+    # a conflict with itself and demand --force forever. One name, one owner,
+    # and the owner is whoever wrote the directory last.
+    surrendered = set()
+    for other, entry in existing.items():
+        if other == tool:
+            continue
+        kept = [name for name in entry["skills"] if str(name) not in set(taken)]
+        surrendered.update(str(name) for name in entry["skills"] if name not in kept)
+        entry["skills"] = kept
+    if surrendered:
+        # A visibility choice is keyed by name, and the name now means a
+        # different skill. "Show me `tdd`" was said about the collection that
+        # just lost it, so re-applying it here would silently unhide a skill
+        # nobody has looked at -- the exact thing the review screen exists to
+        # stop happening by accident.
+        forget_model_decisions(root, surrendered)
+    existing[tool] = {
+        "ref": reference,
+        "commit": head,
+        "installed_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "skills": taken,
+    }
+    payload = {"schema": EXTERNAL_MANIFEST_SCHEMA, "tools": existing}
+    root.mkdir(parents=True, exist_ok=True)
+    (root / EXTERNAL_MANIFEST_FILE).write_text(
+        json.dumps(payload, indent=2) + "\n", encoding="utf-8"
+    )
+
+
+def external_conflicts(root: Path, tool: str, names: Iterable[str]) -> list[tuple]:
+    """(skill, owner) for each name another collection already owns here.
+
+    Two optional collections can claim one name — pstack and mattpocock/skills
+    both ship `tdd` and `teach`, and they disagree about what those words mean.
+    Installing over the top is not an error a moment later: nothing fails, and
+    an agent asked to run `tdd` quietly runs somebody else's workflow instead.
+
+    Owning is by record, not by presence, so re-running a collection over its
+    own files is an update rather than a conflict — and this collection's own
+    bundled skills, which the receipt records, are protected by the same pass.
+
+    The record is new, though, and the commonest starting state is a machine
+    that installed matt-skills with a release that never wrote one. Answering
+    "nothing is owned here" for those roots would fail open on exactly the
+    upgrade path this check exists for, so a collection with no record falls
+    back to its marker: the marker directory is the one attribution that
+    survives a root written before the record existed.
+    """
+    wanted = [str(name) for name in names]
+    manifest = read_external_manifest(root)
+    owners: dict = {}
+    for other, entry in manifest.items():
+        if other == tool:
+            continue
+        for name in entry["skills"]:
+            owners[str(name)] = other
+    # Only when this collection has never recorded an install here. Without
+    # that guard an unrecorded copy of our own would read as somebody else's,
+    # and a legacy collection could never update itself again without --force.
+    if tool not in manifest and not (root / external_tool(tool).marker).is_dir():
+        for other in UPSTREAM_COLLECTIONS:
+            if other.tool == tool or other.tool in manifest:
+                continue
+            if not (root / other.marker).is_dir():
+                continue
+            for name in wanted:
+                if (root / name).is_dir():
+                    owners.setdefault(name, other.tool)
+    receipt = read_receipt(root)
+    if receipt is not None:
+        for name in receipt.get("skills", []) or []:
+            owners.setdefault(str(name), "this collection")
+    return sorted((name, owners[name]) for name in wanted if name in owners)
+
+
+def prune_external_manifest(root: Path, removed: Iterable[str], dry_run: bool) -> None:
+    """Drop names from a root's external record, deleting it when empty.
+
+    The mirror of `prune_receipt`, and needed for the same reason: the conflict
+    message tells the reader to remove the other copy with `--uninstall`, and a
+    record nothing can clear would make that advice false — the name would stay
+    owned by a collection whose files are gone, and the install it was meant to
+    unblock would keep being refused.
+    """
+    if dry_run:
+        return
+    manifest = read_external_manifest(root)
+    if not manifest:
+        return
+    dropped = {str(name) for name in removed}
+    remaining = {}
+    changed = False
+    for tool, entry in manifest.items():
+        kept = [name for name in entry["skills"] if str(name) not in dropped]
+        if len(kept) != len(entry["skills"]):
+            changed = True
+        if kept:
+            remaining[tool] = {**entry, "skills": kept}
+        else:
+            # A record claiming nothing is a claim that nothing can clear.
+            changed = True
+    if not changed:
+        return
+    path = root / EXTERNAL_MANIFEST_FILE
+    if not remaining:
+        remove_path(path)
+        return
+    path.write_text(
+        json.dumps({"schema": EXTERNAL_MANIFEST_SCHEMA, "tools": remaining}, indent=2)
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+# The external collections this installer copies in itself, and therefore the
+# only ones whose skills it can attribute. A tool installed by its own CLI
+# (graphify) drops a directory here but never told us what it placed, so it can
+# never be credited with an unclaimed skill -- crediting it by elimination let
+# the graphify row list mattpocock's hidden skills and rewrite their frontmatter.
+UPSTREAM_TOOL_NAMES = frozenset({MATT_SKILLS.tool, PSTACK.tool})
+
+
+def externally_recorded(root: Path) -> set:
+    """Every skill name any external collection recorded in this root."""
+    return {
+        str(name)
+        for entry in read_external_manifest(root).values()
+        for name in entry["skills"]
+    }
+
+
+class Ownership(NamedTuple):
+    """Who claims `name` in `root`, according to every record that can claim it.
+
+    There are three records now, not two. The receipt lists what this
+    collection installed, `.skills-external.json` lists what an external
+    collection placed *through* this installer, and the directory itself is
+    the third. Before the external manifest existed, "is this ours" was a
+    two-source question, and every caller answered it inline. Six of them did,
+    each slightly differently, and each one written before the third record
+    existed silently began answering about two thirds of the truth -- which is
+    how an uninstall could report success while leaving an ownership claim
+    behind, and how the machine-wide report went blind to exactly the
+    collections whose reason for existing is that they collide.
+
+    So the question is asked once, here. A seventh caller gets the whole
+    answer by construction rather than by remembering.
+    """
+
+    name: str
+    root: Path
+    present: bool
+    by_receipt: bool
+    by_external: Optional[str]
+    matches_checkout: bool
+
+    @property
+    def recorded(self) -> bool:
+        """Whether any record claims it, on disk or not.
+
+        The question the *absent* branch of an uninstall has to ask: a record
+        surviving its directory is the thing that needs clearing, and asking
+        only the receipt there is what made the conflict message's advertised
+        remedy a no-op.
+        """
+        return self.by_receipt or self.by_external is not None
+
+    @property
+    def ours(self) -> bool:
+        """Whether this installer may remove it without `--force`.
+
+        A skill an external collection placed through this installer is ours
+        to remove -- the conflict message says so -- even though it is in no
+        receipt and matches no directory under `skills/`.
+        """
+        return self.recorded or self.matches_checkout
+
+
+def ownership(root: Path, name: str) -> Ownership:
+    """Reconcile every record that can claim `name` in `root`."""
+    destination = root / name
+    owners = {
+        tool: entry["skills"]
+        for tool, entry in read_external_manifest(root).items()
+    }
+    external = next((tool for tool, names in owners.items() if name in names), None)
+    return Ownership(
+        name=name,
+        root=root,
+        present=destination.exists() or destination.is_symlink(),
+        by_receipt=name in receipt_skills(root),
+        by_external=external,
+        matches_checkout=trees_equal(destination, SOURCE_ROOT / name),
+    )
+
+
+def claimed_names(root: Path) -> set:
+    """Every name any record in `root` claims, whatever placed it.
+
+    `available_skills()` answers what this collection *could* install; this
+    answers what this root actually has a claim on, which is the larger set
+    once an external collection has written here.
+    """
+    return set(receipt_skills(root)) | externally_recorded(root)
+
+
+def install_upstream(
+    collection: UpstreamCollection,
+    agents: Iterable[str],
+    roots: list[Path],
+    force: bool,
+    dry_run: bool,
+    emit: Callable[[str], None] = print,
+    executable: Optional[str] = None,
+    ref: Optional[str] = None,
+    allow_conflicts: Optional[bool] = None,
+) -> None:
+    """Fetch one upstream revision, then copy it into the resolved roots.
+
+    Every root gets the same files: the skills are agent-agnostic upstream, and
+    the CLI this replaced wrote byte-identical trees to each agent it was given.
+    `agents` is still validated so an unknown name fails here rather than
+    installing somewhere the caller did not ask for.
+
+    `force` and `allow_conflicts` answer two different questions and default to
+    the same answer only because the command line spells them with one flag.
+    `force` is `install_one`'s: replace a destination that differs. Taking a
+    name from *another collection* is a separate decision, and the dashboard
+    needs to say yes to the first and no to the second -- it passes `force=True`
+    so an external row can offer "update", and that must not silently hand it
+    somebody else's `tdd` as well.
+    """
+    expand_agents(agents)
+    if ref is not None and not ref.strip():
+        # `--matt-ref "$REF"` with an unset REF asked for a revision and named
+        # none. Falling back to the pin would install something the caller did
+        # not choose, which is the failure this flag exists to prevent.
+        raise InstallError(
+            f"{collection.ref_flag} was given an empty value; name a revision"
+        )
+    reference = collection.ref if ref is None else ref.strip()
+    if dry_run:
+        for command in upstream_fetch_commands(collection.repo, reference):
+            emit(f"would run  {shlex.join(command)}")
+        for root in roots:
+            emit(f"would copy all discovered {collection.noun} -> {root}")
+        return
+
+    git = executable or require_git(collection.flag)
+    with tempfile.TemporaryDirectory(prefix=collection.tmp_prefix) as directory:
+        checkout = Path(directory)
+        for command in upstream_fetch_commands(collection.repo, reference, git):
+            _run(command, checkout, UPSTREAM_GIT_ENV)
+        head = checkout_head(checkout, git)
+        if reference == collection.ref:
+            # A tag is a movable label. Checking it against the commit recorded
+            # here is what makes the default install reproducible; without it, a
+            # force-moved tag upstream changes what installs with no change in
+            # this repository for anyone to review.
+            if not head:
+                raise InstallError(
+                    f"could not read the commit behind {collection.source} "
+                    f"{collection.ref}, so the pin cannot be verified"
+                )
+            if head != collection.commit:
+                if collection.ref != collection.commit:
+                    raise InstallError(
+                        f"{collection.source} {collection.ref} now points at "
+                        f"{head[:7]}, not the pinned {collection.commit[:7]}. The "
+                        "tag moved upstream: review the difference and update "
+                        f"{collection.pin_constant}, or name a revision with "
+                        f"{collection.ref_flag}"
+                    )
+                # The pin is the commit itself, so there is no tag to have
+                # moved: the fetch simply did not land where it was sent.
+                raise InstallError(
+                    f"{collection.source} was fetched at {collection.ref[:7]} "
+                    f"but the checkout is on {head[:7]}, so nothing was installed"
+                )
+        changes = checkout_worktree_changes(checkout, git)
+        if changes is None:
+            raise InstallError(
+                f"could not confirm the {collection.source} checkout matches "
+                f"{reference}, so nothing was installed"
+            )
+        if changes:
+            raise InstallError(
+                f"the {collection.source} checkout does not match {reference} — "
+                "a git hook or filter modified it, so nothing was installed. "
+                f"First change: {changes.splitlines()[0].strip()}"
+            )
+        mismatched = checkout_content_mismatches(
+            checkout, git, collection.verify_prefix
+        )
+        if mismatched is None:
+            raise InstallError(
+                f"could not confirm the {collection.source} checkout holds the "
+                f"bytes of {reference}, so nothing was installed"
+            )
+        if mismatched:
+            raise InstallError(
+                f"the {collection.source} checkout does not hold the bytes of "
+                f"{reference}: {len(mismatched)} file(s) differ, starting with "
+                f"{mismatched[0]}. A .gitattributes in that revision, or a "
+                "content filter, rewrote them; nothing was installed"
+            )
+        # After the byte check, never before: a version read out of a tree that
+        # something rewrote on the way to disk is not evidence of anything.
+        version = (
+            declared_version(checkout, collection.subdir, collection.manifest)
+            if collection.manifest
+            else ""
+        )
+        if collection.manifest and reference == collection.ref:
+            if version != collection.version:
+                raise InstallError(
+                    f"{collection.source} at {collection.ref[:7]} declares "
+                    f"version {version or 'none'}, not the pinned "
+                    f"{collection.version}. The pin and the release it names "
+                    "have come apart: review the difference and update "
+                    f"{collection.pin_constant} and its version together, or "
+                    f"name a revision with {collection.ref_flag}"
+                )
+        sources = collection_skill_sources(
+            checkout, collection.source, collection.subdir, collection.skip
+        )
+        if not any(source.name == collection.marker for source in sources):
+            raise InstallError(
+                f"{collection.source} at {reference} did not include "
+                f"{collection.marker}"
+            )
+        names = [source.name for source in sources]
+        # Every root is checked before any root is written, so a conflict in
+        # the second one does not leave the first half-replaced.
+        overwrite_others = force if allow_conflicts is None else allow_conflicts
+        for destination_root in roots:
+            conflicts = external_conflicts(destination_root, collection.tool, names)
+            if conflicts and not overwrite_others:
+                listed = ", ".join(
+                    f"{name} (owned by {owner})" for name, owner in conflicts
+                )
+                removal = " ".join(f"--skill {name}" for name, _ in conflicts)
+                raise InstallError(
+                    f"{collection.source} ships {len(conflicts)} skill(s) that "
+                    f"another collection already owns in {destination_root}: "
+                    f"{listed}. One name is one directory, so installing would "
+                    "replace them and an agent asked for that skill would get "
+                    "this collection's version instead. Either rerun with "
+                    "--force to replace them, or remove the other copy first "
+                    f"with `--uninstall {removal}` — adding --force there too "
+                    "if it was installed before this record existed, since "
+                    "nothing then proves who put it there. Both back the old "
+                    "copy up before touching it"
+                )
+        detail = ", ".join(
+            part
+            for part in (f"plugin {version}" if version else "", head[:7] if head else "")
+            if part
+        )
+        emit(
+            f"{collection.source} @ {reference}" + (f" ({detail})" if detail else "")
+        )
+        for destination_root in roots:
+            # The record has to survive a copy that dies half way. `install_one`
+            # refuses a destination it did not write, and this root is shared --
+            # so one hand-placed directory under a name this collection ships
+            # raises after earlier skills have already landed. Recording only on
+            # the success path left those on disk with nothing claiming them:
+            # the uninstaller then refuses to remove what this installer just
+            # wrote, and every external row lists the union again, which is the
+            # precise failure the manifest was added to prevent. The manifest
+            # must never be emptier than the directory.
+            copied: list[str] = []
+            try:
+                for source in sources:
+                    emit(install_one(source, destination_root, "copy", force, False))
+                    copied.append(source.name)
+            except BaseException:
+                # An *update* that dies half way must not shrink the record.
+                # `record_external_install` rewrites this tool's entry whole, so
+                # handing it only what this run managed to copy would un-claim
+                # skills from the previous install that are still sitting on
+                # disk -- turning a failed update into the same unownable state
+                # a failed first install used to cause. The record is therefore
+                # the union of what was already claimed and still present with
+                # what just landed.
+                surviving = {
+                    name
+                    for name in external_skill_names(destination_root, collection.tool)
+                    if (destination_root / name).exists()
+                }
+                try:
+                    record_external_install(
+                        destination_root,
+                        collection.tool,
+                        sorted(surviving | set(copied)),
+                        reference,
+                        head,
+                    )
+                except OSError as exc:
+                    # Best-effort, like every other write to this cache: losing
+                    # the record is bad, but replacing the error that actually
+                    # stopped the install is worse -- it hides the cause and
+                    # downgrades an InstallError (exit 2) to an OSError (exit 1).
+                    emit(f"note: could not record what landed in {destination_root}: {exc}")
+                raise
+            record_external_install(
+                destination_root, collection.tool, copied, reference, head
+            )
+            # The copies just overwrote any frontmatter edits from an earlier
+            # review, so the recorded choices must be re-applied here or an
+            # update silently re-hides every skill the user enabled.
+            apply_model_decisions(destination_root, emit)
 
 
 def install_matt_skills(
@@ -664,92 +1424,28 @@ def install_matt_skills(
     emit: Callable[[str], None] = print,
     executable: Optional[str] = None,
     ref: Optional[str] = None,
+    allow_conflicts: Optional[bool] = None,
 ) -> None:
-    """Fetch one upstream revision, then copy it into the resolved roots.
+    install_upstream(
+        MATT_SKILLS, agents, roots, force, dry_run, emit, executable, ref,
+        allow_conflicts,
+    )
 
-    Every root gets the same files: the skills are agent-agnostic upstream, and
-    the CLI this replaced wrote byte-identical trees to each agent it was given.
-    `agents` is still validated so an unknown name fails here rather than
-    installing somewhere the caller did not ask for.
-    """
-    expand_agents(agents)
-    if ref is not None and not ref.strip():
-        # `--matt-ref "$REF"` with an unset REF asked for a revision and named
-        # none. Falling back to the pin would install something the caller did
-        # not choose, which is the failure this flag exists to prevent.
-        raise InstallError("--matt-ref was given an empty value; name a revision")
-    reference = MATT_SKILLS_REF if ref is None else ref.strip()
-    if dry_run:
-        for command in matt_skills_fetch_commands(reference):
-            emit(f"would run  {shlex.join(command)}")
-        for root in roots:
-            emit(f"would copy all discovered Matt Pocock skills -> {root}")
-        return
 
-    git = executable or require_git()
-    with tempfile.TemporaryDirectory(prefix="mattpocock-skills-") as directory:
-        checkout = Path(directory)
-        for command in matt_skills_fetch_commands(reference, git):
-            _run(command, checkout, MATT_SKILLS_GIT_ENV)
-        head = matt_skills_head(checkout, git)
-        if reference == MATT_SKILLS_REF:
-            # A tag is a movable label. Checking it against the commit recorded
-            # here is what makes the default install reproducible; without it, a
-            # force-moved tag upstream changes what installs with no change in
-            # this repository for anyone to review.
-            if not head:
-                raise InstallError(
-                    f"could not read the commit behind {MATT_SKILLS_SOURCE} "
-                    f"{MATT_SKILLS_REF}, so the pin cannot be verified"
-                )
-            if head != MATT_SKILLS_COMMIT:
-                raise InstallError(
-                    f"{MATT_SKILLS_SOURCE} {MATT_SKILLS_REF} now points at "
-                    f"{head[:7]}, not the pinned {MATT_SKILLS_COMMIT[:7]}. The "
-                    "tag moved upstream: review the difference and update "
-                    "MATT_SKILLS_COMMIT, or name a revision with --matt-ref"
-                )
-        changes = matt_skills_worktree_changes(checkout, git)
-        if changes is None:
-            raise InstallError(
-                f"could not confirm the {MATT_SKILLS_SOURCE} checkout matches "
-                f"{reference}, so nothing was installed"
-            )
-        if changes:
-            raise InstallError(
-                f"the {MATT_SKILLS_SOURCE} checkout does not match {reference} — "
-                "a git hook or filter modified it, so nothing was installed. "
-                f"First change: {changes.splitlines()[0].strip()}"
-            )
-        mismatched = matt_skills_content_mismatches(checkout, git)
-        if mismatched is None:
-            raise InstallError(
-                f"could not confirm the {MATT_SKILLS_SOURCE} checkout holds the "
-                f"bytes of {reference}, so nothing was installed"
-            )
-        if mismatched:
-            raise InstallError(
-                f"the {MATT_SKILLS_SOURCE} checkout does not hold the bytes of "
-                f"{reference}: {len(mismatched)} file(s) differ, starting with "
-                f"{mismatched[0]}. A .gitattributes in that revision, or a "
-                "content filter, rewrote them; nothing was installed"
-            )
-        sources = matt_skill_sources(checkout)
-        if not any(source.name == "setup-matt-pocock-skills" for source in sources):
-            raise InstallError(
-                f"{MATT_SKILLS_SOURCE} at {reference} did not include "
-                "setup-matt-pocock-skills"
-            )
-        emit(
-            f"{MATT_SKILLS_SOURCE} @ {reference}" + (f" ({head[:7]})" if head else "")
-        )
-        for destination_root in roots:
-            for source in sources:
-                emit(install_one(source, destination_root, "copy", force, False))
-            # The copies just overwrote any frontmatter edits from an earlier
-            # review, so the recorded choices must be re-applied here or an
-            # update silently re-hides every skill the user enabled.
-            apply_model_decisions(destination_root, emit)
+def install_pstack(
+    agents: Iterable[str],
+    roots: list[Path],
+    force: bool,
+    dry_run: bool,
+    emit: Callable[[str], None] = print,
+    executable: Optional[str] = None,
+    ref: Optional[str] = None,
+    allow_conflicts: Optional[bool] = None,
+) -> None:
+    install_upstream(
+        PSTACK, agents, roots, force, dry_run, emit, executable, ref,
+        allow_conflicts,
+    )
 
 
 MODEL_INVOCATION_KEY = "disable-model-invocation"
@@ -759,7 +1455,8 @@ MODEL_DECISIONS_FILE = ".skills-model-invocation.json"
 def skill_is_model_hidden(skill_dir: Path) -> bool:
     """Whether this skill's frontmatter hides it from the model's skill list.
 
-    Upstream collections (mattpocock/skills hides 23 of the 35 it ships) set
+    Upstream collections (mattpocock/skills hides 20 of the 35 it ships, and
+    pstack 39 of its 44) set
     `disable-model-invocation: true` to keep their descriptions out of every
     session's context. The cost is that a harness which routes slash commands
     through the model gets "that skill is not installed in this session" for
@@ -850,6 +1547,35 @@ def record_model_decisions(roots: Iterable[Path], updates: Mapping[str, str]) ->
             + "\n",
             encoding="utf-8",
         )
+
+
+def forget_model_decisions(root: Path, names: Iterable[str]) -> None:
+    """Drop visibility choices for names this root no longer means the same by.
+
+    Called when a name changes hands between collections. The decisions file is
+    keyed by name and says nothing about which skill was being decided on, so a
+    choice that outlives its skill is not a preference any more — it is an
+    instruction aimed at a directory that has been replaced.
+    """
+    if not root.is_dir():
+        return
+    decisions = read_model_decisions([root])
+    remaining = {
+        name: choice
+        for name, choice in decisions.items()
+        if name not in set(names)
+    }
+    if remaining == decisions:
+        return
+    record = root / MODEL_DECISIONS_FILE
+    if not remaining:
+        remove_path(record)
+        return
+    record.write_text(
+        json.dumps({"schema_version": 1, "decisions": remaining}, indent=2, sort_keys=True)
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def apply_model_decisions(root: Path, emit: Callable[[str], None] = print) -> None:
@@ -965,6 +1691,228 @@ def install_one(
     return f"installed  {destination}" + (f" (backup: {backup})" if backup else "")
 
 
+def check_skill_name(name: str) -> None:
+    """Raise unless `name` is a plain directory name, safe to join onto a root.
+
+    The install side never needed this: `install_one` is only ever handed a
+    name that `available_skills` produced. The uninstall side takes whatever
+    `--skill` was given — deliberately, because the name most worth removing
+    is the orphan that has already left the collection — and joins it onto a
+    directory it is about to move away.
+
+    Three values make that dangerous, and all three arrive by accident rather
+    than by malice: `""` (a shell expanding an unset `--skill "$SKILL"`), for
+    which `root / ""` is the root itself; `..` and anything containing a
+    separator, which reach outside the root and land the backup outside the
+    documented `.skills-backups/<root>/` layout as well; and `.`, which is the
+    root under another spelling. Names also arrive from a receipt, whose JSON
+    nothing has ever shape-checked, so the guard belongs at the join and not
+    at the CLI.
+    """
+    if name in ("", ".", "..") or name != Path(name).name:
+        raise InstallError(
+            f"not a skill name: {name!r} (expected one plain directory name, "
+            "with no path separators)"
+        )
+
+
+def uninstall_one(
+    name: str,
+    root: Path,
+    force: bool = False,
+    dry_run: bool = False,
+) -> str:
+    """Remove one installed skill from one root, backing it up first.
+
+    Beside `install_one` on purpose. Backups, receipts, and the refusal to
+    touch what this collection did not put there are defined once for both
+    directions; an uninstaller written anywhere else grows its own copy of the
+    backup logic and then the two disagree about where a recovery lives.
+
+    Four rules carry the risk:
+
+    * `name` must be one plain directory name. `root / name` is a *delete*
+      target, and `Path("/a/b") / ""` is `/a/b` itself while `root / "../x"`
+      is a sibling of the root — so an empty `--skill "$UNSET_VAR"` moved a
+      whole shared `~/.claude/skills` away, receipt and other tools' skills
+      included, and reported success. The check runs before the `--force`
+      branch on purpose: `--force` means "remove a directory that is not
+      ours", never "remove something that is not a skill directory in this
+      root", and the refusal message the caller sees invites `--force`.
+    * An absent destination is a success. Removing nothing is a no-op, and a
+      hook or a script that has to test for presence before every call would
+      race with itself. Presence is `exists() or is_symlink()` — the same test
+      `install_one` makes — so a broken symlink counts as present rather than
+      being silently left behind.
+    * A destination that is both absent from the receipt and unequal to
+      `skills/<name>` is somebody else's, and is refused without `--force`.
+      This is the mirror of `install_one` refusing to overwrite a differing
+      destination, and it is what makes the uninstaller safe to point at
+      `~/.claude/skills`, which is shared with tools this collection does not
+      manage.
+    * The root itself is never removed, however empty it gets, for the same
+      reason.
+
+    A name the receipt records but the disk no longer holds still leaves the
+    receipt: an entry nothing can clear is exactly the `ORPHAN` state that sat
+    in a receipt across two releases.
+    """
+    check_skill_name(name)
+    destination = root / name
+    if destination.parent.resolve() != root.resolve():
+        # Defensive: check_skill_name already rules this out. Stated anyway
+        # because the cost of the guard being wrong is a directory outside the
+        # root being moved, and the invariant is cheaper to assert than to
+        # re-derive from pathlib's join rules at the next edit.
+        raise InstallError(f"refusing to remove outside {root}: {destination}")
+    owner = ownership(root, name)
+    if not owner.present:
+        # Asked of every record, not just the receipt. A directory removed by
+        # hand leaves its claim behind, and that stale claim is what blocks the
+        # next install -- so the remedy the conflict message advertises has to
+        # be able to clear it, whatever wrote it.
+        if not owner.recorded:
+            return f"absent  {destination}"
+        if dry_run:
+            return f"absent  {destination} (would clear it from the records)"
+        forget_records(root, name, dry_run)
+        return f"absent  {destination} (cleared from the records)"
+
+    if not owner.ours and not force:
+        raise InstallError(
+            f"not installed by this collection: {destination} (absent from the "
+            "receipt and from every external record, and differs from this "
+            "checkout; rerun with --force to back it up and remove it anyway)"
+        )
+
+    backup = backup_path(root, name)
+    if dry_run:
+        return f"would remove {destination}; backup {backup}"
+
+    backup.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(destination), str(backup))
+    forget_records(root, name, dry_run)
+    return f"removed  {destination} (backup: {backup})"
+
+
+def forget_records(root: Path, name: str, dry_run: bool) -> None:
+    """Drop every record of `name` in `root`: receipt, ownership, visibility.
+
+    All three or none. The visibility record is the one that was missed, and
+    it is the one that bites silently: `disable-model-invocation` decisions are
+    keyed by bare skill name, so a choice made about one collection's `tdd`
+    was re-applied to a different collection's `tdd` the moment it replaced it
+    -- unhiding, with no prompt, a skill nobody had looked at. The `--force`
+    path of `record_external_install` already drops the decision when ownership
+    changes hands; removal is the same event and needs the same rule.
+    """
+    prune_receipt(root, [name], dry_run)
+    prune_external_manifest(root, [name], dry_run)
+    if not dry_run:
+        forget_model_decisions(root, [name])
+
+
+def uninstall_names(
+    root: Path,
+    skills: Iterable[str] = (),
+    all_skills: bool = False,
+    orphans: bool = False,
+) -> list[str]:
+    """Which names an uninstall touches in one root.
+
+    Per root, because `--all-skills` and `--orphans` are questions about a
+    receipt and two roots rarely hold the same set: resolving them once for
+    every root would remove a skill from a root that never recorded it.
+
+    `--orphans` reads its answer from `root_status` rather than re-deriving it,
+    so the command that clears an orphan and the report that names one can
+    never disagree about which entries qualify.
+    """
+    if orphans:
+        # A record whose directory is gone is an orphan whichever record holds
+        # it. Reading only `root_status` answered for the receipt alone, so an
+        # externally-owned name left behind by a hand-deleted directory had no
+        # bulk command that could clear it -- reopening the very loop
+        # `--orphans` exists to close, one record over.
+        stale = {
+            name
+            for name in externally_recorded(root)
+            if not (root / name).exists() and not (root / name).is_symlink()
+        }
+        return sorted(
+            {item.name for item in root_status(root).skills if item.state == ORPHAN}
+            | stale
+        )
+    if all_skills:
+        # Every name any record claims, not just the receipt's. `uninstall_one`
+        # already treats an externally-recorded skill as ours to remove -- the
+        # conflict message says so -- and a bulk removal that skipped exactly
+        # those left the manifest, and the index entry resting on it, alive
+        # after everything had been removed.
+        return sorted(claimed_names(root))
+    return sorted(set(skills))
+
+
+def uninstall_many(
+    roots: Iterable[Path],
+    skills: Iterable[str] = (),
+    all_skills: bool = False,
+    orphans: bool = False,
+    force: bool = False,
+    dry_run: bool = False,
+    home: Optional[Path] = None,
+    emit: Callable[[str], None] = print,
+) -> list[str]:
+    """Uninstall a selection across several roots, returning what happened.
+
+    One path for the CLI and for a later dashboard, matching the rule that
+    every install goes through `install_one`: the selection rules and the
+    per-root resolution live here, and a second surface adds a screen rather
+    than a second implementation of the same removal.
+
+    Every line is emitted as it happens, not collected and handed back at the
+    end. A removal is not reversible from the message alone -- the timestamped
+    backup path is in it, and that path is the only way back -- so a refusal
+    on the fourth name must not swallow the record of the three directories
+    already moved. Returning the list as well keeps it testable.
+
+    `home` is what lets a removal prune the roots index, and it is optional
+    because the index is a cache: a caller that does not know which home to
+    write to still uninstalls correctly, it just leaves an entry for a root
+    that `machine_status` will then find empty and report as holding nothing.
+    Getting that wrong costs a stale line in a report; refusing to uninstall
+    without it would cost the removal.
+    """
+    messages: list[str] = []
+
+    def say(message: str) -> str:
+        messages.append(message)
+        emit(message)
+        return message
+
+    for root in roots:
+        names = uninstall_names(root, skills, all_skills, orphans)
+        if not names:
+            say(f"nothing to remove  {root}")
+        for name in names:
+            say(uninstall_one(name, root, force, dry_run))
+        # Reached even when nothing was removed, and that is the whole point:
+        # a root the index names but that holds nothing of ours -- deleted
+        # project, receipt cleared by hand -- resolves to an empty selection,
+        # and skipping the prune for exactly that case left an index entry no
+        # command could ever clear. That is the loop `--orphans` was added to
+        # close, one level up.
+        if home is not None and not dry_run and not root_holds_collection(root):
+            try:
+                forget_root(root, home)
+            except OSError as exc:
+                # The skills are already gone; the index is a cache. Failing
+                # the command here would report a removal that happened as a
+                # run that failed.
+                emit(f"note: could not update {roots_index_path(home)}: {exc}")
+    return messages
+
+
 def write_receipt(root: Path, skills: list[str], mode: str, dry_run: bool) -> None:
     if dry_run:
         return
@@ -998,6 +1946,302 @@ def read_receipt(root: Path) -> Optional[dict]:
     except (OSError, ValueError):
         return None
     return receipt if isinstance(receipt, dict) else None
+
+
+def receipt_skills(root: Path) -> list[str]:
+    """The names a root's receipt records, or [] when there is no usable one.
+
+    The same shape-tolerant read `root_status` makes, factored out so the
+    uninstaller and the reconciliation agree on what "the receipt says" means.
+    A missing, unreadable, or malformed receipt answers "nothing recorded"
+    rather than raising: that is the state a hand-copied root is already in,
+    and refusing to answer would make the uninstaller unusable exactly where
+    the receipt is what needs repairing.
+    """
+    receipt = read_receipt(root)
+    if receipt is None:
+        return []
+    raw = receipt.get("skills", [])
+    return [str(item) for item in raw] if isinstance(raw, list) else []
+
+
+def prune_receipt(root: Path, removed: Iterable[str], dry_run: bool) -> None:
+    """Drop names from a root's receipt, deleting it when nothing is left.
+
+    Deliberately not `write_receipt` with a shorter list. That stamps the
+    current VERSION and a fresh `installed_at`, so uninstalling one skill would
+    silently re-date the others and silence the stale-receipt note
+    `root_status` raises on them -- a removal would end up claiming an install
+    it never performed. Only the recorded names change here.
+
+    A receipt that reaches zero skills is deleted rather than kept as an empty
+    list, because a receipt is the claim "this collection owns something here";
+    keeping an empty one leaves the root reported as managed while this
+    collection has nothing in it, and nothing would ever clear it.
+    """
+    if dry_run:
+        return
+    receipt = read_receipt(root)
+    if receipt is None:
+        return
+    dropped = set(removed)
+    raw = receipt.get("skills", [])
+    recorded = [str(item) for item in raw] if isinstance(raw, list) else []
+    remaining = [name for name in recorded if name not in dropped]
+    if remaining == recorded:
+        return
+    path = root / RECEIPT_NAME
+    if not remaining:
+        path.unlink()
+        return
+    receipt["skills"] = remaining
+    temporary = root / f"{RECEIPT_NAME}.tmp"
+    temporary.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+    os.replace(temporary, path)
+
+
+class RootRecord(NamedTuple):
+    """One line of the roots index: a place an install has been, and when.
+
+    Paths and metadata only. It deliberately holds no skill names: the receipt
+    in that root already records them, and a second copy of the same fact is
+    exactly the drift `root_status` exists to catch -- it would have to be
+    rewritten by every install *and* every uninstall to stay true, and the
+    first time one of those failed the index would confidently name skills that
+    are not there.
+    """
+
+    path: Path
+    scope: str
+    agent: str
+    last_seen: str
+
+
+def roots_index_path(home: Path) -> Path:
+    """Where the roots index lives for a given home.
+
+    Taking `home` rather than reading `Path.home()` is what lets `--home`
+    redirect it, so a test -- or a cloud run with a throwaway home -- exercises
+    the real code against its own file instead of appending to the developer's.
+    """
+    return home.expanduser() / ROOTS_INDEX_NAME
+
+
+def known_roots(home: Path) -> list:
+    """Every root the index records, or [] when it cannot be read.
+
+    Missing, empty, truncated, malformed, or holding something that is not a
+    list of objects all answer the same way: no roots. Mirroring
+    `read_receipt`'s posture is the point -- this file is a cache, so the only
+    thing worse than losing it would be letting a half-written copy of it break
+    a scoped operation that never needed it. A caller that gets [] falls back
+    to asking about the place it is standing in, which is what the whole tool
+    did before this index existed.
+
+    Entries missing a usable `path` are dropped rather than repaired: an entry
+    that cannot name a directory cannot be checked, pruned, or reported on.
+    """
+    path = roots_index_path(home)
+    if not path.is_file():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(data, dict):
+        return []
+    raw = data.get("roots", [])
+    if not isinstance(raw, list):
+        return []
+    records = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        recorded = entry.get("path")
+        if not isinstance(recorded, str) or not recorded.strip():
+            continue
+        records.append(
+            RootRecord(
+                Path(recorded),
+                str(entry.get("scope", "")),
+                str(entry.get("agent", "")),
+                str(entry.get("last_seen", "")),
+            )
+        )
+    return records
+
+
+def _write_roots_index(home: Path, records: Iterable) -> None:
+    """Replace the index with `records`, atomically, deleting it when empty.
+
+    Same temp-file-and-`os.replace` as `write_receipt`, so a *reader* arriving
+    mid-write sees the old file or the new one and never half of either. It
+    does not make two writers safe -- that is `_update_roots_index`'s job, and
+    conflating the two is why an earlier version of this docstring claimed a
+    guarantee the code did not provide.
+
+    The scratch file is uniquely named for the same reason. One index serves
+    every root on the machine, so a fixed `.tmp` beside it is shared by every
+    writer: one process's `os.replace` would move another's half-written file
+    into place, and the loser's `os.replace` would then raise FileNotFoundError
+    at a point where its skills are already installed.
+
+    An index with nothing in it is removed rather than left as an empty list,
+    matching `prune_receipt`: absent and empty already mean the same thing to
+    `known_roots`, and keeping the file would leave a machine that installs
+    nothing looking like one that is being tracked.
+    """
+    path = roots_index_path(home)
+    entries = [
+        {
+            "path": str(record.path),
+            "scope": record.scope,
+            "agent": record.agent,
+            "last_seen": record.last_seen,
+        }
+        for record in records
+    ]
+    if not entries:
+        if path.is_file():
+            path.unlink()
+        return
+    payload = {"schema_version": ROOTS_INDEX_SCHEMA, "roots": entries}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle, scratch = tempfile.mkstemp(
+        prefix=f"{ROOTS_INDEX_NAME}.", suffix=".tmp", dir=str(path.parent)
+    )
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8") as stream:
+            stream.write(json.dumps(payload, indent=2) + "\n")
+        os.replace(scratch, path)
+    except Exception:
+        remove_path(Path(scratch))
+        raise
+
+
+def _update_roots_index(home: Path, change: Callable[[list], list]) -> None:
+    """Read the index, apply `change` to its records, and write the result.
+
+    The read and the write have to be one operation. `os.replace` gives a
+    reader an all-or-nothing file, but two installs that each read the index,
+    append their own root, and write it back still lose one of the two roots:
+    the second write is built on a list that predates the first. Nothing
+    reports the gap, and the missing root only reappears if someone installs
+    into it again -- so `--status --all` quietly stops describing a machine it
+    claims to describe. Parallel installs are ordinary here: agent sessions run
+    concurrently and the SessionStart sync hook can fire during a manual run.
+
+    The lock is advisory and best-effort by design. Failing to take it falls
+    through to writing anyway, because the cost of losing the race is one
+    entry the next install restores, while the cost of honouring a lock file
+    left behind by a killed process would be an installer that never finishes.
+    """
+    path = roots_index_path(home)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock = path.with_name(f"{ROOTS_INDEX_NAME}.lock")
+    handle = None
+    deadline = time.monotonic() + ROOTS_INDEX_LOCK_SECONDS
+    while handle is None:
+        try:
+            handle = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(0.02)
+    try:
+        _write_roots_index(home, change(list(known_roots(home))))
+    finally:
+        if handle is not None:
+            os.close(handle)
+            try:
+                lock.unlink()
+            except OSError:
+                pass
+
+
+def remember_root(
+    root: Path,
+    scope: str,
+    agent: str,
+    home: Path,
+    dry_run: bool = False,
+) -> None:
+    """Record that an install touched `root`, refreshing its `last_seen`.
+
+    Called wherever `write_receipt` is, and honouring `--dry-run` the same way,
+    so the index can never claim a root that was only ever described. The two
+    together are the whole bookkeeping of an install: the receipt says what is
+    in a root, this says the root exists at all.
+
+    Deduped on the resolved path, and every entry is written resolved, so the
+    same directory reached as `~/.claude/skills`, as a relative `--target`, or
+    through a symlinked home is one entry rather than three that later report
+    the same drift three times. An existing entry keeps its position instead of
+    moving to the end, so reinstalling does not churn the file for no reason.
+
+    `scope` is the label the invocation used, not a property the path has:
+    `--target` names a directory directly and says nothing about whether it
+    belongs to a user or a project, so the honest record is what was asked for.
+    """
+    if dry_run:
+        return
+    resolved = root.expanduser().resolve()
+    entry = RootRecord(
+        resolved, scope, agent, datetime.now(timezone.utc).isoformat()
+    )
+
+    def change(records: list) -> list:
+        for index, record in enumerate(records):
+            if record.path == resolved:
+                records[index] = entry
+                break
+        else:
+            records.append(entry)
+        return records
+
+    _update_roots_index(home, change)
+
+
+def forget_root(root: Path, home: Path) -> None:
+    """Drop `root` from the index.
+
+    The uninstaller's half of the bookkeeping, and the reason the index was
+    safe to write in the first place: an index nothing prunes accumulates
+    every directory anyone ever pointed this installer at, and a machine-wide
+    report made of stale entries is one nobody reads twice.
+
+    Forgetting a root is not removing anything from disk. The directory, and
+    whatever another tool put in it, is left exactly as it was -- this only
+    stops the index claiming that this collection has business there.
+    """
+    resolved = root.expanduser().resolve()
+    if not any(record.path == resolved for record in known_roots(home)):
+        # Nothing to drop, so nothing to lock or rewrite. Checked before the
+        # locked update rather than inside it because the common case is an
+        # uninstall from a root nobody indexed, and rewriting the file to the
+        # bytes it already holds would refresh nothing and race for no reason.
+        return
+
+    def change(records: list) -> list:
+        return [record for record in records if record.path != resolved]
+
+    _update_roots_index(home, change)
+
+
+def root_holds_collection(root: Path) -> bool:
+    """Whether anything from this collection is still in `root`.
+
+    The condition `forget_root` is gated on. Asked through `root_status` rather
+    than by listing the directory, because the directory is shared: another
+    tool's skills, or a hand-copied one this collection never installed, are
+    not a reason to keep an index entry, and an empty receipt with a stray
+    file beside it would otherwise keep the root indexed forever.
+    """
+    return (
+        bool(root_status(root).skills)
+        or read_receipt(root) is not None
+        or bool(read_external_manifest(root))
+    )
 
 
 class SkillReport(NamedTuple):
@@ -1120,6 +2364,162 @@ def collection_status(roots: Iterable[Path]) -> list:
     return reports
 
 
+class ShadowReport(NamedTuple):
+    """One skill name found in more than one root, and every root holding it.
+
+    `roots` names all of them and the report never says which one wins.
+    Precedence between two skill directories is the harness's rule -- and a
+    different rule in each harness -- so naming a winner here would be the
+    confident wrong answer the receipt reconciliation exists to prevent. The
+    collision is the fact; what to do about it is the reader's call.
+    """
+
+    name: str
+    state: str
+    roots: tuple
+    detail: str
+
+
+class MachineReport(NamedTuple):
+    """Every indexed root at once, plus what only that view can see.
+
+    `vanished` is kept apart from `reports` rather than folded in as another
+    root with problems: an indexed directory that is gone is a stale cache
+    entry, not a broken install, and counting it as work would make a report
+    that never comes back clean on any machine where a project was deleted.
+
+    `unreadable` is a root that is there but cannot be opened -- a
+    TCC-protected directory on macOS, a root-owned project, a stale network
+    mount. Separate from both, and unlike `vanished` it does count as work:
+    it is the one case where the report is knowingly incomplete, and a clean
+    exit code would tell a hook the machine is fine when nothing looked. One
+    line either way, which is the point -- a single unreadable directory used
+    to raise past every other root and answer nothing about the machine at all.
+    """
+
+    reports: tuple
+    vanished: tuple
+    shadowed: tuple
+    unreadable: tuple = ()
+
+    def actionable(self) -> list:
+        return [item for item in self.shadowed if item.state in ACTIONABLE_STATES]
+
+
+def _copies_agree(left: Path, right: Path) -> bool:
+    """Whether two installed copies of one skill hold the same content.
+
+    Both sides are resolved first, deliberately. This collection installs
+    either as a copy or as a symlink to the same checkout, so a linked root and
+    a copied root read identically while `trees_equal` on the raw paths would
+    compare a link's target against a directory and call them different. The
+    question shadowing answers is what an agent *reads*; which shape it is
+    stored in is `MODE_MISMATCH`'s business, one root at a time.
+
+    A broken link resolves to nothing and so agrees with nothing, which is the
+    right answer: a root where the skill reads as empty genuinely differs from
+    one where it reads.
+    """
+    try:
+        return trees_equal(left.resolve(), right.resolve())
+    except OSError:
+        return False
+
+
+def shadow_reports(roots: Iterable[Path]) -> list:
+    """Which skill names appear in more than one of `roots`.
+
+    Two states because they are not equally interesting. Identical copies in
+    several roots are what a machine-wide install *produces* -- `--agent all`
+    writes the same tree to .agents and to .claude on purpose -- so reporting
+    each of those as a finding would bury the one case that matters under the
+    normal shape of a healthy machine. Differing copies are the case that
+    matters: the agent's behaviour then depends on which root it reads, and
+    nothing on disk says which that is.
+    """
+    bundled = available_skills()
+    found: dict = {}
+    for root in roots:
+        # A name the collection dropped can shadow too, and the root that still
+        # holds it is the one nobody is looking at. Taking every claimed name
+        # as well as the collection's is what keeps an orphan visible here --
+        # and what keeps an *external* skill visible at all. Two collections
+        # that ship the same name and disagree about it is the case shadowing
+        # exists to catch; enumerating only bundled names looked straight past
+        # it and printed "nothing to update".
+        for name in sorted(set(bundled) | claimed_names(root)):
+            destination = root / name
+            if destination.exists() or destination.is_symlink():
+                found.setdefault(name, []).append(destination)
+    reports = []
+    for name in sorted(found):
+        copies = found[name]
+        if len(copies) < 2:
+            continue
+        agree = all(_copies_agree(copies[0], other) for other in copies[1:])
+        state = SHADOWED if agree else DIVERGENT
+        detail = (
+            "identical copies in {count} roots"
+            if agree
+            else "copies differ between {count} roots; which one an agent "
+            "reads is its own rule, not this installer's"
+        ).format(count=len(copies))
+        reports.append(
+            ShadowReport(name, state, tuple(copy.parent for copy in copies), detail)
+        )
+    return reports
+
+
+def machine_status(home: Path) -> MachineReport:
+    """Reconcile every root the index knows about, not just this one place.
+
+    `root_status` was already scope-agnostic and already took an arbitrary
+    root; what was missing was a list of them. Mapping the one over the other
+    is the whole of the machine-wide answer, plus the shadowing pass that only
+    becomes possible once more than one root is in view.
+
+    An indexed root whose directory is gone is skipped and reported as
+    `VANISHED` rather than reconciled. Deleting a project is a thing people do,
+    and the index promised only to say where to look.
+
+    A root that raises while being read costs one line, not the whole answer.
+    Scoped `--status` asks about one place, so an unreadable directory there is
+    the answer; `--all` asks about every place at once, and letting the first
+    permission error escape meant one protected directory hid the state of
+    every healthy root beside it.
+    """
+    live = []
+    vanished = []
+    for record in known_roots(home):
+        root = record.path.expanduser()
+        if root.is_dir() or (root / RECEIPT_NAME).is_file():
+            live.append(root)
+        else:
+            vanished.append(record)
+    bundled = available_skills()
+    reports = []
+    readable = []
+    unreadable = []
+    for root in live:
+        try:
+            reports.append(root_status(root, bundled))
+        except OSError as exc:
+            unreadable.append((root, str(exc)))
+        else:
+            readable.append(root)
+    try:
+        shadowed = shadow_reports(readable)
+    except OSError as exc:
+        # Same reasoning one level up: shadowing is the extra that the
+        # machine-wide view makes possible, and losing it must not lose the
+        # per-root reports that are the answer people came for.
+        shadowed = []
+        unreadable.append((home, str(exc)))
+    return MachineReport(
+        tuple(reports), tuple(vanished), tuple(shadowed), tuple(unreadable)
+    )
+
+
 def _normalized(text: str) -> str:
     """Content with platform line endings removed.
 
@@ -1189,6 +2589,37 @@ ORIGIN_BEHIND = "behind"
 ORIGIN_UNKNOWN = "unknown"
 
 
+def status_git(
+    repo: Path,
+    *arguments: str,
+    timeout: Optional[float] = STATUS_GIT_TIMEOUT,
+) -> Optional[str]:
+    """Run one read-only git command in `repo`, or return None if it failed.
+
+    Every freshness question shares this runner so the hardening is stated
+    once: `STATUS_GIT_ENV` keeps a credential prompt from parking a status
+    check forever, `STATUS_GIT_TIMEOUT` keeps an unreachable remote from doing
+    the same without prompting anything, and None covers every way git can
+    decline -- not installed, not a checkout, no remote, no route to it, no
+    answer inside the budget. Callers turn that None into "unknown", which is
+    why this swallows rather than raises: a dashboard asking how fresh it is
+    must not die because the network is down, and must not hang because the
+    network is merely silent.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo), *arguments],
+            capture_output=True,
+            text=True,
+            check=True,
+            env={**os.environ, **STATUS_GIT_ENV},
+            timeout=timeout,
+        )
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return None
+    return result.stdout.strip()
+
+
 def checkout_behind_origin(repo: Path = REPO_ROOT) -> OriginStatus:
     """How far this checkout trails its remote.
 
@@ -1197,17 +2628,7 @@ def checkout_behind_origin(repo: Path = REPO_ROOT) -> OriginStatus:
     costs a fetch, so it is opt-in rather than part of the default answer.
     """
     def git(*arguments: str) -> Optional[str]:
-        try:
-            result = subprocess.run(
-                ["git", "-C", str(repo), *arguments],
-                capture_output=True,
-                text=True,
-                check=True,
-                env={**os.environ, **STATUS_GIT_ENV},
-            )
-        except (OSError, subprocess.CalledProcessError):
-            return None
-        return result.stdout.strip()
+        return status_git(repo, *arguments)
 
     if git("rev-parse", "--is-inside-work-tree") != "true":
         return OriginStatus(
@@ -1240,6 +2661,120 @@ def checkout_behind_origin(repo: Path = REPO_ROOT) -> OriginStatus:
     return OriginStatus(ORIGIN_CURRENT, "up to date with origin")
 
 
+class SkillFreshness(NamedTuple):
+    """Per-skill answers to "how far does this checkout trail origin".
+
+    `behind` maps a skill name to the number of commits on `origin/<branch>`
+    that touch `skills/<name>/` and are not in HEAD. **A name is present only
+    when the question was actually answered.** Absent means unknown, which is
+    why this is a mapping rather than a count per requested name: filling an
+    unanswerable name in as 0 would let the dashboard paint "up to date" over
+    a machine that never reached the remote, and a confident wrong answer is
+    the one failure the whole status side is written to avoid.
+
+    `state` is the shared verdict -- `ORIGIN_BEHIND` when some skill trails,
+    `ORIGIN_CURRENT` when every asked-about skill was checked and none does,
+    `ORIGIN_UNKNOWN` when nothing could be checked -- reusing the vocabulary
+    `checkout_behind_origin` already established, because it is the same
+    question asked at a smaller grain. `detail` says why, in a sentence fit to
+    show a person.
+    """
+
+    state: str
+    detail: str
+    behind: dict
+
+
+def skills_behind_origin(
+    names: Iterable[str],
+    repo: Path = REPO_ROOT,
+    fetch: bool = True,
+) -> SkillFreshness:
+    """How far behind origin each named skill in this checkout is.
+
+    `checkout_behind_origin` answers this for the collection; a dashboard
+    listing thirty rows wants it per row, so that "up to date with the
+    checkout" can stop being mistaken for "up to date". One fetch serves every
+    name -- the per-skill work is a local `rev-list` over the paths the remote
+    moved, which costs nothing once the objects are here. Pass `fetch=False`
+    when something already fetched in this pass, and the whole call stays
+    local.
+
+    The fetch is opt-in for the reason `checkout_behind_origin` states, and
+    the reason bites harder here: this is the call a TUI is tempted to make
+    while drawing its first frame. It must not. Bind it to a key, run it off
+    the UI thread, and show "checking..." until it answers.
+
+    Every failure degrades to unknown and none raises. No git, no `.git` (a
+    release archive has none), a detached HEAD, no `origin/<branch>`, no route
+    to the remote -- each leaves the name out of `behind` rather than claiming
+    a number, because a dashboard that crashes when the network drops is worse
+    than one that admits it does not know.
+
+    This compares committed history only. A skill edited in the working tree
+    and not committed is a different question, which `trees_equal` answers
+    locally against the installed copy.
+    """
+    asked = list(dict.fromkeys(names))
+    if status_git(repo, "rev-parse", "--is-inside-work-tree") != "true":
+        return SkillFreshness(
+            ORIGIN_UNKNOWN,
+            "not a git checkout, so there is no origin to compare "
+            "(a release archive has none)",
+            {},
+        )
+    branch = status_git(repo, "rev-parse", "--abbrev-ref", "HEAD")
+    if not branch or branch == "HEAD":
+        return SkillFreshness(
+            ORIGIN_UNKNOWN, "checkout is not on a branch, so it has no upstream", {}
+        )
+    if fetch and status_git(repo, "fetch", "--quiet", "origin") is None:
+        return SkillFreshness(ORIGIN_UNKNOWN, "could not reach origin", {})
+    remote = f"origin/{branch}"
+    if status_git(repo, "rev-parse", "--verify", "--quiet", remote) is None:
+        return SkillFreshness(
+            ORIGIN_UNKNOWN, f"no {remote} to compare against", {}
+        )
+    behind = {}
+    for name in asked:
+        try:
+            check_skill_name(name)
+        except InstallError:
+            continue
+        # `:(literal)` because a pathspec is glob-by-default and a name is not
+        # a pattern: `check_skill_name` stops separators, not `*`, and a `*`
+        # read as a glob would count every skill's commits against one row.
+        count = status_git(
+            repo,
+            "rev-list",
+            "--count",
+            f"HEAD..{remote}",
+            "--",
+            f":(literal)skills/{name}",
+        )
+        if count is None:
+            continue
+        try:
+            behind[name] = int(count)
+        except ValueError:
+            continue
+    if not behind:
+        if not asked:
+            return SkillFreshness(ORIGIN_CURRENT, f"up to date with {remote}", {})
+        return SkillFreshness(
+            ORIGIN_UNKNOWN, f"could not read how any skill compares to {remote}", {}
+        )
+    stale = sorted(name for name, count in behind.items() if count)
+    if stale:
+        return SkillFreshness(
+            ORIGIN_BEHIND,
+            f"{len(stale)} skill(s) behind {remote}: {', '.join(stale)}; "
+            "`git pull` before installing",
+            behind,
+        )
+    return SkillFreshness(ORIGIN_CURRENT, f"up to date with {remote}", behind)
+
+
 # `--status` found work to do. Distinct from the error codes above on purpose:
 # a hook needs to tell "the check ran and there is drift" apart from "the check
 # itself broke", and both being 1 would make that impossible.
@@ -1249,20 +2784,38 @@ STATUS_ACTION_EXIT = 3
 def status_lines(
     roots: Iterable[Path],
     check_origin: bool = False,
+    machine: Optional[MachineReport] = None,
 ) -> tuple[list[str], bool]:
     """Rendered status, and whether anything needs a human.
 
     One function so `install.py --status`, `skills status`, and any hook that
     wants an answer all describe the same reconciliation rather than three that
     drift apart.
+
+    `machine` widens the same report instead of replacing it: `--status --all`
+    renders the roots the index knows about in the identical per-root format,
+    then the two sections only that view can produce. A second renderer would
+    have to be kept in step with this one by hand, and the first line to fall
+    out of step would be the one a reader compares across the two.
     """
     lines = [f"collection {VERSION} at {REPO_ROOT}"]
-    reports = collection_status(roots)
+    reports = machine.reports if machine is not None else collection_status(roots)
     pending = 0
 
     if not reports:
         lines.append("")
-        lines.append("no destination root holds skills from this collection")
+        if machine is None:
+            lines.append("no destination root holds skills from this collection")
+        elif machine.unreadable:
+            lines.append("no indexed root could be read; see below")
+        elif machine.vanished:
+            lines.append("every root the index knows about is gone")
+        else:
+            lines.append(
+                "the roots index records no root yet; it is written by installs, "
+                "so a machine that installed before this release has none until "
+                "the next one"
+            )
     for report in reports:
         lines.append("")
         lines.append(str(report.root))
@@ -1278,6 +2831,54 @@ def status_lines(
         width = max(len(item.name) for item in report.skills)
         for item in report.skills:
             lines.append(f"  {item.state:<9} {item.name:<{width}}  {item.detail}")
+
+    if machine is not None and machine.vanished:
+        # Listed, never counted. A directory the index still names is a stale
+        # cache entry to offer to prune, and adding it to `pending` would mean
+        # a machine where one project was deleted could never report clean.
+        lines.append("")
+        lines.append("indexed roots that no longer exist")
+        width = max(len(record.scope) or 1 for record in machine.vanished)
+        for record in machine.vanished:
+            lines.append(f"  {VANISHED:<9} {record.scope:<{width}}  {record.path}")
+
+    if machine is not None and machine.unreadable:
+        # Counted, unlike `vanished`. A root that is gone is a stale cache
+        # entry and answering "nothing to update" about it is true; a root
+        # that could not be read is an answer this report does not have, and
+        # exiting 0 on it would tell a hook the machine is clean when nobody
+        # looked.
+        lines.append("")
+        lines.append("indexed roots that could not be read")
+        pending += len(machine.unreadable)
+        for root, detail in machine.unreadable:
+            lines.append(f"  unreadable  {root}  {detail}")
+
+    if machine is not None and machine.shadowed:
+        lines.append("")
+        lines.append("installed in more than one root")
+        pending += len(machine.actionable())
+        divergent = [item for item in machine.shadowed if item.state == DIVERGENT]
+        agreeing = [item for item in machine.shadowed if item.state != DIVERGENT]
+        # Identical copies in several roots are what a machine-wide install
+        # *produces*, and once external collections are counted there are
+        # dozens of them: listing each with its roots buried the divergent
+        # case under two hundred lines of healthy machine. So the agreeing
+        # half is one count, and the full treatment is spent on the half that
+        # actually needs a decision.
+        if agreeing:
+            lines.append(
+                f"  {SHADOWED:<9} {len(agreeing)} name(s) appear identically in "
+                "more than one root; nothing to do"
+            )
+        width = max((len(item.name) for item in divergent), default=1)
+        for item in divergent:
+            lines.append(f"  {item.state:<9} {item.name:<{width}}  {item.detail}")
+            # Every root, every time, and no verdict on which of them wins:
+            # the reader knows their harness's precedence rule and this does
+            # not, so the useful thing to hand them is the full list.
+            for shadow_root in item.roots:
+                lines.append(f"            {shadow_root}")
 
     vendored = vendored_status()
     if vendored:
@@ -1513,6 +3114,9 @@ def cloud_offer(home: Path, repo: Path = REPO_ROOT) -> Optional[str]:
         f"  {'matt-skills'.ljust(width)}  external, needs git",
         f"      {external_tool('matt-skills').summary}. Its `code-review` shares",
         "      a name with Claude's built-in and replaces it for the session.",
+        f"  {'pstack'.ljust(width)}  external, needs git",
+        f"      {external_tool('pstack').summary}. Written for Cursor: several",
+        "      of its skills name Cursor-only tools and model slugs.",
         "",
         "Commands:",
         f"  everything suggested   {installer}{suggested}",
@@ -1521,6 +3125,7 @@ def cloud_offer(home: Path, repo: Path = REPO_ROOT) -> Optional[str]:
         f"  global instructions    {installer} --global-instructions",
         f"  graphify               {installer} --graphify",
         f"  matt-skills            {installer} --matt-skills",
+        f"  pstack                 {installer} --pstack",
         f"  nothing, stop asking   touch {(home / CLOUD_DECLINED).as_posix()}",
         "",
         "Flags combine, and passing any of them installs without prompting.",
@@ -1640,9 +3245,28 @@ def strip_appended_graphify(home: Path, dry_run: bool) -> list[str]:
     return messages
 
 
+class _RecordScope(argparse.Action):
+    """Store `--scope` and remember that it was typed.
+
+    A default and a typed value are the same string once argparse is done, so
+    nothing downstream can tell `--all` from `--all --scope user`. One of those
+    is a coherent request and the other contradicts itself, and rejecting the
+    second means knowing which happened. A second attribute is the cheapest
+    way to know without giving `--scope` a sentinel default that every existing
+    reader of `args.scope` would then have to resolve.
+    """
+
+    def __call__(self, parser_, namespace, values, option_string=None):
+        setattr(namespace, self.dest, values)
+        setattr(namespace, "scope_given", True)
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
-        description="Install this collection into shared or agent-specific skill directories."
+        description=(
+            "Install this collection into shared or agent-specific skill "
+            "directories, or uninstall what it installed there."
+        )
     )
     result.add_argument(
         "--agent",
@@ -1651,11 +3275,23 @@ def parser() -> argparse.ArgumentParser:
         metavar="NAME",
         help="universal, codex, cursor, copilot, claude, or all (repeatable; default all)",
     )
-    result.add_argument("--scope", choices=("user", "project"), default="user")
+    result.add_argument(
+        "--scope",
+        choices=("user", "project"),
+        default="user",
+        action=_RecordScope,
+    )
+    result.set_defaults(scope_given=False)
     result.add_argument("--project-dir", type=Path, default=Path.cwd())
     result.add_argument("--home", type=Path, default=Path.home(), help=argparse.SUPPRESS)
     result.add_argument("--target", type=Path, help="override the resolved skills root")
-    result.add_argument("--skill", action="append", default=[], metavar="NAME")
+    result.add_argument(
+        "--skill",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="a skill to install, or with --uninstall to remove (repeatable)",
+    )
     result.add_argument("--mode", choices=("copy", "link"), default="copy")
     result.add_argument(
         "--graphify",
@@ -1683,6 +3319,30 @@ def parser() -> argparse.ArgumentParser:
         help=(
             "with --matt-skills: the tag, branch, or commit of mattpocock/skills "
             f"to install (default: {MATT_SKILLS_REF}; pass main to track upstream)"
+        ),
+    )
+    pstack = result.add_mutually_exclusive_group()
+    pstack.add_argument(
+        "--pstack",
+        dest="pstack",
+        action="store_true",
+        help="install all pstack skills for the selected agents",
+    )
+    pstack.add_argument(
+        "--no-pstack",
+        dest="pstack",
+        action="store_false",
+        help=argparse.SUPPRESS,
+    )
+    result.set_defaults(pstack=None)
+    result.add_argument(
+        "--pstack-ref",
+        default=None,
+        metavar="REF",
+        help=(
+            "with --pstack: the tag, branch, or commit of cursor/plugins to "
+            f"install pstack from (default: {PSTACK_REF[:7]}, which ships "
+            f"pstack {PSTACK_VERSION}; pass main to track upstream)"
         ),
     )
     result.add_argument(
@@ -1754,6 +3414,29 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help=argparse.SUPPRESS,
     )
+    result.add_argument(
+        "--uninstall",
+        action="store_true",
+        help=(
+            "remove skills from the selected roots instead of installing: name "
+            "them with --skill, or take a whole receipt with --all-skills or "
+            "--orphans. Each removal is backed up first, and a skill this "
+            "collection did not install is refused unless you pass --force"
+        ),
+    )
+    result.add_argument(
+        "--all-skills",
+        action="store_true",
+        help="with --uninstall: remove every skill each root's receipt records",
+    )
+    result.add_argument(
+        "--orphans",
+        action="store_true",
+        help=(
+            "with --uninstall: remove only the receipt entries whose skill has "
+            "left this collection, the state --status reports as `orphan`"
+        ),
+    )
     result.add_argument("--force", action="store_true")
     result.add_argument("--dry-run", action="store_true")
     result.add_argument("--list", action="store_true", help="list bundled skills and exit")
@@ -1761,6 +3444,17 @@ def parser() -> argparse.ArgumentParser:
         "--status",
         action="store_true",
         help="report which managed skills need updating, then exit",
+    )
+    result.add_argument(
+        "--all",
+        dest="all_roots",
+        action="store_true",
+        help=(
+            "with --status: report every root this installer has recorded "
+            "touching, on the whole machine, plus any skill installed in more "
+            "than one of them. Cannot be combined with --scope or --target, "
+            "which ask about one place"
+        ),
     )
     result.add_argument(
         "--check-origin",
@@ -1782,6 +3476,8 @@ def open_dashboard(args: argparse.Namespace) -> int:
         (args.graphify, "--graphify"),
         (args.matt_skills, "--matt-skills"),
         (args.matt_ref is not None, "--matt-ref"),
+        (args.pstack, "--pstack"),
+        (args.pstack_ref is not None, "--pstack-ref"),
         (args.target is not None, "--target"),
         (args.global_instructions is not None, "--global-instructions"),
     ):
@@ -1818,6 +3514,23 @@ def execute_install(args: argparse.Namespace, selected: list[str]) -> None:
                 )
             )
         write_receipt(root, selected, args.mode, args.dry_run)
+        # Beside the receipt, on purpose and with the same dry-run guard. The
+        # receipt says what is in this root; the index says the root exists at
+        # all, which is the only reason a later `--status --all` can find a
+        # project nobody is standing in. A `--target` install is recorded too:
+        # an explicit root is still a root you will want to see later.
+        #
+        # Wrapped because the index lives in $HOME and the install may not:
+        # a read-only or ephemeral home is normal in CI and in containers, and
+        # letting a failed cache write escape turned a `--scope project`
+        # install that had already written .agents into exit 1 *and* skipped
+        # the .claude root entirely. The index's own contract is that deleting
+        # it breaks nothing, so failing to write it must break nothing either
+        # -- the receipt is the record, and the next install rewrites the entry.
+        try:
+            remember_root(root, args.scope, root_agent(root), args.home, args.dry_run)
+        except OSError as exc:
+            print(f"note: could not record {root} in {roots_index_path(args.home)}: {exc}")
     if args.matt_skills:
         install_matt_skills(
             args.agent,
@@ -1828,6 +3541,36 @@ def execute_install(args: argparse.Namespace, selected: list[str]) -> None:
             getattr(args, "matt_git", None),
             getattr(args, "matt_ref", None),
         )
+    # After matt-skills, on purpose: the two collections share two skill names,
+    # so whichever runs second is the one that finds the conflict and says so.
+    # Running pstack second makes that message name the collection the caller
+    # is more likely to be adding to an existing machine.
+    if args.pstack:
+        install_pstack(
+            args.agent,
+            roots,
+            args.force,
+            args.dry_run,
+            print,
+            getattr(args, "pstack_git", None),
+            getattr(args, "pstack_ref", None),
+        )
+    if (args.matt_skills or args.pstack) and not args.dry_run:
+        # An external collection writes real skills into a real root, and that
+        # root is exactly as worth finding later as one this collection wrote
+        # to -- more so, because a root holding only external skills has no
+        # receipt, so nothing else in the index would ever name it. Without
+        # this, `--status --all` was blind to any machine whose only install
+        # was `--pstack`, and the shadowing pass that exists to catch two
+        # collections disagreeing about `tdd` never saw either copy.
+        for root in roots:
+            try:
+                remember_root(root, args.scope, root_agent(root), args.home, False)
+            except OSError as exc:
+                print(
+                    f"note: could not record {root} in "
+                    f"{roots_index_path(args.home)}: {exc}"
+                )
     if args.global_instructions is not None:
         for result in install_global_instructions(
             args.home, args.global_instructions, args.dry_run
@@ -1842,24 +3585,116 @@ def execute_install(args: argparse.Namespace, selected: list[str]) -> None:
             print,
             home=args.home,
         )
-    if args.matt_skills and not args.dry_run:
-        print(
-            "Next: run /setup-matt-pocock-skills once inside the target "
-            "repository to finish configuring the workflows."
+    fetched = [
+        collection
+        for collection, wanted in (
+            (MATT_SKILLS, args.matt_skills),
+            (PSTACK, args.pstack),
         )
+        if wanted
+    ]
+    if fetched and not args.dry_run:
+        for collection in fetched:
+            print(
+                f"Next: run /{collection.marker} once inside the target "
+                "repository to finish configuring the workflows."
+            )
+        # One message for both, because the count is of a root and not of a
+        # collection: a machine with both installed has one list of hidden
+        # skills, and two messages counting overlapping halves of it would be
+        # arithmetic the reader has to do.
         undecided = {
             name for root in roots for name in hidden_skills(root)
         } - set(read_model_decisions(roots))
         if undecided:
+            rows = " or ".join(collection.tool for collection in fetched)
             print(
                 f"{len(undecided)} skill(s) installed hidden from the model's "
-                "skill list; select matt-skills in the dashboard to review "
+                f"skill list; select {rows} in the dashboard to review "
                 "them, or enable one directly with --enable-skill NAME."
             )
     if not args.dry_run:
         hint = launcher_hint()
         if hint:
             print(hint)
+
+
+def execute_uninstall(args: argparse.Namespace) -> int:
+    """Handle --uninstall and exit.
+
+    Reached before every other dispatch so that a command line asking for a
+    removal cannot quietly do something else instead: every flag that would
+    have won the dispatch, or that only describes an install, is rejected by
+    name rather than ignored. Ignoring one is how `--uninstall --status` would
+    print a clean report and leave the skills in place.
+
+    Selecting names is not validated against the collection, on purpose. The
+    name most worth removing is the one that has *left* the collection, so a
+    bundled-skill check here would reject exactly the orphan the command
+    exists to clear.
+    """
+    for present, flag in (
+        (args.list, "--list"),
+        (args.status, "--status"),
+        # Rejected by name rather than ignored because `--uninstall --all`
+        # reads like "remove it everywhere", and it is not: `--all` widens a
+        # *report* to the whole machine. Silently doing something narrower
+        # than that reading -- or wider -- is the one mistake this flag pair
+        # must not make.
+        (args.all_roots, "--all"),
+        (args.setup_path, "--setup-path"),
+        (args.cloud_bootstrap, "--cloud-bootstrap"),
+        (args.graphify, "--graphify"),
+        (bool(args.matt_skills), "--matt-skills"),
+        (args.matt_ref is not None, "--matt-ref"),
+        (bool(args.pstack), "--pstack"),
+        (args.pstack_ref is not None, "--pstack-ref"),
+        (args.global_instructions is not None, "--global-instructions"),
+        (bool(args.enable_skill), "--enable-skill"),
+        (bool(args.hide_skill), "--hide-skill"),
+        (args.interactive, "--interactive"),
+    ):
+        if present:
+            raise InstallError(
+                f"--uninstall does not combine with {flag}; run them as two commands"
+            )
+    if not args.uninstall:
+        flag = "--all-skills" if args.all_skills else "--orphans"
+        raise InstallError(
+            f"{flag} only selects what to remove; add --uninstall to remove it"
+        )
+    if args.all_skills and args.orphans:
+        raise InstallError(
+            "--all-skills already covers --orphans; pass one or the other"
+        )
+    if args.skill and (args.all_skills or args.orphans):
+        wider = "--all-skills" if args.all_skills else "--orphans"
+        raise InstallError(
+            f"--skill names an exact set and {wider} takes a whole receipt; "
+            "pass one or the other"
+        )
+    if not (args.skill or args.all_skills or args.orphans):
+        # Defaulting to everything is the one thing an uninstaller must never
+        # do: the install default is recoverable, this one deletes work.
+        raise InstallError(
+            "--uninstall needs to know what to remove: --skill NAME, "
+            "--all-skills, or --orphans"
+        )
+    # `print` rather than a loop over the return value: a refusal or an I/O
+    # error partway through has to leave the already-removed skills' backup
+    # paths on stdout, and a caller that only reads the returned list sees
+    # nothing at all when the call raises.
+    uninstall_many(
+        stage_roots(args, args.scope),
+        args.skill,
+        args.all_skills,
+        args.orphans,
+        args.force,
+        args.dry_run,
+        args.home,
+        print,
+    )
+    return 0
 
 
 def manage_model_invocation(args: argparse.Namespace) -> int:
@@ -1897,14 +3732,48 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = parser().parse_args(raw_args)
     try:
         bundled = available_skills()
+        if args.uninstall or args.all_skills or args.orphans:
+            # Ahead of every other branch so a removal cannot be silently
+            # traded for a report or an install; the combinations are rejected
+            # inside rather than resolved by dispatch order.
+            return execute_uninstall(args)
+        if args.all_roots:
+            # `--all` asks about the machine; `--scope` and `--target` each
+            # name one place. Answering a contradiction by picking whichever
+            # the dispatch order happens to favour is how a report ends up
+            # describing somewhere the caller did not ask about.
+            # `--agent` belongs in this list for the same reason as the other
+            # two: it is resolved by the same `resolve_roots`, and narrowing
+            # to one agent's convention is narrowing to a place. Ignoring it
+            # answered a request for "the Claude roots on this machine" with
+            # every root on the machine, silently.
+            elsewhere = (
+                "--scope"
+                if getattr(args, "scope_given", False)
+                else "--target" if args.target is not None
+                else "--agent" if args.agent
+                else ""
+            )
+            if elsewhere:
+                raise InstallError(
+                    f"--all asks about the whole machine and {elsewhere} asks "
+                    "about one place; pass one or the other"
+                )
+            if not args.status:
+                raise InstallError(
+                    "--all widens what --status reports; add --status to see it"
+                )
         if args.list:
             print("\n".join(bundled))
             return 0
         if args.status:
             # Read-only, and reachable with no terminal: a hook or a CI job is
             # the caller that most needs this answer.
+            machine = machine_status(args.home) if args.all_roots else None
             lines, pending = status_lines(
-                stage_roots(args, args.scope), args.check_origin
+                [] if machine is not None else stage_roots(args, args.scope),
+                args.check_origin,
+                machine,
             )
             print("\n".join(lines))
             return STATUS_ACTION_EXIT if pending else 0
@@ -1950,12 +3819,19 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "--matt-ref only applies to --matt-skills; add --matt-skills to "
                 "install that revision"
             )
+        if args.pstack_ref is not None and not args.pstack:
+            raise InstallError(
+                "--pstack-ref only applies to --pstack; add --pstack to "
+                "install that revision"
+            )
         if args.graphify and args.target is not None:
             raise InstallError(
                 "--graphify cannot be combined with --target; use --scope instead"
             )
         if args.matt_skills and not args.dry_run:
-            args.matt_git = require_git()
+            args.matt_git = require_git("--matt-skills")
+        if args.pstack and not args.dry_run:
+            args.pstack_git = require_git("--pstack")
         if args.graphify and not args.dry_run:
             graphify_cwd = args.project_dir.expanduser().resolve()
             if args.scope == "project" and not graphify_cwd.is_dir():
