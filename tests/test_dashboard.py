@@ -1404,9 +1404,11 @@ class RegressionTests(DashboardCase):
                 text.index(skills_tui.REMOVE_LABEL), text.index("INSTALL")
             )
             root = self.claude_root()
-            self.assertIn(
-                str(root.parent / ".skills-backups" / root.name), text
-            )
+            # Resolved on both sides: Windows hands tempfile an 8.3 short path
+            # (RUNNER~1) while the dashboard prints the long one, so comparing
+            # the raw strings fails on a path that is the same directory.
+            backup = (root.parent / ".skills-backups" / root.name).resolve()
+            self.assertIn(str(backup), text)
             self.assertIn("1 deletion", text)
             self.assertNotIn(skills_tui.FAIL, text)
 

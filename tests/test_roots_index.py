@@ -313,7 +313,10 @@ class CacheFailureTests(unittest.TestCase):
         return result
 
     @unittest.skipIf(os.name == "nt", "POSIX permission bits")
-    @unittest.skipIf(os.geteuid() == 0, "root ignores the permission bits")
+    @unittest.skipIf(
+        not hasattr(os, "geteuid") or os.geteuid() == 0,
+        "needs POSIX permission bits that a non-root user cannot bypass",
+    )
     def test_an_unwritable_home_does_not_fail_or_truncate_an_install(self) -> None:
         project = self.directory / "project"
         project.mkdir()
@@ -413,7 +416,10 @@ class UnreadableRootTests(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.home, ignore_errors=True)
 
     @unittest.skipIf(os.name == "nt", "POSIX permission bits")
-    @unittest.skipIf(os.geteuid() == 0, "root ignores the permission bits")
+    @unittest.skipIf(
+        not hasattr(os, "geteuid") or os.geteuid() == 0,
+        "needs POSIX permission bits that a non-root user cannot bypass",
+    )
     def test_an_unreadable_root_is_one_line_and_the_others_still_report(self) -> None:
         healthy = self.home / "one" / "skills"
         broken = self.home / "two" / "skills"

@@ -296,6 +296,11 @@ class VerifyPrefixTests(unittest.TestCase):
         run("init", "--quiet")
         run("config", "user.email", "t@example.com")
         run("config", "user.name", "t")
+        # Windows checks out CRLF by default, which rewrites every file on the
+        # way out and makes the whole tree read as mismatched. That behaviour
+        # is real and is precisely what this function detects -- but here it
+        # would drown the one tampered file the test is about.
+        run("config", "core.autocrlf", "false")
         for relative in paths:
             target = checkout / relative
             target.parent.mkdir(parents=True, exist_ok=True)
