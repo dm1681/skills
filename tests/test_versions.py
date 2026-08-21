@@ -205,7 +205,8 @@ class ValidatorVersionChecksTests(unittest.TestCase):
         errors = VALIDATOR.validate()
         self.assertTrue(
             any(
-                "demo-skill/SKILL.md requires a version key" in error
+                "demo-skill/SKILL.md requires a version key"
+                in error.replace("\\", "/")
                 for error in errors
             ),
             errors,
@@ -216,7 +217,8 @@ class ValidatorVersionChecksTests(unittest.TestCase):
         errors = VALIDATOR.validate()
         self.assertTrue(
             any(
-                "demo-skill/SKILL.md requires a version key" in error
+                "demo-skill/SKILL.md requires a version key"
+                in error.replace("\\", "/")
                 for error in errors
             ),
             errors,
