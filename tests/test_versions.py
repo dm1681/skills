@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -41,6 +43,21 @@ SPEC = importlib.util.spec_from_file_location(
 assert SPEC is not None and SPEC.loader is not None
 VALIDATOR = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(VALIDATOR)
+
+
+def _rmtree_force(path: Path) -> None:
+    """Delete a tree including git's read-only object files.
+
+    Git marks objects read-only. POSIX checks the *directory* bit to unlink,
+    so it does not care; Windows checks the file's own bit and refuses, which
+    made a plain rmtree of a fixture `.git` raise WinError 5.
+    """
+
+    def clear_readonly(func, target, _exc):
+        os.chmod(target, stat.S_IWRITE)
+        func(target)
+
+    shutil.rmtree(path, onerror=clear_readonly)
 
 
 class SkillVersionTests(unittest.TestCase):
@@ -236,7 +253,7 @@ class ValidatorVersionChecksTests(unittest.TestCase):
         self.assertTrue(
             any(
                 f"{vendored_name}/SKILL.md is vendored and must not carry a "
-                "version key" in error
+                "version key" in error.replace("\\", "/")
                 for error in errors
             ),
             errors,
@@ -444,7 +461,7 @@ class BumpCheckTests(unittest.TestCase):
         """The posture the whole check has to keep: an unpacked release
         tarball has no `.git`, and a validator that failed there would fail
         every install-from-archive for a reason the archive cannot fix."""
-        shutil.rmtree(self.repo / ".git")
+        _rmtree_force(self.repo / ".git")
         entrypoint = self.entrypoint("demo-skill")
         entrypoint.write_text(
             entrypoint.read_text(encoding="utf-8") + "\nmore body\n", encoding="utf-8"
