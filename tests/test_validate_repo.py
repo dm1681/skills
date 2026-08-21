@@ -46,24 +46,42 @@ class SkillWarningTests(unittest.TestCase):
         self.assertEqual([], VALIDATOR.skill_warnings("demo", text))
 
 
-# The one shipped skill allowed to warn. `olympus-report-progress` is vendored
-# from the Olympus repository, and the sessions that load it run in unrelated
-# repositories where Olympus's own docs do not exist -- so it states its whole
-# spec inline and cannot be split into references/ the way the warning
-# suggests. Splitting it would break the case it exists for. Everything else
-# must stay clean, including that skill's description phrasing.
+# `olympus-report-progress` is vendored from the Olympus repository, and the
+# sessions that load it run in unrelated repositories where Olympus's own docs
+# do not exist -- so it states its whole spec inline and cannot be split into
+# references/ the way the budget warning suggests. Splitting it would break the
+# case it exists for, and it is not ours to split: the copy here is pinned to
+# upstream by SHA256, so editing it is drift, not a fix.
 SELF_CONTAINED_BY_DESIGN = "olympus-report-progress"
 
 
 class ShippedSkillTests(unittest.TestCase):
-    def test_only_the_off_repo_skill_may_exceed_the_entrypoint_budget(self) -> None:
-        budget_warning = f"skills/{SELF_CONTAINED_BY_DESIGN}/SKILL.md is"
-        unexpected = [
-            warning
-            for warning in VALIDATOR.collect_warnings()
-            if not (warning.startswith(budget_warning) and "budget" in warning)
-        ]
-        self.assertEqual([], unexpected)
+    def test_the_shipped_collection_warns_about_nothing(self) -> None:
+        """A clean run must be genuinely clean, or nobody reads the warnings.
+
+        This used to whitelist the vendored skill's over-budget entrypoint,
+        which meant every green run still printed one line -- and a warning
+        that is always there is a warning everyone learns to skip. The
+        exemption now lives in `skill_warnings`, where the reason it can never
+        be acted on is stated, so this asserts the honest thing instead.
+        """
+        self.assertEqual([], VALIDATOR.collect_warnings())
+
+    def test_the_vendored_skill_is_the_one_that_would_otherwise_warn(self) -> None:
+        """Pins *why* the exemption is load-bearing rather than decorative.
+
+        If upstream ever trims the entrypoint under budget, this fails and the
+        exemption can be reconsidered on purpose instead of quietly covering
+        for a skill that no longer needs it.
+        """
+        entrypoint = VALIDATOR.ROOT / "skills" / SELF_CONTAINED_BY_DESIGN / "SKILL.md"
+        text = entrypoint.read_text(encoding="utf-8")
+        self.assertIn(SELF_CONTAINED_BY_DESIGN, VALIDATOR.VENDORED_SKILL_NAMES)
+        self.assertGreater(len(text.splitlines()), VALIDATOR.SKILL_LINE_BUDGET)
+        # Same text under a non-vendored name still warns: the silence is the
+        # exemption's doing, not a hole in the budget check itself.
+        self.assertTrue(VALIDATOR.skill_warnings("not-vendored", text))
+        self.assertEqual([], VALIDATOR.skill_warnings(SELF_CONTAINED_BY_DESIGN, text))
 
 
 if __name__ == "__main__":

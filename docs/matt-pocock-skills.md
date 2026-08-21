@@ -119,6 +119,14 @@ upstream costs nothing here. Two exceptions:
   two directories upstream but one destination on Windows and on a stock macOS
   filesystem. Nothing collides today.
 
+A third exception is not upstream's but this collection's. `pstack`, the other
+optional collection here, also ships `tdd` and `teach` and means different
+things by them. A skill root is one flat directory, so whichever install runs
+second stops and names the shared skills rather than replacing them silently —
+`--force` accepts the replacement and backs the old copy up, and `--uninstall`
+clears the other collection's claim. See
+[`pstack.md`](pstack.md#two-collections-one-directory).
+
 Every selected root receives the same files. The skills carry no agent-specific
 content — upstream's CLI wrote byte-identical trees to each agent it was given —
 so there is no agent mapping to keep in step any more.

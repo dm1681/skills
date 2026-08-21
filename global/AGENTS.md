@@ -1,11 +1,21 @@
 # Global agent instructions
 
 These apply to every project on this machine, in addition to any project-level
-`AGENTS.md` or `CLAUDE.md`. This file is the single source of truth: the
-installer points `~/.agents/AGENTS.md` and `~/.claude/CLAUDE.md` at it rather
-than copying it, so edits here take effect everywhere without reinstalling.
+`AGENTS.md` or `CLAUDE.md`.
+
+**Source of truth: `global/AGENTS.md` in the dm1681/skills checkout.** If you
+are reading this text as `~/.agents/AGENTS.md` or `~/.claude/CLAUDE.md`, you
+are reading an installed copy. Never edit it in place — change the checkout's
+`global/AGENTS.md` and rerun `./install.sh --global-instructions`, because an
+in-place edit is backed up and overwritten by the next install. This applies
+to agents asked to "always remember" something globally: the durable place for
+that instruction is the checkout, not the installed file.
 
 Install with `./install.sh --global-instructions` (see the repo `AGENTS.md`).
+`--global-instructions` (link, the default) writes pointer files that `@`-import
+this one, so edits take effect without reinstalling; `--global-instructions
+copy` writes the text into `~/.agents/AGENTS.md`, which then needs a reinstall
+after every change.
 
 ## Visualization-driven development
 
@@ -19,6 +29,17 @@ user where the artifact is saved.
 ## graphify
 - **graphify** (`~/.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
 When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
+
+## Workflows
+
+When authoring a Workflow script, choose `model` and `effort` per `agent()`
+call to match that agent's own task — never leave the tier to inherit by
+default. Cheap mechanical stages (grep, list, transform, extract) get a small
+model and `effort: 'low'`; hard reasoning stages (design judging, adversarial
+verification, synthesis, root-cause analysis) get the strong model and
+`effort: 'high'` or above. Record the pairing in `meta.phases` (add `model` to
+the phase entry) and state the tiering in the summary so it can be overridden
+before the run.
 
 ## Output shaping (ADHD reader)
 

@@ -102,7 +102,15 @@ class InstallerTests(unittest.TestCase):
     def test_project_scope(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             project = Path(directory)
-            self.run_installer("--scope", "project", "--project-dir", str(project))
+            # --home is passed even though nothing here reads the home tree:
+            # a project install still records the root it touched in the
+            # machine-wide roots index, and without the redirect this test
+            # appended its temp path to the developer's real index, which then
+            # reported it as a vanished root forever after.
+            self.run_installer(
+                "--scope", "project", "--project-dir", str(project),
+                "--home", str(project / "home"),
+            )
             self.assertTrue((project / ".agents" / "skills" / SKILL / "SKILL.md").is_file())
 
     def test_differing_destination_requires_force_and_is_backed_up(self) -> None:
