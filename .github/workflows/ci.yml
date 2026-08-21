@@ -18,7 +18,13 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
+      # Full history and tags on purpose. The validator's version-bump check
+      # diffs each skill against the last release tag, and the default shallow
+      # no-tags fetch leaves it nothing to resolve -- so the check would pass
+      # by being unable to run, in the job whose whole job is to run it.
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           python-version: "3.12"

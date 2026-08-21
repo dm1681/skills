@@ -308,13 +308,35 @@ def command_status(args: argparse.Namespace) -> int:
     Deliberately dependency-free: this is the answer a SessionStart hook or a
     CI job wants, and neither has a terminal for the dashboard nor a reason to
     need `textual` installed.
+
+    `--all` swaps the question from "this place" to "this machine" by handing
+    `status_lines` a `MachineReport` instead of a root list — the same call
+    `install.py --status --all` makes, because `skills` is the command the
+    docs point people at and a machine-wide report reachable from only one of
+    the two surfaces is a report most people never find.
     """
-    scope = "user" if args.user else "project"
-    project_dir = args.project_dir.expanduser().resolve()
-    roots = install.resolve_roots(
-        args.agent, scope, Path.home(), project_dir, None
-    )
-    lines, pending = install.status_lines(roots, args.check_origin)
+    if args.all_roots:
+        # Rejected by name rather than merged, matching install.py: `--all`
+        # asks about the machine and each of these asks about one place, so
+        # honouring both would answer about somewhere the caller did not ask
+        # about. `--project-dir` is exempt: it has a default, so its presence
+        # says nothing about what was typed.
+        for present, flag in ((args.user, "--user"), (bool(args.agent), "--agent")):
+            if present:
+                raise install.InstallError(
+                    f"--all asks about the whole machine and {flag} asks about "
+                    "one place; pass one or the other"
+                )
+        lines, pending = install.status_lines(
+            [], args.check_origin, install.machine_status(Path.home())
+        )
+    else:
+        scope = "user" if args.user else "project"
+        project_dir = args.project_dir.expanduser().resolve()
+        roots = install.resolve_roots(
+            args.agent, scope, Path.home(), project_dir, None
+        )
+        lines, pending = install.status_lines(roots, args.check_origin)
     print("\n".join(lines))
     return install.STATUS_ACTION_EXIT if pending else 0
 
@@ -381,6 +403,61 @@ def command_install(args: argparse.Namespace) -> int:
             args.dry_run,
         )
     )
+
+
+def command_uninstall(args: argparse.Namespace) -> int:
+    """Remove installed skills, delegating to the one uninstall path.
+
+    Every rule that makes a removal safe -- the name check, the backup, the
+    receipt rewrite, the refusal to touch a directory this collection did not
+    install -- lives in `install.uninstall_one`. This builds an argument list
+    and hands over, for the same reason `command_install` does: a second
+    implementation of those rules is a second place for them to disagree.
+
+    Naming nothing is an error rather than a shortcut for everything. The
+    install side can fall back to the dashboard when it is given no names,
+    because the cost of guessing wrong there is an extra directory; here it is
+    a deleted one.
+    """
+    names = list(args.name)
+    if names and (args.all or args.orphans):
+        raise install.InstallError(
+            "pass skill names or --all/--orphans, not both"
+        )
+    if not (names or args.all or args.orphans):
+        raise install.InstallError(
+            "name at least one skill, or pass --all to remove everything this "
+            "collection installed here, or --orphans to clear only the "
+            "entries whose skills have left the collection. "
+            "`skills status` shows what is installed."
+        )
+
+    scope = "user" if args.user else "project"
+    project_dir = args.project_dir.expanduser().resolve()
+    if scope == "project" and not project_dir.is_dir():
+        raise install.InstallError("project directory does not exist: %s" % project_dir)
+
+    argv = [
+        "--non-interactive",
+        "--uninstall",
+        "--scope",
+        scope,
+        "--project-dir",
+        str(project_dir),
+    ]
+    for agent in args.agent:
+        argv.extend(("--agent", agent))
+    for name in names:
+        argv.extend(("--skill", name))
+    if args.all:
+        argv.append("--all-skills")
+    if args.orphans:
+        argv.append("--orphans")
+    if args.force:
+        argv.append("--force")
+    if args.dry_run:
+        argv.append("--dry-run")
+    return install.main(argv)
 
 
 def command_setup_path(args: argparse.Namespace) -> int:
@@ -468,6 +545,42 @@ def parser() -> argparse.ArgumentParser:
     where = subcommands.add_parser("where", help="print this checkout's path")
     where.set_defaults(handler=command_where)
 
+    remover = subcommands.add_parser(
+        "uninstall",
+        help="remove installed skills, backing each one up first",
+    )
+    remover.add_argument("name", nargs="*", help="skill names to remove")
+    remover.add_argument(
+        "--all",
+        action="store_true",
+        help="remove every skill this collection installed here",
+    )
+    remover.add_argument(
+        "--orphans",
+        action="store_true",
+        help="remove only the recorded skills that have left this collection",
+    )
+    remover.add_argument(
+        "--user",
+        action="store_true",
+        help="remove from the machine-wide roots instead of this project's",
+    )
+    remover.add_argument("--project-dir", type=Path, default=Path.cwd())
+    remover.add_argument(
+        "--agent",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="universal, codex, cursor, copilot, claude, or all (repeatable; default all)",
+    )
+    remover.add_argument(
+        "--force",
+        action="store_true",
+        help="also remove a directory this collection did not install",
+    )
+    remover.add_argument("--dry-run", action="store_true")
+    remover.set_defaults(handler=command_uninstall)
+
     status = subcommands.add_parser(
         "status",
         help="report which installed skills differ from this checkout",
@@ -485,6 +598,12 @@ def parser() -> argparse.ArgumentParser:
         help="limit the check to one agent's skill directory",
     )
     status.add_argument("--project-dir", type=Path, default=Path.cwd())
+    status.add_argument(
+        "--all",
+        dest="all_roots",
+        action="store_true",
+        help="report every root any install has touched, not just this place",
+    )
     status.add_argument(
         "--check-origin",
         action="store_true",
