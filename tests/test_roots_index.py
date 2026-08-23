@@ -202,6 +202,9 @@ class StatusAllEndToEndTests(unittest.TestCase):
             text=True,
             capture_output=True,
             check=False,
+            # These assert on a temp `--home`; the plugin section of the same
+            # report asks the real machine. See test_status.run_status.
+            env={**os.environ, install.PLUGIN_STATUS_ENV: "off"},
         )
         self.assertEqual(expected, result.returncode, result.stdout + result.stderr)
         return result
@@ -308,6 +311,7 @@ class CacheFailureTests(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, str(INSTALLER), *arguments],
             cwd=ROOT, text=True, capture_output=True, check=False,
+            env={**os.environ, install.PLUGIN_STATUS_ENV: "off"},
         )
         self.assertEqual(expected, result.returncode, result.stdout + result.stderr)
         return result

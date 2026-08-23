@@ -2778,6 +2778,386 @@ def skills_behind_origin(
 # `--status` found work to do. Distinct from the error codes above on purpose:
 # a hook needs to tell "the check ran and there is drift" apart from "the check
 # itself broke", and both being 1 would make that impossible.
+PLUGINS_MANIFEST = REPO_ROOT / "plugins.json"
+PLUGINS_MANIFEST_SCHEMA = 1
+PLUGIN_CLI_TIMEOUT = 30.0
+# The manifest is a machine-wide baseline, so it governs user scope and only
+# user scope. A project- or local-scope plugin belongs to the repository that
+# asked for it, and calling one of those undeclared drift would report every
+# collaborator's repo-level choice as a problem on every machine.
+PLUGIN_SCOPE = "user"
+
+DISABLED = "disabled"
+PLUGIN_ACTIONABLE = (MISSING, DISABLED, UNTRACKED)
+
+
+class PluginSpec(NamedTuple):
+    """One plugin the manifest declares, split the way its id reads."""
+
+    name: str
+    marketplace: str
+
+    @property
+    def identifier(self) -> str:
+        return f"{self.name}@{self.marketplace}"
+
+
+class PluginManifest(NamedTuple):
+    """The declared plugin state: which catalogues, and which plugins from them.
+
+    `marketplaces` maps a marketplace *name* to the source string
+    `claude plugin marketplace add` takes, because the name is what a plugin id
+    references and the source is what registers it. Nothing here pins a
+    version: marketplaces auto-update their plugins in the background, so a pin
+    would be overwritten on one machine and not another, and the manifest would
+    describe a state no machine actually holds.
+    """
+
+    marketplaces: Mapping[str, str]
+    plugins: tuple
+
+
+def read_plugin_manifest(
+    path: Path = PLUGINS_MANIFEST,
+) -> Optional[PluginManifest]:
+    """The declared plugin state, or None when this checkout ships no manifest.
+
+    None rather than an error: an unpacked release archive from before this
+    release has no `plugins.json`, and every other part of the installer works
+    there unchanged. `--status` renders no plugin section at all in that case,
+    on the principle that already makes an unfetchable origin `unknown` rather
+    than `behind` -- a question this checkout cannot ask is not a finding.
+    Only `--plugins` refuses, because it was asked to act on the file by name.
+
+    A malformed file is a different thing and does raise. So does a plugin
+    whose marketplace the same file never declares: that install fails on a
+    fresh machine with an error from the Claude CLI about a catalogue nobody
+    mentioned, which is a long way from the typo that caused it.
+    """
+    if not path.is_file():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise InstallError(f"{path.name} is not readable JSON: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise InstallError(f"{path.name} must hold a JSON object")
+    schema = raw.get("schema")
+    if schema != PLUGINS_MANIFEST_SCHEMA:
+        raise InstallError(
+            f"{path.name} declares schema {schema!r}, but this installer "
+            f"understands {PLUGINS_MANIFEST_SCHEMA}"
+        )
+    marketplaces = raw.get("marketplaces") or {}
+    if not isinstance(marketplaces, dict) or not all(
+        isinstance(key, str) and isinstance(value, str) and key and value
+        for key, value in marketplaces.items()
+    ):
+        raise InstallError(
+            f"{path.name}: marketplaces must map a marketplace name to the "
+            "source `claude plugin marketplace add` takes"
+        )
+    entries = raw.get("plugins") or []
+    if not isinstance(entries, list):
+        raise InstallError(f"{path.name}: plugins must be a list of ids")
+    specs = []
+    for entry in entries:
+        if not isinstance(entry, str) or entry.count("@") != 1:
+            raise InstallError(
+                f"{path.name}: {entry!r} is not a `name@marketplace` id"
+            )
+        name, marketplace = entry.split("@")
+        if not name or not marketplace:
+            raise InstallError(
+                f"{path.name}: {entry!r} is not a `name@marketplace` id"
+            )
+        if marketplace not in marketplaces:
+            raise InstallError(
+                f"{path.name}: {entry} names marketplace {marketplace!r}, "
+                "which the same file does not declare"
+            )
+        specs.append(PluginSpec(name, marketplace))
+    duplicates = sorted({spec.identifier for spec in specs if specs.count(spec) > 1})
+    if duplicates:
+        raise InstallError(
+            f"{path.name}: declared more than once: {', '.join(duplicates)}"
+        )
+    return PluginManifest(marketplaces, tuple(specs))
+
+
+class PluginProbe(NamedTuple):
+    """What Claude Code reports about this machine, keyed for reconciliation."""
+
+    installed: Mapping[str, dict]
+    marketplaces: frozenset
+
+
+def claude_cli() -> Optional[str]:
+    """The `claude` executable, or None when Claude Code is not on PATH."""
+    return shutil.which("claude")
+
+
+def _claude_command(claude: str, arguments: Iterable[str]) -> list[str]:
+    """A runnable argv for the Claude CLI, batch-file shims included.
+
+    An npm-global install on Windows puts a `claude.cmd` shim on PATH, and
+    CreateProcess cannot launch a batch file, so the list-form call that works
+    on every other install raises WinError 193 there. Routing that one case
+    through `cmd /c` keeps a single code path for the other three platforms.
+    """
+    command = [claude, *arguments]
+    if claude.lower().endswith((".cmd", ".bat")):
+        return ["cmd", "/c", *command]
+    return command
+
+
+def _plugin_cli_json(claude: str, *arguments: str):
+    """One read-only `claude plugin ... --json` call, or None if it declined.
+
+    Swallowing rather than raising, for the reason `status_git` does: a status
+    check must not die because Claude Code is mid-upgrade, and must not hang
+    because it is waiting on something. None covers every way the CLI can
+    decline -- absent, too old for `--json`, timed out, or answering with
+    something that is not JSON. Callers turn None into `unknown`, which is
+    reported and not counted as work.
+    """
+    try:
+        result = subprocess.run(
+            _claude_command(claude, ["plugin", *arguments, "--json"]),
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=PLUGIN_CLI_TIMEOUT,
+        )
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return None
+    try:
+        return json.loads(result.stdout)
+    except ValueError:
+        return None
+
+
+def probe_plugins(claude: Optional[str] = None) -> Optional[PluginProbe]:
+    """What this machine has installed, or None if Claude Code could not say."""
+    claude = claude or claude_cli()
+    if not claude:
+        return None
+    plugins = _plugin_cli_json(claude, "list")
+    marketplaces = _plugin_cli_json(claude, "marketplace", "list")
+    if not isinstance(plugins, list) or not isinstance(marketplaces, list):
+        return None
+    installed = {
+        entry["id"]: entry
+        for entry in plugins
+        if isinstance(entry, dict) and isinstance(entry.get("id"), str)
+    }
+    names = frozenset(
+        entry["name"]
+        for entry in marketplaces
+        if isinstance(entry, dict) and isinstance(entry.get("name"), str)
+    )
+    return PluginProbe(installed, names)
+
+
+class PluginReport(NamedTuple):
+    """One reconciled row. `kind` is what to *do* about it, `state` what it is.
+
+    Both are needed and neither implies the other: a missing marketplace and a
+    missing plugin render identically but are closed by different commands, and
+    inferring the difference from whether the name contains an `@` would make
+    the remedy depend on a naming convention the Claude CLI owns.
+    """
+
+    kind: str
+    state: str
+    name: str
+    detail: str
+
+
+class PluginsReport(NamedTuple):
+    entries: tuple
+    note: Optional[str]
+
+    def actionable(self) -> list:
+        return [item for item in self.entries if item.state in PLUGIN_ACTIONABLE]
+
+
+def plugins_status(
+    manifest: PluginManifest, probe: Optional[PluginProbe]
+) -> PluginsReport:
+    """Reconcile the manifest against one machine. Pure, so it is testable.
+
+    The single answer to "does this machine match the declared plugins", shared
+    by the report and by `--plugins`, which derives its commands from these
+    rows rather than recomputing the same comparison against a second reading
+    of the CLI. Two readings could disagree, and the one that installs would be
+    the one nobody saw.
+    """
+    if probe is None:
+        return PluginsReport(
+            (),
+            "Claude Code's `claude` command could not be asked, so the "
+            "installed plugins are unknown",
+        )
+    entries = []
+    for name in sorted(manifest.marketplaces):
+        if name in probe.marketplaces:
+            entries.append(PluginReport("marketplace", CURRENT, name, "registered"))
+        else:
+            entries.append(
+                PluginReport(
+                    "marketplace",
+                    MISSING,
+                    name,
+                    "not registered -- `claude plugin marketplace add "
+                    f"{manifest.marketplaces[name]}`",
+                )
+            )
+    # Only the scope the manifest governs; see PLUGIN_SCOPE.
+    installed = {
+        identifier: entry
+        for identifier, entry in probe.installed.items()
+        if entry.get("scope", PLUGIN_SCOPE) == PLUGIN_SCOPE
+    }
+    declared = {spec.identifier: spec for spec in manifest.plugins}
+    for identifier in sorted(declared):
+        entry = installed.get(identifier)
+        if entry is None:
+            entries.append(
+                PluginReport(
+                    "plugin",
+                    MISSING,
+                    identifier,
+                    "declared, not installed -- `claude plugin install "
+                    f"{identifier} --scope {PLUGIN_SCOPE}`",
+                )
+            )
+        elif not entry.get("enabled", True):
+            entries.append(
+                PluginReport(
+                    "plugin",
+                    DISABLED,
+                    identifier,
+                    f"installed but disabled -- `claude plugin enable {identifier}`",
+                )
+            )
+        else:
+            entries.append(
+                PluginReport(
+                    "plugin",
+                    CURRENT,
+                    identifier,
+                    f"version {entry.get('version') or 'unknown'}",
+                )
+            )
+    for identifier in sorted(set(installed) - set(declared)):
+        entries.append(
+            PluginReport(
+                "plugin",
+                UNTRACKED,
+                identifier,
+                f"installed here, absent from {PLUGINS_MANIFEST.name} -- add it "
+                f"there, or `claude plugin uninstall {identifier}`",
+            )
+        )
+    return PluginsReport(tuple(entries), None)
+
+
+PLUGIN_STATUS_ENV = "SKILLS_PLUGIN_STATUS"
+
+
+def plugins_report(
+    manifest_path: Path = PLUGINS_MANIFEST,
+    claude: Optional[str] = None,
+    environ: Optional[Mapping[str, str]] = None,
+) -> Optional[PluginsReport]:
+    """The one call a status caller makes, or None when there is nothing to say.
+
+    `SKILLS_PLUGIN_STATUS=off` drops the section entirely, following the same
+    convention as `AGENT_GLOBAL_INSTRUCTIONS`: the callers that most want this
+    are hooks and CI jobs whose command line somebody else wrote, and an
+    environment variable is the handle they have. It is also what keeps this
+    project's own tests deterministic -- every other section reconciles files
+    under a temp `--home`, but this one asks the developer's real machine, so
+    a suite that left it on would pass or fail on which plugins happened to be
+    installed where it ran.
+    """
+    environ = os.environ if environ is None else environ
+    if environ.get(PLUGIN_STATUS_ENV, "on").strip().lower() in ("off", "0", "no"):
+        return None
+    manifest = read_plugin_manifest(manifest_path)
+    if manifest is None:
+        return None
+    return plugins_status(manifest, probe_plugins(claude))
+
+
+def plugin_actions(manifest: PluginManifest, report: PluginsReport) -> list:
+    """The `claude` argv lists that close the gap, in the order they must run.
+
+    Marketplaces first: installing a plugin from a catalogue this machine has
+    not registered is the failure the ordering exists to prevent. Nothing here
+    removes anything -- an undeclared plugin is reported and left alone,
+    because the manifest is a floor for what every machine has, not a warrant
+    to delete what someone installed on one of them on purpose.
+    """
+    states = {(item.kind, item.name): item.state for item in report.entries}
+    actions = []
+    for name, source in sorted(manifest.marketplaces.items()):
+        if states.get(("marketplace", name)) == MISSING:
+            actions.append(["plugin", "marketplace", "add", source])
+    for spec in sorted(manifest.plugins):
+        state = states.get(("plugin", spec.identifier))
+        if state == MISSING:
+            actions.append(
+                ["plugin", "install", spec.identifier, "--scope", PLUGIN_SCOPE, "--yes"]
+            )
+        elif state == DISABLED:
+            actions.append(["plugin", "enable", spec.identifier])
+    return actions
+
+
+def install_plugins(
+    dry_run: bool = False,
+    manifest_path: Path = PLUGINS_MANIFEST,
+    claude: Optional[str] = None,
+    emit: Callable[[str], None] = print,
+) -> int:
+    """Bring this machine up to the manifest, and say what it left alone."""
+    manifest = read_plugin_manifest(manifest_path)
+    if manifest is None:
+        raise InstallError(
+            f"this checkout ships no {manifest_path.name}, so there are no "
+            "plugins to install; pull a release that has one"
+        )
+    claude = claude or claude_cli()
+    if not claude:
+        raise InstallError(
+            "--plugins drives Claude Code's own CLI, which is not on PATH; "
+            "install Claude Code, or run this on a machine that has it"
+        )
+    report = plugins_status(manifest, probe_plugins(claude))
+    if report.note:
+        raise InstallError(f"could not read this machine's plugins: {report.note}")
+    for item in report.actionable():
+        if item.state == UNTRACKED:
+            emit(f"  {UNTRACKED:<9} {item.name}  {item.detail}")
+    actions = plugin_actions(manifest, report)
+    if not actions:
+        emit("every plugin the manifest declares is registered and enabled")
+        return 0
+    for action in actions:
+        rendered = shlex.join(["claude", *action])
+        emit(f"{'would run' if dry_run else 'running'}: {rendered}")
+        if not dry_run:
+            _run(_claude_command(claude, action), REPO_ROOT)
+    if not dry_run:
+        emit(
+            f"{len(actions)} change(s) applied; restart Claude Code or run "
+            "/reload-plugins to load them"
+        )
+    return 0
+
+
 STATUS_ACTION_EXIT = 3
 
 
@@ -2785,6 +3165,7 @@ def status_lines(
     roots: Iterable[Path],
     check_origin: bool = False,
     machine: Optional[MachineReport] = None,
+    plugins: Optional[PluginsReport] = None,
 ) -> tuple[list[str], bool]:
     """Rendered status, and whether anything needs a human.
 
@@ -2797,6 +3178,12 @@ def status_lines(
     then the two sections only that view can produce. A second renderer would
     have to be kept in step with this one by hand, and the first line to fall
     out of step would be the one a reader compares across the two.
+
+    `plugins` is passed in rather than computed here for the same reason
+    `machine` is, plus one this section alone has: reading it shells out to
+    another program, and a renderer that did that on its own would make every
+    existing caller -- and every test of them -- depend on what Claude Code
+    happens to have installed on the machine running it.
     """
     lines = [f"collection {VERSION} at {REPO_ROOT}"]
     reports = machine.reports if machine is not None else collection_status(roots)
@@ -2887,6 +3274,33 @@ def status_lines(
         lines.append("vendored copies")
         for problem in vendored:
             lines.append(f"  drifted   {problem}")
+
+    if plugins is not None:
+        lines.append("")
+        lines.append("plugins")
+        if plugins.note:
+            # Not counted, for the reason `unknown` origin is not: a question
+            # this machine could not ask is not a finding, and a box without
+            # Claude Code on PATH would otherwise never report clean.
+            lines.append(f"  {ORIGIN_UNKNOWN:<9} {plugins.note}")
+        else:
+            actionable = plugins.actionable()
+            pending += len(actionable)
+            # The healthy rows collapse to a count, the lesson the shadowed
+            # section already learned: two dozen `current` lines is what a
+            # matching machine *produces*, and printing each one buries the
+            # handful of rows that need a decision.
+            agreeing = len(plugins.entries) - len(actionable)
+            if agreeing:
+                lines.append(
+                    f"  {CURRENT:<9} {agreeing} declared item(s) registered, "
+                    "installed, and enabled"
+                )
+            width = max((len(item.name) for item in actionable), default=1)
+            for item in actionable:
+                lines.append(
+                    f"  {item.state:<9} {item.name:<{width}}  {item.detail}"
+                )
 
     if check_origin:
         origin = checkout_behind_origin()
@@ -3461,6 +3875,17 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="with --status, also fetch and report whether this checkout is behind",
     )
+    result.add_argument(
+        "--plugins",
+        action="store_true",
+        help=(
+            "install every Claude Code plugin plugins.json declares that this "
+            "machine is missing, register any marketplace they need, and "
+            "re-enable any that is installed but switched off, then exit. "
+            "Reports plugins installed here but not declared; never removes "
+            "one. --status already reports the same reconciliation"
+        ),
+    )
     result.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
     return result
 
@@ -3774,9 +4199,29 @@ def main(argv: Optional[list[str]] = None) -> int:
                 [] if machine is not None else stage_roots(args, args.scope),
                 args.check_origin,
                 machine,
+                # Unconditional, unlike --check-origin: that one reaches the
+                # network, this one asks a local CLI and answers `unknown`
+                # when it cannot. Plugins are the half of the drift this
+                # collection could not previously see, so a report that hid
+                # them behind a flag would keep answering "nothing to update"
+                # about a machine missing half its tooling.
+                plugins_report(),
             )
             print("\n".join(lines))
             return STATUS_ACTION_EXIT if pending else 0
+        if args.plugins:
+            # Named rather than quietly dropped. This is the flag a fresh
+            # machine runs, so `--plugins --skill tdd` is a plausible thing to
+            # type expecting both halves, and doing one of them without
+            # saying so is the silent short-change the other guards here
+            # exist to prevent. Two commands, in either order.
+            if args.skill:
+                raise InstallError(
+                    "--plugins installs Claude Code plugins and --skill "
+                    "installs skills from this collection; run them as two "
+                    "commands"
+                )
+            return install_plugins(dry_run=args.dry_run)
         if args.cloud_offer:
             # Ahead of the dashboard check and the bare-invocation guard: this
             # runs from a hook with no terminal, and silence is a valid answer.

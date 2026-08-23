@@ -328,7 +328,10 @@ def command_status(args: argparse.Namespace) -> int:
                     "one place; pass one or the other"
                 )
         lines, pending = install.status_lines(
-            [], args.check_origin, install.machine_status(Path.home())
+            [],
+            args.check_origin,
+            install.machine_status(Path.home()),
+            install.plugins_report(),
         )
     else:
         scope = "user" if args.user else "project"
@@ -336,9 +339,27 @@ def command_status(args: argparse.Namespace) -> int:
         roots = install.resolve_roots(
             args.agent, scope, Path.home(), project_dir, None
         )
-        lines, pending = install.status_lines(roots, args.check_origin)
+        # Plugins are reported in both views, not only under `--all`. They are
+        # installed per machine and never per root, so narrowing the question
+        # to one skills directory does not narrow them -- and this is the
+        # invocation a SessionStart hook makes, so it is the one that has to
+        # see the drift.
+        lines, pending = install.status_lines(
+            roots, args.check_origin, None, install.plugins_report()
+        )
     print("\n".join(lines))
     return install.STATUS_ACTION_EXIT if pending else 0
+
+
+def command_plugins(args: argparse.Namespace) -> int:
+    """Bring this machine's Claude Code plugins up to `plugins.json`.
+
+    Delegates rather than reimplements, the same way every other subcommand
+    here does: `install.install_plugins` is where the ordering and the
+    never-remove rule live, and a second copy of them reachable from the
+    command the docs point people at is how the two would disagree.
+    """
+    return install.install_plugins(dry_run=args.dry_run)
 
 
 def command_where(args: argparse.Namespace) -> int:
@@ -610,6 +631,17 @@ def parser() -> argparse.ArgumentParser:
         help="also fetch and report whether this checkout is behind origin",
     )
     status.set_defaults(handler=command_status)
+
+    plugins = subcommands.add_parser(
+        "plugins",
+        help="install the Claude Code plugins this collection declares",
+    )
+    plugins.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="print the `claude` commands that would run, and run none of them",
+    )
+    plugins.set_defaults(handler=command_plugins)
 
     setup = subcommands.add_parser(
         "setup-path", help="write launcher shims so `skills` works from any directory"

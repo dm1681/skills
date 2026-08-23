@@ -249,7 +249,15 @@ class CliInvocation(unittest.TestCase):
             text=True,
             capture_output=True,
             check=False,
-            env={**os.environ, "HOME": self._home.name, "USERPROFILE": self._home.name},
+            env={
+                **os.environ,
+                "HOME": self._home.name,
+                "USERPROFILE": self._home.name,
+                # Same reason as the redirected home: `skills status` reports
+                # plugins from the real machine, which no temp directory can
+                # stand in for. See test_status.run_status.
+                install.PLUGIN_STATUS_ENV: "off",
+            },
         )
         self.assertEqual(
             result.returncode,
