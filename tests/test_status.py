@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -195,6 +196,12 @@ class StatusCommandTests(unittest.TestCase):
             text=True,
             capture_output=True,
             check=False,
+            # Every other section of this report reconciles files under the
+            # temp `--home` these tests hand it. The plugin section asks the
+            # developer's real machine, so leaving it on would make "a clean
+            # home exits zero" depend on which plugins happen to be installed
+            # wherever the suite runs. test_plugins.py covers that section.
+            env={**os.environ, install.PLUGIN_STATUS_ENV: "off"},
         )
 
     def test_a_clean_home_exits_zero(self) -> None:

@@ -7,6 +7,21 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Added
 
+- `plugins.json` declares the Claude Code plugins and marketplaces every
+  machine should have, and `skills plugins` (or `install.py --plugins`)
+  installs the ones a machine is missing, registers any marketplace they need,
+  and re-enables any that is installed but switched off. `skills status`
+  reports the same reconciliation, so one command now answers "is this machine
+  current" for skills *and* plugins — previously it answered for half of them
+  and said nothing about the other half. Marketplaces are registered before
+  anything installs from them, and an undeclared plugin is reported and never
+  removed: the manifest is a floor for what every machine has, not a warrant
+  to delete what someone installed on one of them on purpose. Only user scope
+  is governed, because a project- or local-scope plugin belongs to the
+  repository that asked for it. Nothing pins a version — marketplaces
+  auto-update their plugins in the background, so a pin would describe a state
+  no machine actually holds. Set `SKILLS_PLUGIN_STATUS=off` to drop the
+  section on a machine whose hook should not ask.
 - Skills carry a `version:` in their frontmatter, and the dashboard shows it.
   A row states the checkout's version, or `installed → checkout` when the two
   differ, and marks the case the field exists to expose: contents that changed

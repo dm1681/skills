@@ -80,6 +80,21 @@ wrappers) installs them locally, `skills_tui.py` is the interactive dashboard,
   through `ownership()` / `claimed_names()`, and remove through
   `forget_records()`, which clears all three or none. Do not add a seventh
   inline answer.
+- **`plugins.json` is reconciled against another program, not against files.**
+  Every other section of `--status` compares this checkout to a directory, so
+  a test can stage both under `--home`. The plugin section shells out to
+  `claude plugin list --json`, which answers about the developer's real
+  machine — so any test that reaches `--status` must set
+  `SKILLS_PLUGIN_STATUS=off` (the shared `run_installer`/`run_cli`/`run_status`
+  helpers do) or it passes or fails on which plugins happen to be installed
+  wherever it ran. The reconciliation itself is pure (`plugins_status`) and is
+  tested against fabricated probes; only the thin shell-out layer is not.
+  `--plugins` derives its commands from those same rows rather than reading
+  the CLI a second time, because two readings could disagree and the one that
+  installs would be the one nobody saw. It never removes a plugin: an
+  undeclared one is reported, since the manifest is a floor for what every
+  machine has and not a warrant to delete what someone installed on one of
+  them deliberately. See [`docs/plugin-sync.md`](docs/plugin-sync.md).
 - The TUI's colour contract (documented at the top of `skills_tui.py`) is
   load-bearing: one hue means one thing, and red is reserved for failure, so a
   healthy run contains none.

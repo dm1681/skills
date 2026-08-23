@@ -471,10 +471,38 @@ a CRLF checkout would otherwise read as drift on Windows and nowhere else.
 which is worth knowing before believing anything above it: every skill can
 match a source that is itself three commits stale.
 
+A `plugins` section reports the same reconciliation for Claude Code plugins,
+in both the scoped and the `--all` view — they are installed per machine and
+never per skills root, so narrowing to one directory does not narrow them.
+`SKILLS_PLUGIN_STATUS=off` drops it. See
+[Claude Code plugins](#claude-code-plugins) below.
+
 The command needs no `textual` and no terminal, so a `SessionStart` hook or a
 CI job can gate on it. It exits `0` when there is nothing to do and `3` when
 there is — deliberately not `1` or `2`, which already mean the run itself
 failed, so a caller can tell "there is drift" from "the check broke".
+
+## Claude Code plugins
+
+Skills are files in this checkout. Claude Code **plugins** are installed by
+Claude Code's own CLI, so they drift independently — and copying
+`~/.claude/settings.json` between machines does not fix that: `enabledPlugins`
+does not install anything from an external source, and half the file names a
+path or a platform.
+
+`plugins.json` declares the marketplaces and plugins every machine should
+have, and one command closes the gap:
+
+```sh
+skills plugins             # install what is missing, register any marketplace
+skills plugins --dry-run   # print the `claude` commands, run none of them
+./install.sh --plugins     # same, with no `skills` command yet
+```
+
+`skills status` reports the same reconciliation alongside the skills, so one
+command answers "is this machine current" for both halves. An undeclared
+plugin is reported as `untracked` and never removed. See
+[`docs/plugin-sync.md`](docs/plugin-sync.md).
 
 ## Sync on another machine
 
@@ -485,6 +513,7 @@ git clone https://github.com/dm1681/skills
 cd skills
 uv sync
 ./install.sh --agent all
+skills plugins
 ```
 
 To pin a machine to a release, check out its tag first:
