@@ -18,7 +18,9 @@ wrappers) installs them locally, `skills_tui.py` is the interactive dashboard,
   run; warnings are the skill conventions (entrypoint length, "Use when"
   trigger phrasing) — fix those too.
 - Run tests: `uv run python -m unittest discover -s tests`.
-- Run both before committing. See `RELEASING.md` for versioning and releases.
+- For the Cloudflare artifact client, also run
+  `node --test tests/cloudflare_artifacts.test.mjs` with Node.js 22 or newer.
+- Run the required checks before committing. See `RELEASING.md` for versioning and releases.
 
 ## Gotchas the file tree does not show
 

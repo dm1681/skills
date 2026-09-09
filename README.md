@@ -8,10 +8,27 @@ self-contained under [`skills/`](skills/).
 
 | Skill | Purpose |
 | --- | --- |
+| `cloudflare-artifacts` | Upload completed artifacts to the Cloudflare library and return verified public URLs and GitHub-ready Markdown links. |
 | `olympus-report-progress` | Report a repository checkout and append a session update to a running Olympus server, from any repository. |
 | `semantic-pr-review` | Explain a pull request as a source-verified semantic hierarchy and interactive flowchart. |
 | `viz-driven-dev` | Build the plot, overlay, or video that would show a feature's effect before implementing it, then regenerate it from real output. |
 | `wow-addon-dev` | Build, debug, package, and publish retail World of Warcraft addons under the taint and secret-value fences. |
+
+## Cloudflare artifact publishing
+
+`cloudflare-artifacts` publishes a completed file or static browser build to the
+existing Cloudflare artifact library. Each upload receives its own lasting
+public URL, works without a VPN or browser session, and leaves earlier
+artifacts intact. The bundled Node.js client verifies the public entry point
+before returning its URL and Markdown link.
+
+The skill is portable across agent hosts and needs Node.js 22 or newer, with no
+npm dependencies. Configure an upload-only key through
+`ARTIFACT_PUBLISH_TOKEN_FILE` or a secret-store-injected
+`ARTIFACT_PUBLISH_TOKEN`; credentials are never included in this repository.
+Read the skill's [credential guide](skills/cloudflare-artifacts/references/credentials.md)
+when preparing another host. Posting a link to GitHub uses the agent's existing
+GitHub access and the user's authorization for that issue.
 
 ## Semantic PR review
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cloudflare Artifacts"
+  short_description: "Publish artifacts with lasting public links"
+  default_prompt: "Use $cloudflare-artifacts to publish this completed artifact and return its verified public URL and Markdown link."
