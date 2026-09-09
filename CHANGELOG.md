@@ -7,6 +7,10 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Added
 
+- `cloudflare-artifacts` bundles a portable, dependency-free Node.js uploader
+  for the existing public artifact library, with checksum verification,
+  immutable links, retry support, and instructions for agent credentials and
+  authorized GitHub issue links. Publishing keys remain outside the skill.
 - `plugins.json` declares the Claude Code plugins and marketplaces every
   machine should have, and `skills plugins` (or `install.py --plugins`)
   installs the ones a machine is missing, registers any marketplace they need,
