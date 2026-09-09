@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ponytail"
+  short_description: "Choose the simplest working implementation"
+  default_prompt: "Use $ponytail to find the simplest implementation that meets this task's requirements."
