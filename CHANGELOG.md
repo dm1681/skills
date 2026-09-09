@@ -7,6 +7,9 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Added
 
+- `ponytail` vendors the core simplicity skill from `DietrichGebert/ponytail`
+  at commit `356918eba965ee1eac64bd3a7f0dd02108350de5`, with its MIT license,
+  agent display metadata, and an upstream SHA256 pin for offline drift checks.
 - `cloudflare-artifacts` bundles a portable, dependency-free Node.js uploader
   for the existing public artifact library, with checksum verification,
   immutable links, retry support, and instructions for agent credentials and

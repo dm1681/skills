@@ -14,3 +14,7 @@ dist/
 .claude/skills/
 .claude/.skills-backups/
 *.graphify-bak
+
+# Graphify regenerates its graph, caches, and local skill registration.
+/graphify-out/
+/.claude/CLAUDE.md

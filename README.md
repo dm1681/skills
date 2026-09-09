@@ -10,6 +10,7 @@ self-contained under [`skills/`](skills/).
 | --- | --- |
 | `cloudflare-artifacts` | Upload completed artifacts to the Cloudflare library and return verified public URLs and GitHub-ready Markdown links. |
 | `olympus-report-progress` | Report a repository checkout and append a session update to a running Olympus server, from any repository. |
+| `ponytail` | Minimize unnecessary code by reusing existing code, the standard library, and native platform features. |
 | `semantic-pr-review` | Explain a pull request as a source-verified semantic hierarchy and interactive flowchart. |
 | `viz-driven-dev` | Build the plot, overlay, or video that would show a feature's effect before implementing it, then regenerate it from real output. |
 | `wow-addon-dev` | Build, debug, package, and publish retail World of Warcraft addons under the taint and secret-value fences. |
@@ -112,6 +113,31 @@ registered as `olympus` and falls back to plain HTTP against
 `$OLYMPUS_BASE_URL/api/agent/v1/...`, so it is fully usable with no MCP server
 configured; this installer does not register one. Registering the adapter is a
 manual, optional step in your own agent configuration.
+
+## Ponytail
+
+`ponytail` applies a simplicity ladder to coding tasks: question speculative
+requirements, reuse existing code, reach for the standard library and native
+platform features, then write the minimum implementation that works. It offers
+`lite`, `full` (default), and `ultra` levels while preserving validation,
+security, accessibility, and explicitly requested behavior.
+
+The core instruction skill is vendored from
+[DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail/tree/356918eba965ee1eac64bd3a7f0dd02108350de5/skills/ponytail)
+at commit `356918eba965ee1eac64bd3a7f0dd02108350de5`, with its MIT license
+included. Its upstream contents are pinned in `install.VENDORED_SKILLS` for
+offline drift detection; the provenance note in `SKILL.md` explains re-syncs.
+
+Install it through the existing installer:
+
+```sh
+./install.sh --skill ponytail
+```
+
+Then ask the agent to use `ponytail` for a coding task. This portable skill
+requires no runtime dependencies. Automatic activation hooks and companion
+commands such as `ponytail-review` are part of the upstream plugin, which is
+installed separately.
 
 ## Install
 
