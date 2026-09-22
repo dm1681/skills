@@ -167,9 +167,31 @@ Then commit the listed paths to the target's **default branch**.
 ## Shared agent guidance: AGENTS.md + CLAUDE.md
 
 Keep one source of truth. `AGENTS.md` holds the guidance (Codex, Cursor, and
-Copilot read it natively); `CLAUDE.md` is a one-line `@AGENTS.md` import so
-Claude Code pulls in the exact same content. Edit `AGENTS.md` only — never
+Copilot read it natively); `CLAUDE.md` imports `@AGENTS.md` so Claude Code
+pulls in the exact same content. Edit `AGENTS.md` only — never
 duplicate the text into `CLAUDE.md`. `init-repo.sh` scaffolds both this way.
+
+The import remains our compatibility default. Claude Code v2.1.277 introduced
+native `AGENTS.md` loading, but availability depends on the session's provider
+and feature flags, including settings that disable telemetry. Its default
+fallback also stops when a `CLAUDE.md`, `.claude/CLAUDE.md`, or
+`CLAUDE.local.md` exists in the working directory or an ancestor. Keeping the
+import covers sessions without native support and does not duplicate content
+when both-file loading is enabled. See
+[Anthropic's loading rules](https://code.claude.com/docs/en/memory#agentsmd).
+
+**Nested guidance:** with a root `CLAUDE.md` import and default fallback,
+nested `AGENTS.md` files do not load automatically. Add a `CLAUDE.md` importing
+`@AGENTS.md` beside each nested file that Claude must discover. In environments
+with native support, users can instead choose `claude-md-and-agents-md` under
+`/config` → **Project instructions**. Project/local settings cannot select
+that mode, so a checked-in setting alone cannot make it a team guarantee.
+
+Keep the global `~/.claude/CLAUDE.md` import chain and both skill installation
+roots. Native project instructions do not replace either mechanism. The
+[support research](anthropic-agents-md-support.md) records the configuration
+and remaining limitations. We retain the two-file scaffold without adding a
+native-only option.
 
 ## Reuse in another repo (manual)
 
