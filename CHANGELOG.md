@@ -64,6 +64,11 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Changed
 
+- Document Claude Code's conditional native `AGENTS.md` support while keeping
+  the `CLAUDE.md` import as the compatibility default. Clarify nested guidance,
+  global instruction imports, and the unchanged skill-directory mappings;
+  update scaffold comments and retain the two-file scaffold.
+
 - The dashboard's colour contract is now one valence ramp: grey means nothing
   happens, green an install, peach a replacement or a removal, red a failure.
   Green previously meant "already up to date" and blue meant "install", so the

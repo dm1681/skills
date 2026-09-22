@@ -128,6 +128,9 @@ else
 fi
 
 # --- 3. AGENTS.md / CLAUDE.md ----------------------------------------------
+# Retain the import for Claude versions/providers without native AGENTS.md
+# support. A root CLAUDE.md disables native fallback for nested AGENTS.md;
+# nested shared guidance needs its own import or explicitly enabled both mode.
 if [ "$AGENTS_MD" -eq 1 ]; then
   AGENTS="$TARGET/AGENTS.md"
   if [ ! -f "$AGENTS" ]; then
@@ -135,8 +138,10 @@ if [ "$AGENTS_MD" -eq 1 ]; then
 # Agent guide
 
 <!-- Shared guidance for all coding agents (Claude Code, Codex, Cursor,
-Copilot, ...). Claude Code reads it through the CLAUDE.md import. Replace the
-project section below with real context. -->
+Copilot, ...). The CLAUDE.md import preserves compatibility across Claude
+versions, providers, and feature settings. Replace the project section below
+with real context. For nested AGENTS.md files, add corresponding CLAUDE.md
+imports or explicitly enable native both-file loading. -->
 
 ## Project
 
@@ -170,7 +175,8 @@ MD
 
 Agent guidance for this repository is maintained in AGENTS.md so every coding
 agent shares one source of truth. The import below pulls it into Claude Code's
-context — edit AGENTS.md, not this file.
+context across Claude versions, providers, and feature settings. Keep this
+compatibility import; edit AGENTS.md, not this file.
 
 @AGENTS.md
 MD
