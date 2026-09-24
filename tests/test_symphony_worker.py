@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -154,7 +155,9 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual("/native/codex", config["codex"])
         self.assertEqual(30000, workflow["polling"]["interval_ms"])
         self.assertEqual(30000, workflow["codex"]["read_timeout_ms"])
-        self.assertIn("symphony_project.py worker", workflow["codex"]["command"])
+        command = shlex.split(workflow["codex"]["command"])
+        self.assertEqual("symphony_project.py", Path(command[1]).name)
+        self.assertEqual("worker", command[2])
 
     @unittest.skipUnless(os.environ.get("SYMPHONY_TEST_CODEX"), "Set SYMPHONY_TEST_CODEX to run native sandbox proof")
     def test_native_git_commit_and_parent_sibling_denials(self):
