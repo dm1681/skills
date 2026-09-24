@@ -378,7 +378,7 @@ def prepare_workspace(project: Path) -> None:
     branch = f"codex/{cwd.name}"
     for ref in (branch, config["base_branch"]):
         subprocess.run(["git", "check-ref-format", "--branch", ref], cwd=cwd, check=True, capture_output=True)
-    subprocess.run(["git", "clone", "--no-checkout", "--", config["repo_url"], "."], cwd=cwd, check=True)
+    subprocess.run(["git", "clone", "--no-hardlinks", "--no-checkout", "--", config["repo_url"], "."], cwd=cwd, check=True)
     # Recover a published issue branch after workspace cleanup, otherwise branch
     # from the configured base (which need not be the remote's default branch).
     remote_branch = f"refs/remotes/origin/{branch}"
