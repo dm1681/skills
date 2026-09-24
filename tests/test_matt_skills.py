@@ -245,9 +245,15 @@ class MattSkillsTests(unittest.TestCase):
                 mock.patch.object(
                     INSTALLER, "checkout_content_mismatches", return_value=[]
                 ),
+                # These fixtures are two-skill checkouts standing in for a
+                # 35-skill upstream, so they do not ship the skills this
+                # collection forks. Shadowing is neutralised for the same
+                # reason the three checks above are: the subject here is what
+                # gets copied where, not whether the fetch is the real thing.
+                mock.patch.object(INSTALLER, "SHADOWED_SKILLS", ()),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run) as run,
             ):
-                INSTALLER.install_matt_skills(
+                INSTALLER.install_upstream(INSTALLER.MATT_SKILLS,
                     ["universal"],
                     [destination],
                     force=False,
@@ -281,9 +287,15 @@ class MattSkillsTests(unittest.TestCase):
                 mock.patch.object(
                     INSTALLER, "checkout_content_mismatches", return_value=[]
                 ),
+                # These fixtures are two-skill checkouts standing in for a
+                # 35-skill upstream, so they do not ship the skills this
+                # collection forks. Shadowing is neutralised for the same
+                # reason the three checks above are: the subject here is what
+                # gets copied where, not whether the fetch is the real thing.
+                mock.patch.object(INSTALLER, "SHADOWED_SKILLS", ()),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
-                INSTALLER.install_matt_skills(
+                INSTALLER.install_upstream(INSTALLER.MATT_SKILLS,
                     ["all"], roots, force=False, dry_run=False, emit=lambda _: None
                 )
             for root in roots:
@@ -313,12 +325,18 @@ class MattSkillsTests(unittest.TestCase):
                 mock.patch.object(
                     INSTALLER, "checkout_content_mismatches", return_value=[]
                 ),
+                # These fixtures are two-skill checkouts standing in for a
+                # 35-skill upstream, so they do not ship the skills this
+                # collection forks. Shadowing is neutralised for the same
+                # reason the three checks above are: the subject here is what
+                # gets copied where, not whether the fetch is the real thing.
+                mock.patch.object(INSTALLER, "SHADOWED_SKILLS", ()),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
                 with self.assertRaisesRegex(
                     INSTALLER.InstallError, "setup-matt-pocock-skills"
                 ):
-                    INSTALLER.install_matt_skills(
+                    INSTALLER.install_upstream(INSTALLER.MATT_SKILLS,
                         ["universal"],
                         [destination],
                         force=False,
@@ -333,14 +351,14 @@ class MattSkillsTests(unittest.TestCase):
             side_effect=AssertionError("an unknown agent must not reach the network"),
         ):
             with self.assertRaisesRegex(INSTALLER.InstallError, "unknown agent"):
-                INSTALLER.install_matt_skills(
+                INSTALLER.install_upstream(INSTALLER.MATT_SKILLS,
                     ["nope"], [ROOT], force=False, dry_run=False
                 )
 
     def test_missing_git_is_actionable(self) -> None:
         with mock.patch.object(INSTALLER.shutil, "which", return_value=None):
             with self.assertRaisesRegex(INSTALLER.InstallError, "requires git"):
-                INSTALLER.install_matt_skills([], [ROOT], force=False, dry_run=False)
+                INSTALLER.install_upstream(INSTALLER.MATT_SKILLS,[], [ROOT], force=False, dry_run=False)
 
     def test_dry_run_prints_exact_commands_without_requiring_git(self) -> None:
         output = io.StringIO()
@@ -352,7 +370,7 @@ class MattSkillsTests(unittest.TestCase):
             ),
             contextlib.redirect_stdout(output),
         ):
-            INSTALLER.install_matt_skills(
+            INSTALLER.install_upstream(INSTALLER.MATT_SKILLS,
                 ["all"], [ROOT / ".agents" / "skills", ROOT / ".claude" / "skills"],
                 force=False, dry_run=True, ref="v1.0.0",
             )
@@ -375,14 +393,14 @@ class MattSkillsTests(unittest.TestCase):
         )
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
-            INSTALLER.install_matt_skills(
+            INSTALLER.install_upstream(INSTALLER.MATT_SKILLS,
                 ["claude"], [ROOT], force=False, dry_run=True, ref=None
             )
         self.assertIn(INSTALLER.MATT_SKILLS_REF, output.getvalue())
 
     def test_an_empty_ref_is_refused_rather_than_defaulted(self) -> None:
         with self.assertRaisesRegex(INSTALLER.InstallError, "empty value"):
-            INSTALLER.install_matt_skills(
+            INSTALLER.install_upstream(INSTALLER.MATT_SKILLS,
                 ["claude"], [ROOT], force=False, dry_run=True, ref="  "
             )
 
@@ -403,10 +421,16 @@ class MattSkillsTests(unittest.TestCase):
                 mock.patch.object(
                     INSTALLER, "checkout_content_mismatches", return_value=[]
                 ),
+                # These fixtures are two-skill checkouts standing in for a
+                # 35-skill upstream, so they do not ship the skills this
+                # collection forks. Shadowing is neutralised for the same
+                # reason the three checks above are: the subject here is what
+                # gets copied where, not whether the fetch is the real thing.
+                mock.patch.object(INSTALLER, "SHADOWED_SKILLS", ()),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
                 with self.assertRaisesRegex(INSTALLER.InstallError, "tag moved"):
-                    INSTALLER.install_matt_skills(
+                    INSTALLER.install_upstream(INSTALLER.MATT_SKILLS,
                         ["claude"],
                         [destination],
                         force=False,
@@ -433,9 +457,15 @@ class MattSkillsTests(unittest.TestCase):
                 mock.patch.object(
                     INSTALLER, "checkout_content_mismatches", return_value=[]
                 ),
+                # These fixtures are two-skill checkouts standing in for a
+                # 35-skill upstream, so they do not ship the skills this
+                # collection forks. Shadowing is neutralised for the same
+                # reason the three checks above are: the subject here is what
+                # gets copied where, not whether the fetch is the real thing.
+                mock.patch.object(INSTALLER, "SHADOWED_SKILLS", ()),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
-                INSTALLER.install_matt_skills(
+                INSTALLER.install_upstream(INSTALLER.MATT_SKILLS,
                     ["claude"],
                     [destination],
                     force=False,
@@ -471,7 +501,7 @@ class MattSkillsTests(unittest.TestCase):
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
                 with self.assertRaisesRegex(INSTALLER.InstallError, "git hook or filter"):
-                    INSTALLER.install_matt_skills(
+                    INSTALLER.install_upstream(INSTALLER.MATT_SKILLS,
                         ["claude"],
                         [destination],
                         force=False,
@@ -501,7 +531,7 @@ class MattSkillsTests(unittest.TestCase):
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
                 with self.assertRaisesRegex(INSTALLER.InstallError, "could not confirm"):
-                    INSTALLER.install_matt_skills(
+                    INSTALLER.install_upstream(INSTALLER.MATT_SKILLS,
                         ["claude"],
                         [destination],
                         force=False,
@@ -540,7 +570,7 @@ class MattSkillsTests(unittest.TestCase):
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
                 with self.assertRaisesRegex(INSTALLER.InstallError, "does not hold the bytes"):
-                    INSTALLER.install_matt_skills(
+                    INSTALLER.install_upstream(INSTALLER.MATT_SKILLS,
                         ["claude"],
                         [destination],
                         force=False,
@@ -573,7 +603,7 @@ class MattSkillsTests(unittest.TestCase):
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
                 with self.assertRaisesRegex(INSTALLER.InstallError, "could not confirm"):
-                    INSTALLER.install_matt_skills(
+                    INSTALLER.install_upstream(INSTALLER.MATT_SKILLS,
                         ["claude"],
                         [destination],
                         force=False,
@@ -615,9 +645,15 @@ class MattSkillsTests(unittest.TestCase):
                 mock.patch.object(
                     INSTALLER, "checkout_content_mismatches", return_value=[]
                 ),
+                # These fixtures are two-skill checkouts standing in for a
+                # 35-skill upstream, so they do not ship the skills this
+                # collection forks. Shadowing is neutralised for the same
+                # reason the three checks above are: the subject here is what
+                # gets copied where, not whether the fetch is the real thing.
+                mock.patch.object(INSTALLER, "SHADOWED_SKILLS", ()),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
-                INSTALLER.install_matt_skills(
+                INSTALLER.install_upstream(INSTALLER.MATT_SKILLS,
                     ["claude"],
                     [destination],
                     force=False,
@@ -643,12 +679,18 @@ class MattSkillsTests(unittest.TestCase):
                 mock.patch.object(
                     INSTALLER, "checkout_content_mismatches", return_value=[]
                 ),
+                # These fixtures are two-skill checkouts standing in for a
+                # 35-skill upstream, so they do not ship the skills this
+                # collection forks. Shadowing is neutralised for the same
+                # reason the three checks above are: the subject here is what
+                # gets copied where, not whether the fetch is the real thing.
+                mock.patch.object(INSTALLER, "SHADOWED_SKILLS", ()),
                 mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
             ):
                 with self.assertRaisesRegex(
                     INSTALLER.InstallError, "pin cannot be verified"
                 ):
-                    INSTALLER.install_matt_skills(
+                    INSTALLER.install_upstream(INSTALLER.MATT_SKILLS,
                         ["claude"],
                         [destination],
                         force=False,
@@ -747,9 +789,13 @@ class ModelInvocationTests(unittest.TestCase):
             mock.patch.object(
                 INSTALLER, "checkout_content_mismatches", return_value=[]
             ),
+            # A two-skill stand-in for a 35-skill upstream, so it ships none of
+            # the skills this collection forks; see the note on the other
+            # fixtures above.
+            mock.patch.object(INSTALLER, "SHADOWED_SKILLS", ()),
             mock.patch.object(INSTALLER, "_run", side_effect=fake_run),
         ):
-            INSTALLER.install_matt_skills(
+            INSTALLER.install_upstream(INSTALLER.MATT_SKILLS,
                 ["claude"], [self.root], force=True, dry_run=False,
                 emit=lambda _line: None,
             )

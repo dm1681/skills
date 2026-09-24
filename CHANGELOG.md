@@ -5,7 +5,34 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+### Symphony integration and curated skills (pending major release)
+
+- Add project-only Linux/WSL Symphony setup, runtime installation, readiness and
+  explicit start, plus a dashboard setup form. Start verifies the exact project's
+  Done setup issue, required lifecycle states and local worker discovery/sandbox.
+- Revalidate editable runtime configuration, create isolated issue branches from
+  the configured base, and keep PR/review instructions independent of an optional
+  repository template or review bot. Curated migration preflights legacy ownership
+  and copy/link mode across all roots before writes.
+- Use the current host-native Codex sandbox probe command and document the
+  verified Linux 0.156.1 repair for the WSLg socket-alias rejection.
+- Replace the broad Matt offering with ten repository-owned forks plus the
+  existing interactive implement fork, with attribution, source hashes and
+  shadow protection. `--matt-skills` is a curated alias; `--matt-ref` is retired.
+  Preserve unrelated installed skills and their receipts during migration.
+- Require status updates at pickup/checkpoints/completion and verify transitions
+  by rereading the issue, including supervised setup moving out of Backlog.
+- Adopt Symphony workpads and lifecycle for explicitly identified workers; keep
+  interactive interviews/manual review separate and remove mandatory global
+  visualization-first guidance. Templates are reconciled at integration closeout.
+
+
 ### Added
+
+- Shared Linear work tracking and handoff guidance in `global/AGENTS.md`, with
+  a per-repository mapping example, offline handoffs, and documented global
+  instruction-loading gaps across supported agents. Existing link/copy and
+  cloud sync paths carry the guidance; connector authentication stays separate.
 
 - `ponytail` vendors the core simplicity skill from `DietrichGebert/ponytail`
   at commit `356918eba965ee1eac64bd3a7f0dd02108350de5`, with its MIT license,
@@ -29,6 +56,46 @@ All notable changes to this repository are documented here. Versions follow
   auto-update their plugins in the background, so a pin would describe a state
   no machine actually holds. Set `SKILLS_PLUGIN_STATUS=off` to drop the
   section on a machine whose hook should not ask.
+
+- `implement`, forked from `mattpocock/skills` at v1.2.3 (`6acc160`) and
+  extended with one section: it asks, before writing any code, whether to build
+  the work in one pass or section by section — stopping after each slice to say
+  what it does and why — so a user who wants to follow the work can. It keeps
+  upstream's name because the name is a dispatch target: `ask-matt` routes to
+  `/implement` in six places and `to-tickets` hands it the ticket frontier, so a
+  fork under another name is one the pipeline never reaches, and renaming it
+  there would mean editing upstream's files in place.
+
+- `SHADOWED_SKILLS`, the mechanism that lets a fork keep upstream's name without
+  the two contesting it on every update — a plain install refusing, `--force`
+  handing the name over, and the next `--matt-skills` taking it back. Upstream's
+  copy is fetched and byte-verified like everything else and then not installed,
+  so a shadowed name is an ordinary bundled skill: versioned, diffable, and
+  reconciled by `--status` like the rest.
+
+  It is not `MATT_SKILLS_SKIP`, and the difference is the point. Skip matches the
+  first path component under `skills/`, which upstream uses for categories;
+  `implement` lives at `skills/engineering/implement/`, so a skip entry naming
+  the skill matches nothing while looking exactly like it works — the install
+  reports success and upstream's copy lands anyway. Shadowing matches the skill
+  name, after discovery has flattened the category away, and a test pins the
+  difference so the plausible-looking version cannot come back.
+
+  Because a shadowed skill is never installed, nothing else can see it change:
+  the byte verification covers what gets installed. So each entry records the
+  SHA256 of upstream's entrypoint at the revision the fork was taken from, line
+  endings normalised, and every install compares it against what it just
+  fetched. A default install stops, which at the pinned revision means it fires
+  in exactly one situation — somebody moved `MATT_SKILLS_REF` without
+  reconciling the fork. A caller who named a revision with `--matt-ref` gets a
+  warning instead, the same rule the version pin already follows and for the
+  same reason. Upstream dropping the skill stops a default install too: a
+  rename or a retirement leaves the fork as the only copy under that name, which
+  is a decision rather than a state to inherit silently. The recorded ref is a
+  literal on purpose — pointing it at the pin would make the two equal by
+  construction and degrade the diff the error prints to `X..X`. See
+  [`docs/matt-pocock-skills.md`](docs/matt-pocock-skills.md#forking-implement).
+
 - Skills carry a `version:` in their frontmatter, and the dashboard shows it.
   A row states the checkout's version, or `installed → checkout` when the two
   differ, and marks the case the field exists to expose: contents that changed

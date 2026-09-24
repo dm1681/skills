@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import Mapping, Optional, Sequence
@@ -661,6 +662,8 @@ def parser() -> argparse.ArgumentParser:
     setup.add_argument("--dry-run", action="store_true")
     setup.set_defaults(handler=command_setup_path)
 
+    import symphony_project
+    symphony_project.add_parser(subcommands)
     return result
 
 
@@ -688,7 +691,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except install.InstallError as exc:
         print("error: %s" % exc, file=sys.stderr)
         return 2
-    except OSError as exc:
+    except (OSError, subprocess.CalledProcessError) as exc:
         print("error: %s" % exc, file=sys.stderr)
         return 1
 

@@ -18,3 +18,6 @@ dist/
 # Graphify regenerates its graph, caches, and local skill registration.
 /graphify-out/
 /.claude/CLAUDE.md
+
+# Project-local Symphony configuration, runtime and issue workspaces.
+/.symphony/
