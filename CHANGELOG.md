@@ -14,6 +14,8 @@ All notable changes to this repository are documented here. Versions follow
   the configured base, and keep PR/review instructions independent of an optional
   repository template or review bot. Curated migration preflights legacy ownership
   and copy/link mode across all roots before writes.
+- Write generated workflow bytes consistently across hosts so Windows newline
+  translation cannot make repeat setup falsely report a user-edited file.
 - Use the current host-native Codex sandbox probe command and document the
   verified Linux 0.156.1 repair for the WSLg socket-alias rejection.
 - Replace the broad Matt offering with ten repository-owned forks plus the

@@ -273,7 +273,7 @@ class InstallerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             result = self.run_installer("--home", directory, "--curated-skills", "--dry-run")
             self.assertIn("repository-owned curated subset", result.stdout)
-            self.assertIn("skills/tdd", result.stdout)
+            self.assertIn(str(Path("skills") / "tdd"), result.stdout)
             self.assertNotIn("git fetch", result.stdout)
 
     def test_retired_matt_ref_is_rejected_before_writes(self) -> None:
