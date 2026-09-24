@@ -31,6 +31,9 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Added
 
+- Verify the existing Ponytail import with upstream/license vetting and isolated
+  copy/link, package-scope, and vendored-drift regression coverage (DIE-61).
+
 - Shared Linear work tracking and handoff guidance in `global/AGENTS.md`, with
   a per-repository mapping example, offline handoffs, and documented global
   instruction-loading gaps across supported agents. Existing link/copy and
