@@ -70,6 +70,17 @@ wrappers) installs them locally, `skills_tui.py` is the interactive dashboard,
   the upgrade path, not an edge case. `--uninstall` clears the record too —
   the conflict message names it as the remedy, so a record nothing could clear
   would make that advice false.
+- A skill this collection *forks* from an external one keeps upstream's name
+  and is dropped from the upstream install by `SHADOWED_SKILLS`, not by
+  `UpstreamCollection.skip`. Skip matches the **first path component** under
+  `skills/`, which upstream uses for categories, so a skip entry naming a skill
+  matches nothing while looking exactly like it works — `implement` lives at
+  `skills/engineering/implement/`, the install reports success, and upstream's
+  copy lands anyway. Shadowing matches the flattened skill name. Because a
+  shadowed skill is never installed, no other check can see it move: the byte
+  verification covers what gets installed. The recorded SHA256 is what closes
+  that, and its `ref` must stay a literal — pointing it at `MATT_SKILLS_REF`
+  makes the record equal to the thing it checks and prints a `X..X` diff.
 - **"Who owns skill N in root R" has exactly one answer, `install.ownership`.**
   Three records can claim a name — the receipt, `.skills-external.json`, and
   the directory itself — plus the visibility choice keyed beside them. Six
@@ -131,6 +142,11 @@ that do not resolve `@path` imports and for machines without this checkout.
 The `SessionStart` sync script honours `AGENT_GLOBAL_INSTRUCTIONS=link|copy`,
 forcing `copy` when it installs from a temporary clone.
 
+The shared Linear workflow lives in `global/AGENTS.md`; see
+[`docs/linear-workflow.md`](docs/linear-workflow.md) for per-repo mapping and
+[`docs/agent-support.md`](docs/agent-support.md#global-instruction-loading) for
+instruction-loading gaps. Skill discovery alone does not load global guidance.
+
 ## Conventions
 
 - `AGENTS.md` is the single source of agent guidance; `CLAUDE.md` imports it
@@ -159,3 +175,18 @@ Rules:
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+
+## Symphony pilot mapping
+
+- Project: [Skills — Symphony WSL pilot](https://linear.app/diego-mcdonald/project/skills-symphony-wsl-pilot-f5364fea9e9c).
+- Project UUID: `f1f4e47e-a464-4c93-a545-76ce39b28194`; slug ID: `f5364fea9e9c`; team: DIE.
+- Setup issue: [DIE-60](https://linear.app/diego-mcdonald/issue/DIE-60/set-up-repository-for-harness-engineering), UUID `ea6a5458-4a39-41ff-aad4-c7ed65084283`.
+- This checkout is the Linux/WSL pilot; see `docs/symphony.md`. Setup/check never dispatch.
+- Explicit Symphony workers use the upstream lifecycle and persistent workpad,
+  not the legacy readiness-label/claim/Current-overview/handoff protocol.
+- Follow the required status synchronization in `global/AGENTS.md`: read the
+  current issue state at pickup, update it when work/review readiness changes,
+  and verify every transition by fetching the issue again before reporting it.
+- Supervised setup uses In Progress while implementation/validation remains and
+  Human Review when ready for acceptance. Keep DIE-60 incomplete until reviewed;
+  this forbids premature Done, not In Progress. Live start remains separate.

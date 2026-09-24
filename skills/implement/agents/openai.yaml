@@ -1,0 +1,5 @@
+interface:
+  display_name: "Implement (interactive)"
+  short_description: "Build work from a spec or tickets, all at once or section by section"
+policy:
+  allow_implicit_invocation: false

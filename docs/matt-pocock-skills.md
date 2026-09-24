@@ -1,147 +1,72 @@
-# Matt Pocock skills (optional)
+# Curated Matt-derived skills
 
-[`mattpocock/skills`](https://github.com/mattpocock/skills) provides
-implementation, test-driven development, and two-axis review workflows. No skill
-bundled in this collection depends on them, so they are a pure opt-in. When
-requested, the complete collection is installed so those workflows and their
-transitive skill dependencies remain coherent.
+This repository owns and versions a supported subset of
+[Matt Pocock's skills](https://github.com/mattpocock/skills), based on v1.2.3,
+commit `6acc160e4e0cd062dbbbd7a1b26ae92855edf07e`. Each fork retains the MIT license.
+`curated-skills.json` records the upstream paths and normalized SHA256 of every
+source/supporting file. This is a deliberate fork, not an immutable vendored copy.
 
-## Install behavior
+## Install and migrate
 
-The wizard never prompts for third-party downloads. Installing them is always
-explicit:
-
-```sh
-./install.sh --agent all --matt-skills
-```
-
-The installer shallow-fetches one revision of the upstream repository into a
-disposable checkout, then copies every skill it discovers into the same resolved
-roots used for the bundled skills. That preserves `~/.agents/skills` for shared
-user installs and applies the installer's existing backup-before-replace policy.
-
-The effective commands have this form:
+Choose individual skills in the dashboard's YOUR SKILLS list, use
+`skills install tdd codebase-design`, or install the supported subset:
 
 ```sh
-git init --quiet --template=
-git fetch --quiet --depth 1 https://github.com/mattpocock/skills.git v1.2.3
-git -c core.hooksPath=.git/no-hooks -c core.autocrlf=false -c core.eol=lf \
-  checkout --quiet --detach FETCH_HEAD
-git status --porcelain   # must be empty before anything is copied
-git ls-tree -r FETCH_HEAD -- skills/   # every blob compared against
-git hash-object --no-filters …         # the bytes actually on disk
+./install.sh --curated-skills --scope project --project-dir /path/to/project
 ```
 
-The fetch runs with `GIT_TERMINAL_PROMPT=0` and `GIT_ASKPASS=echo`, so a `401`
-— a proxy in the way, a repository URL pointing somewhere private — fails in a
-second instead of waiting on a password nobody is there to type.
+`--matt-skills` is a compatibility alias for this subset. It no longer downloads
+the broad collection. `--matt-ref` is retired and fails before writes. There is no
+`setup-matt-pocock-skills` follow-up. Existing project tracker mapping and linked
+issues/specs supply review context. Ordinary scripted installation needs Python,
+not Textual or a network fetch.
 
-`git fetch <url> <ref>` rather than `git clone --branch <ref>`, because clone's
-`--branch` takes a tag or a branch and refuses a commit SHA. Every install
-prints the ref and the commit it resolved to, so `--matt-ref main` still leaves
-a record of what actually arrived.
+Existing upstream copies require `--force` to back up and replace the selected
+names. Ownership transfers to the local receipt and old visibility decisions for
+replaced names are cleared. Unrelated skills such as triage remain installed and
+retain their records; migration never implicitly uninstalls them. The legacy
+Matt dashboard row remains for old-install visibility and explicit migration;
+the owned forks themselves are listed under YOUR SKILLS.
 
-Checkout overrides line-ending conversion because Git for Windows enables
-`core.autocrlf` by default. Without the override the same commit installs
-different bytes there than everywhere else, and the shell script one upstream
-skill ships arrives with a `#!/bin/bash\r` shebang that no POSIX shell can run.
+## Supported subset
 
-It also keeps the user's own git hooks out of the disposable checkout, by two
-doors because closing one leaves the other open: `--template=` stops
-`init.templateDir` from seeding this repository with them, and an unreadable
-`core.hooksPath` neutralizes a global setting the empty template does not
-affect. A `post-checkout` hook would otherwise run before the copy and edit
-files that the commit check still calls correct. Since a hook is not the only
-thing that can rewrite a working tree, the install then asks git whether the
-checkout still matches the commit, and stops without copying if it does not.
+| Skill | Interactive session | Symphony worker |
+| --- | --- | --- |
+| codebase-design | Shared design vocabulary | Same vocabulary |
+| domain-modeling | Interview, glossary and ADR creation | Consume prepared glossary/ADRs; skill excluded |
+| diagnosing-bugs | Reproduction and diagnosis; ask for missing evidence | Record blockers in workpad; record architectural follow-up |
+| tdd | Confirm test seams with user | Choose and document seams autonomously |
+| research | Delegate within session when available; otherwise investigate | Same, retaining Symphony ownership |
+| writing-for-agents | Instruction authoring | Same |
+| grilling | Preserve interview/wait behavior | Excluded |
+| code-review | Parallel Standards and Spec reviews; manual Human Review | Excluded |
+| handoff | Explicit interactive handoff | Workpad replaces this skill |
+| claude-handoff | Explicit invocation, existing workflow unchanged | Explicit invocation remains available; no ownership transfer |
+| implement | Interactive pacing choice; display name Implement (interactive) | Excluded |
 
-That question is asked twice, because `git status` alone cannot answer it. A
-`.gitattributes` in the fetched revision can set `eol`, which outranks the
-config the checkout passes; git rewrites the files on the way out and then
-calls the result clean, because it applies the same attribute on the way back
-in. So the install also hashes the bytes as they sit on disk, with filters
-off, against the blobs the commit records. Nothing upstream sets such an
-attribute today — the check exists so the day it does is a stop with a
-readable message rather than a silently different install.
+The supported set omits triage, to-tickets, loop-me, ask-matt and the broad setup
+router. Retained skills' local references and support files are included. The
+mandatory global visualization-first rule is removed; viz-driven-dev remains
+available interactively and is explicitly disabled for workers.
 
-Git is the only requirement; there is no Node.js dependency. `--dry-run` prints
-the exact commands and final destinations without network access. Custom
-`--target` paths are supported because destination resolution remains under this
-installer's control.
+## Forking implement
 
-## Which revision gets installed
+The pre-existing implement fork keeps its internal name and interactive pacing
+behavior. Descriptions and UI metadata identify it as interactive. The name stays
+stable so an explicitly requested `/implement` still reaches it.
 
-`MATT_SKILLS_REF` in `install.py` pins the default, so two installs a week apart
-are the same install. A tag is a movable label, so `MATT_SKILLS_COMMIT` records
-the commit behind it and the default install stops if upstream has force-moved
-the tag since — update the two together. Override the ref per run:
+`SHADOWED_SKILLS` in `install.py` protects all retained same-name forks at the
+flattened skill-name stage of the shared upstream installer. Category skipping
+is not a substitute: `skills/engineering/implement` is not a category called
+implement. Original upstream copies cannot overwrite these forks on a collection
+refresh. Other collections' ownership conflicts still use `ownership()` and
+`claimed_names()`; removals/migrations clear records through `forget_records()`.
 
-```sh
-# Track upstream.
-./install.sh --agent all --matt-skills --matt-ref main
+## Deliberate upstream maintenance
 
-# An older release.
-./install.sh --agent all --matt-skills --matt-ref v1.2.2
-
-# An exact commit, named in full: the remote resolves the argument as a
-# refspec, and an abbreviated SHA is not one.
-./install.sh --agent all --matt-skills \
-  --matt-ref 9c9f36ccd3995266cd675468af71639c8dde1ec5
-```
-
-A named ref is checked against no second pin — it *is* the revision the caller
-chose. An empty one (`--matt-ref "$REF"` with `REF` unset) is refused rather
-than quietly falling back to the default.
-
-Updating the pin is a commit somebody reviews, and the diff behind it is
-readable before it lands:
-
-```sh
-# Not into ./skills: that is this repository's own bundled-skills directory,
-# and git refuses a non-empty destination.
-git clone https://github.com/mattpocock/skills.git /tmp/mattpocock-skills
-git -C /tmp/mattpocock-skills diff v1.2.3..v1.3.0 -- skills/
-```
-
-## What gets installed
-
-Upstream files its skills under `skills/<category>/<name>/`; every consumer,
-including upstream's own CLI, installs them flat as `<name>/`. Discovery walks
-the checkout for `SKILL.md` rather than assuming that depth, so a reorganization
-upstream costs nothing here. Two exceptions:
-
-- `skills/deprecated/` is skipped — matched on the first path component only, so
-  a skill that merely has `deprecated` deeper in its path still installs.
-  Upstream retires skills there instead of deleting them, and a retirement
-  should not arrive as a fresh install.
-- Two categories claiming one name stops the install rather than letting one
-  silently win. The comparison is case-insensitive, because `Foo` and `foo` are
-  two directories upstream but one destination on Windows and on a stock macOS
-  filesystem. Nothing collides today.
-
-A third exception is not upstream's but this collection's. `pstack`, the other
-optional collection here, also ships `tdd` and `teach` and means different
-things by them. A skill root is one flat directory, so whichever install runs
-second stops and names the shared skills rather than replacing them silently —
-`--force` accepts the replacement and backs the old copy up, and `--uninstall`
-clears the other collection's claim. See
-[`pstack.md`](pstack.md#two-collections-one-directory).
-
-Every selected root receives the same files. The skills carry no agent-specific
-content — upstream's CLI wrote byte-identical trees to each agent it was given —
-so there is no agent mapping to keep in step any more.
-
-An upstream checkout that does not contain `setup-matt-pocock-skills` fails the
-install, because that is the shape of the collection changing under us and a
-partial install is worse than a stop.
-
-## One-time repository setup
-
-Installing the files is the machine-level step. Then invoke
-`/setup-matt-pocock-skills` once from inside the target repository to configure
-the issue tracker, triage labels, and documentation layout. This is a user or
-agent action; the terminal installer cannot invoke a coding-agent slash command
-on the user's behalf.
-
-Skipping these skills entirely is fully supported: every skill bundled in this
-collection installs and runs without them.
+Compare the recorded revision and file hashes with a separately verified upstream
+checkout. Review supporting-file changes as well as entrypoints. Apply accepted
+improvements to source files here, bump the affected skill versions, and update
+the provenance record and shadow entries together. Do not edit installed home
+copies or move the fork base merely because an upstream collection pin changed.
+A default upstream fetch detects shadow drift and stops for reconciliation.

@@ -1,0 +1,13 @@
+{
+  "repository": "https://github.com/openai/symphony",
+  "revision": "be10a1b79df723d6d7612b5651c8522704dafb2e",
+  "files": {
+    ".codex/skills/linear/SKILL.md": "dae7888e1a1c888e88568f7c4efd0dc269c143d1c40f97e382e0e86a85208507",
+    ".codex/skills/commit/SKILL.md": "60788c28cdc1925cb40020798ac4a85ca73cc8b04cbca31f22d92515755dd112",
+    ".codex/skills/pull/SKILL.md": "7aa0ef5cd87707fb2db62b3ca465811283c42a0b8172c451007cfb80a56e4088",
+    ".codex/skills/push/SKILL.md": "e9c91348a03b09c498ebd38e2cb560dc5c2392a5cb57e45210cd724a3d54c3d6",
+    ".codex/skills/land/land_watch.py": "46ede0036339ba2d18f2ff8825a6cf8aa5cb87186fdc6bade7c30add67f2df22",
+    ".codex/skills/land/SKILL.md": "64b5b6e1c613bcf89c32711ef7bb81c2e370ad93b3d3139902aeea3071ad75d2",
+    "elixir/WORKFLOW.md": "7c465f8a44c6698db804dc7c6665cc1c2b7cadc1efed7d26c48629fcf530869d"
+  }
+}

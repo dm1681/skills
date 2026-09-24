@@ -269,37 +269,23 @@ class InstallerTests(unittest.TestCase):
             )
             self.assertIn("cannot be combined with --target", result.stderr)
 
-    def test_matt_skills_dry_run_shows_external_command(self) -> None:
+    def test_curated_alias_dry_run_copies_local_forks_without_fetch(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            result = self.run_installer(
-                "--home", directory, "--agent", "all", "--matt-skills", "--dry-run"
-            )
-            self.assertIn(
-                "git fetch --quiet --depth 1 "
-                f"https://github.com/mattpocock/skills.git {install.MATT_SKILLS_REF}",
-                result.stdout,
-            )
-            self.assertIn("git -c core.hooksPath=.git/no-hooks -c core.autocrlf=false -c core.eol=lf "
-                "checkout --quiet --detach FETCH_HEAD", result.stdout)
+            result = self.run_installer("--home", directory, "--curated-skills", "--dry-run")
+            self.assertIn("repository-owned curated subset", result.stdout)
+            self.assertIn("skills/tdd", result.stdout)
+            self.assertNotIn("git fetch", result.stdout)
 
-    def test_matt_skills_dry_run_honours_a_requested_ref(self) -> None:
+    def test_retired_matt_ref_is_rejected_before_writes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            result = self.run_installer(
-                "--home", directory, "--matt-skills", "--matt-ref", "main", "--dry-run"
-            )
-            self.assertIn(
-                "https://github.com/mattpocock/skills.git main", result.stdout
-            )
+            result = self.run_installer("--home", directory, "--matt-skills", "--matt-ref", "main", expected=2)
+            self.assertIn("retired", result.stderr)
+            self.assertEqual([], list(Path(directory).iterdir()))
 
-    def test_matt_skills_supports_custom_target_via_staging(self) -> None:
+    def test_curated_alias_supports_custom_target(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            result = self.run_installer(
-                "--target", directory, "--matt-skills", "--dry-run"
-            )
-            self.assertIn(
-                f"would copy all discovered Matt Pocock skills -> {Path(directory).resolve()}",
-                result.stdout,
-            )
+            result = self.run_installer("--target", directory, "--matt-skills", "--dry-run")
+            self.assertIn(str(Path(directory).resolve() / "tdd"), result.stdout)
 
     @unittest.skipIf(os.name == "nt", "Windows symlinks may require Developer Mode")
     def test_link_mode(self) -> None:

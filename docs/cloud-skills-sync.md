@@ -85,7 +85,7 @@ What it offers:
 | one skill, this repo only | `install.sh --skill NAME --scope project` |
 | user-level instructions | `install.sh --global-instructions` |
 | graphify (needs `uv`) | `install.sh --graphify` |
-| mattpocock/skills (needs `git`) | `install.sh --matt-skills` |
+| Curated Matt-derived skills (local source) | `install.sh --curated-skills` |
 | pstack (needs `git`) | `install.sh --pstack` |
 
 Two things the offer is careful about:
@@ -230,6 +230,15 @@ home directory (each is backed up into `~/.skills-backups/` first). `link`
 writes pointers back to the local checkout; `copy` writes the text itself. A
 cloned source is always installed as `copy`, since the clone is a temporary
 directory that a pointer would outlive.
+
+This also carries the [shared Linear workflow](linear-workflow.md) once the
+source contains it. The hook/bootstrap offer and skill installation alone do
+not opt in to global instructions. File delivery does not configure an agent's
+instruction discovery or authenticate Linear; use the
+[loading matrix](agent-support.md#global-instruction-loading) and verify both
+instruction loading and connector access in each new environment. Keep the
+project mapping in that project's `AGENTS.md` and credentials outside synced
+files. Report only the environments actually checked.
 
 ## Choosing a source: vendor vs. clone
 

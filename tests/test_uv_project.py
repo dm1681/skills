@@ -43,7 +43,7 @@ class UvProjectTests(unittest.TestCase):
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
             encoding="utf-8"
         )
-        for filename in ("pyproject.toml", "uv.lock", ".python-version"):
+        for filename in ("pyproject.toml", "uv.lock", ".python-version", "curated-skills.json", "symphony_project.py", "templates"):
             with self.subTest(filename=filename):
                 self.assertIn(filename, workflow)
 

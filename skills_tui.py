@@ -80,7 +80,7 @@ from textual.app import App, ComposeResult  # noqa: E402
 from textual.binding import Binding  # noqa: E402
 from textual.containers import Container, Horizontal, VerticalScroll  # noqa: E402
 from textual.screen import ModalScreen  # noqa: E402
-from textual.widgets import Markdown, Static  # noqa: E402
+from textual.widgets import Button, Input, Label, Markdown, Static  # noqa: E402
 
 AVAILABLE = "available"
 INSTALLED = "installed"
@@ -733,6 +733,82 @@ class HiddenSkillRow(Static):
         )
 
 
+
+class SymphonySetup(ModalScreen):
+    """Project setup only; starting dispatch remains an explicit CLI action."""
+    BINDINGS = [Binding("escape", "close", "close")]
+    DEFAULT_CSS = """
+    SymphonySetup { align: center middle; }
+    SymphonySetup > VerticalScroll { width: 88; height: 90%; border: round #94e2d5; background: $surface; padding: 1 2; }
+    SymphonySetup Input { margin-bottom: 1; }
+    SymphonySetup #symphony-result { height: auto; margin: 1 0; }
+    """
+    FIELDS = (
+        ("project_id", "Linear project ID"), ("project_slug", "Linear project slug ID"),
+        ("setup_issue", "Exact setup issue ID or identifier"),
+        ("validation_command", "Repository validation command"),
+        ("runtime_source", "Pinned Symphony source directory"),
+        ("repo_url", "Repository clone URL"), ("base_branch", "Base branch"),
+        ("dashboard_port", "Local dashboard port (blank disables dashboard)"),
+    )
+
+    def __init__(self, project_dir):
+        super().__init__()
+        self.project_dir = project_dir
+        import symphony_project
+        try:
+            self.config = symphony_project.load(project_dir)
+        except install.InstallError:
+            self.config = {"base_branch": "main", "dashboard_port": 8788}
+
+    def compose(self):
+        with VerticalScroll():
+            yield Label("Symphony project setup")
+            yield Static(str(self.project_dir), markup=False)
+            for key, label in self.FIELDS:
+                yield Label(label)
+                value = self.config.get(key)
+                yield Input(value="" if value is None else str(value), id="symphony-" + key)
+            with Horizontal():
+                yield Button("Save setup", id="symphony-save")
+                yield Button("Check readiness", id="symphony-check")
+                yield Button("Close", id="symphony-close")
+            yield Static("Setup and checks never start workers. Start explicitly with skills symphony start.", id="symphony-result")
+
+    def on_button_pressed(self, event):
+        import symphony_project
+        if event.button.id == "symphony-close":
+            self.dismiss(); return
+        if event.button.id == "symphony-check":
+            self.check_readiness(); return
+        if event.button.id != "symphony-save":
+            return
+        try:
+            options = {key: self.query_one("#symphony-" + key, Input).value.strip() for key, _ in self.FIELDS}
+            raw_port = options.pop("dashboard_port")
+            options["dashboard_port"] = int(raw_port) if raw_port else None
+            options = {key: value for key, value in options.items() if value != ""}
+            self.config = symphony_project.setup(self.project_dir, **options)
+            if not raw_port:
+                self.config = symphony_project.setup(self.project_dir, dashboard_enabled=False)
+            self.query_one("#symphony-result", Static).update("Configured. No workers started. Check readiness before an explicit start.")
+        except (ValueError, OSError, install.InstallError) as exc:
+            self.query_one("#symphony-result", Static).update("Setup failed: " + str(exc))
+
+    @work(thread=True, exclusive=True)
+    def check_readiness(self):
+        import symphony_project
+        try:
+            problems = symphony_project.check(self.project_dir)
+            text = "\n".join("Not ready: " + item for item in problems) if problems else "Ready for an explicit start. No workers started."
+        except (OSError, install.InstallError) as exc:
+            text = str(exc)
+        self.app.call_from_thread(self.query_one("#symphony-result", Static).update, text)
+
+    def action_close(self):
+        self.dismiss()
+
+
 class SkillsApp(App):
     """Dashboard and guided setup, sharing one shell."""
 
@@ -754,6 +830,7 @@ class SkillsApp(App):
         Binding("x", "mark_remove", "remove"),
         Binding("u", "check_upstream", "upstream"),
         Binding("g", "toggle_guided", "guided"),
+        Binding("y", "symphony_setup", "Symphony project"),
         Binding("q", "quit", "quit"),
     ]
 
@@ -1751,6 +1828,10 @@ class SkillsApp(App):
             "[%s]%s[/]" % (colours.get(freshness.state, MUTE), freshness.detail)
         )
 
+    def action_symphony_setup(self) -> None:
+        if not self._spinning and not self._checking:
+            self.push_screen(SymphonySetup(self.project_dir))
+
     def action_toggle_guided(self) -> None:
         self.step = 0 if self.guided() else 1
         self.render_all()
@@ -1962,7 +2043,7 @@ class SkillsApp(App):
             # refusal surfaces through note_failure, in red, like any failure.
             "matt-skills": lambda: install.install_matt_skills(
                 self.agents, self.roots(), True, False, lambda _line: None,
-                allow_conflicts=False,
+                allow_conflicts=False, mode=self.mode,
             ),
             "pstack": lambda: install.install_pstack(
                 self.agents, self.roots(), True, False, lambda _line: None,

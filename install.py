@@ -192,6 +192,65 @@ VENDORED_SKILLS = (
 )
 
 
+class ShadowedSkill(NamedTuple):
+    """A skill this collection forks from an upstream one and installs instead.
+
+    Different from `UpstreamCollection.skip`, which drops a *path component* of
+    the upstream layout -- `skills/deprecated/`, a retirement shelf. Upstream
+    files skills as `skills/<category>/<name>/`, so a skip entry never matches a
+    skill name: `implement` lives under `engineering/`, and skipping the string
+    "implement" skips nothing at all while looking exactly like it works. This
+    matches the skill name, after discovery has flattened it.
+
+    A fork keeps upstream's name on purpose. The name is a dispatch target --
+    `ask-matt` routes to `/implement` in six places and `to-tickets` hands it
+    the ticket frontier -- so a fork under another name is one the pipeline
+    never reaches, and renaming it there would mean editing upstream's files in
+    place. Keeping the name means the two copies would contest it on every
+    update, which is what dropping upstream's from the install settles.
+
+    `sha256` is upstream's entrypoint at `ref`, the revision this fork was taken
+    from, hashed with line endings normalised for the reason `_normalized`
+    gives. It is not an integrity check -- the fetch already has one -- but a
+    record of what the fork was reconciled against, so that a pin moving over
+    an upstream that changed underneath is a stop rather than a silence. That
+    is the whole point of writing it down: nothing else can see the difference,
+    because a shadowed skill is never installed and therefore never compared.
+    """
+
+    skill: str
+    tool: str
+    upstream: str
+    ref: str
+    sha256: str
+
+
+SHADOWED_SKILLS = (
+    ShadowedSkill(
+        skill="implement",
+        tool="matt-skills",
+        upstream="skills/engineering/implement/SKILL.md",
+        # A literal, never MATT_SKILLS_REF. This is the revision the fork was
+        # last reconciled against, and the pin is the revision being installed;
+        # tying the two together makes them equal by construction, so the diff
+        # this prints degenerates to `X..X` and the record silently follows the
+        # pin it is supposed to be checked against.
+        ref="v1.2.3",
+        sha256="6d3fd9e83b8f36e5213854779db49b256a457a7ebb4a503e53fa7dcff696adc3",
+    ),
+)
+
+
+# Repository-owned forks; provenance is fixed independently of collection pins.
+CURATED_MANIFEST = json.loads((REPO_ROOT / "curated-skills.json").read_text(encoding="utf-8"))
+CURATED_SKILLS = tuple(CURATED_MANIFEST["skills"])
+SHADOWED_SKILLS += tuple(
+    ShadowedSkill(name, "matt-skills", record["upstream"] + "/SKILL.md",
+                  CURATED_MANIFEST["ref"], record["files"]["SKILL.md"])
+    for name, record in CURATED_MANIFEST["skills"].items() if name != "implement"
+)
+
+
 class InstallError(RuntimeError):
     """A user-actionable installation error."""
 
@@ -223,11 +282,13 @@ EXTERNAL_TOOLS = (
         requires="uv",
         marker="graphify",
     ),
+    # Keep the legacy marker for status/visibility and explicit migration. The
+    # action installs local forks; it no longer fetches the broad collection.
     ExternalTool(
         name="matt-skills",
-        summary="mattpocock/skills engineering workflows",
-        origin="mattpocock/skills on GitHub, cloned at a pinned ref and copied in",
-        requires="git",
+        summary="Legacy Matt installs: migrate to the supported local forks",
+        origin="repository-owned curated skills; existing unrelated skills stay installed",
+        requires="Python",
         marker="setup-matt-pocock-skills",
     ),
     ExternalTool(
@@ -796,6 +857,100 @@ def _has_ancestor_skill(skill_dir: Path, root: Path) -> bool:
     return False
 
 
+def shadowed_for(tool: str) -> tuple:
+    """The forks this collection ships of `tool`'s skills."""
+    return tuple(entry for entry in SHADOWED_SKILLS if entry.tool == tool)
+
+
+def shadow_drift(entry: ShadowedSkill, entrypoint: Path) -> Optional[str]:
+    """How upstream's copy differs from what the fork was taken from, or None.
+
+    None means the two agree: upstream has not touched the skill since the fork,
+    so there is nothing to reconcile and nothing to say.
+    """
+    try:
+        text = _normalized(entrypoint.read_text(encoding="utf-8"))
+    except OSError as exc:
+        # Unreadable is not unchanged. Saying nothing here would be the one
+        # failure this record exists to prevent, wearing a different hat.
+        return f"could not be read to compare against the fork ({exc})"
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    if digest == entry.sha256:
+        return None
+    return f"changed since {entry.ref} ({entry.sha256[:12]} -> {digest[:12]})"
+
+
+def apply_shadows(
+    collection: UpstreamCollection,
+    sources: list,
+    reference: str,
+    entrypoint: str = "SKILL.md",
+) -> tuple:
+    """Drop the upstream skills this collection forks, and report what moved.
+
+    Returns the sources to install and the lines to emit about the ones held
+    back. The drop is why a fork can keep upstream's name without the two
+    contesting it on every update: upstream's copy is fetched and verified like
+    everything else, and then simply not installed.
+
+    A difference is a stop on a default install and a note on a named one, which
+    is the rule the version pin already follows and for the same reason: the
+    default is this repository's claim about a revision, so a claim that has
+    come apart from the revision is a defect, while a caller who named a
+    revision chose it and is owed a report rather than a refusal. In practice
+    the stop fires in exactly one place -- somebody moved the pin without
+    reconciling the fork -- because at the pinned revision the hashes agree by
+    construction.
+    """
+    shadows = {entry.skill.casefold(): entry for entry in shadowed_for(collection.tool)}
+    if not shadows:
+        return sources, []
+
+    kept: list = []
+    notes: list = []
+    found: set = set()
+    for source in sources:
+        entry = shadows.get(source.name.casefold())
+        if entry is None:
+            kept.append(source)
+            continue
+        found.add(entry.skill.casefold())
+        drift = shadow_drift(entry, source / entrypoint)
+        if drift is None:
+            notes.append(
+                f"shadowed  {entry.skill}: upstream unchanged since {entry.ref}; "
+                f"skills/{entry.skill}/ installs instead"
+            )
+            continue
+        problem = (
+            f"upstream's {entry.skill} {drift}, and skills/{entry.skill}/ forks "
+            f"it, so the change is not in what gets installed. Review it and "
+            f"fold it in:\n"
+            f"    git -C <checkout> diff {entry.ref}..{reference} -- {entry.upstream}\n"
+            f"then update this fork and its SHADOWED_SKILLS entry together"
+        )
+        if reference == collection.ref:
+            raise InstallError(problem)
+        notes.append(f"warning: {problem}")
+
+    for key, entry in shadows.items():
+        if key in found:
+            continue
+        # Upstream renaming or retiring a forked skill leaves the fork as the
+        # only copy under that name, which is a decision to make rather than a
+        # state to inherit silently.
+        missing = (
+            f"{collection.source} at {reference} no longer ships {entry.skill}, "
+            f"which skills/{entry.skill}/ forks from {entry.upstream} at "
+            f"{entry.ref}; check whether it was renamed or retired"
+        )
+        if reference == collection.ref:
+            raise InstallError(missing)
+        notes.append(f"warning: {missing}")
+
+    return kept, notes
+
+
 def collection_skill_sources(
     checkout: Path,
     source: str,
@@ -1339,6 +1494,11 @@ def install_upstream(
                 f"{collection.source} at {reference} did not include "
                 f"{collection.marker}"
             )
+        # After the marker check, so a fetch missing its marker is reported as
+        # the broken fetch it is rather than as a fork that lost its upstream.
+        sources, shadow_notes = apply_shadows(collection, sources, reference)
+        for note in shadow_notes:
+            emit(note)
         names = [source.name for source in sources]
         # Every root is checked before any root is written, so a conflict in
         # the second one does not leave the first half-replaced.
@@ -1432,11 +1592,40 @@ def install_matt_skills(
     executable: Optional[str] = None,
     ref: Optional[str] = None,
     allow_conflicts: Optional[bool] = None,
+    mode: str = "copy",
 ) -> None:
-    install_upstream(
-        MATT_SKILLS, agents, roots, force, dry_run, emit, executable, ref,
-        allow_conflicts,
-    )
+    """Compatibility alias for the supported, repository-owned subset."""
+    expand_agents(agents)
+    if ref is not None:
+        raise InstallError("--matt-ref is retired; curated forks are versioned in this checkout")
+    emit("--matt-skills now installs the repository-owned curated subset; unrelated skills remain")
+    install_curated(roots, force, dry_run, emit, allow_conflicts, mode)
+
+
+def install_curated(roots, force=False, dry_run=False, emit=print, allow_conflicts=None, mode="copy"):
+    # Preflight every root before changing any, including stale ownership claims.
+    for root in roots:
+        conflicts = dict(external_conflicts(root, "matt-skills", CURATED_SKILLS))
+        for name in CURATED_SKILLS:
+            owner = ownership(root, name)
+            # The shared conflict check also covers pre-manifest installations.
+            # A current bundled receipt takes precedence over legacy markers.
+            external = owner.by_external or (conflicts.get(name) if not owner.by_receipt else None)
+            if external and not (force and (allow_conflicts is not False or external == "matt-skills")):
+                raise InstallError(f"{name} is owned by {external}; use --force to back up and migrate this name")
+            destination = root / name
+            current = destination_matches_mode(destination, mode) and trees_equal(destination, SOURCE_ROOT / name)
+            if (destination.exists() or destination.is_symlink()) and not force and not current:
+                raise InstallError(f"destination content or mode differs: {destination}; use --force to back up and replace it")
+    for root in roots:
+        names = set(receipt_skills(root)) | set(CURATED_SKILLS)
+        for name in CURATED_SKILLS:
+            previous = ownership(root, name)
+            emit(install_one(SOURCE_ROOT / name, root, mode, force, dry_run))
+            if previous.by_external and not dry_run:
+                forget_records(root, name, False)
+        write_receipt(root, sorted(names), mode, dry_run)
+
 
 
 def install_pstack(
@@ -1656,9 +1845,12 @@ def install_one(
     dry_run: bool,
 ) -> str:
     destination = root / source.name
+    takes_ownership = source.resolve() == (SOURCE_ROOT / source.name).resolve() and ownership(root, source.name).by_external is not None
     exists = destination.exists() or destination.is_symlink()
     current = exists and destination_matches_mode(destination, mode)
     if current and trees_equal(destination, source):
+        if takes_ownership and not dry_run:
+            forget_records(root, source.name, False)
         return f"unchanged  {destination}"
     if exists and not force:
         actual = "link" if destination.is_symlink() else "copy"
@@ -1695,6 +1887,8 @@ def install_one(
         if backup is not None and not destination.exists() and not destination.is_symlink():
             shutil.move(str(backup), str(destination))
         raise
+    if takes_ownership:
+        forget_records(root, source.name, False)
     return f"installed  {destination}" + (f" (backup: {backup})" if backup else "")
 
 
@@ -3721,10 +3915,10 @@ def parser() -> argparse.ArgumentParser:
     )
     matt_skills = result.add_mutually_exclusive_group()
     matt_skills.add_argument(
-        "--matt-skills",
+        "--matt-skills", "--curated-skills",
         dest="matt_skills",
         action="store_true",
-        help="install all mattpocock/skills for the selected agents",
+        help="install the supported repository-owned Matt forks (legacy alias: --matt-skills)",
     )
     matt_skills.add_argument(
         "--no-matt-skills",
@@ -3737,10 +3931,7 @@ def parser() -> argparse.ArgumentParser:
         "--matt-ref",
         default=None,
         metavar="REF",
-        help=(
-            "with --matt-skills: the tag, branch, or commit of mattpocock/skills "
-            f"to install (default: {MATT_SKILLS_REF}; pass main to track upstream)"
-        ),
+        help="retired: curated forks are versioned in this checkout; omit this option",
     )
     pstack = result.add_mutually_exclusive_group()
     pstack.add_argument(
@@ -3945,7 +4136,8 @@ def execute_install(args: argparse.Namespace, selected: list[str]) -> None:
                     args.dry_run,
                 )
             )
-        write_receipt(root, selected, args.mode, args.dry_run)
+        if selected:
+            write_receipt(root, sorted(set(receipt_skills(root)) | set(selected)), args.mode, args.dry_run)
         # Beside the receipt, on purpose and with the same dry-run guard. The
         # receipt says what is in this root; the index says the root exists at
         # all, which is the only reason a later `--status --all` can find a
@@ -3972,6 +4164,7 @@ def execute_install(args: argparse.Namespace, selected: list[str]) -> None:
             print,
             getattr(args, "matt_git", None),
             getattr(args, "matt_ref", None),
+            mode=args.mode,
         )
     # After matt-skills, on purpose: the two collections share two skill names,
     # so whichever runs second is the one that finds the conflict and says so.
@@ -4020,7 +4213,6 @@ def execute_install(args: argparse.Namespace, selected: list[str]) -> None:
     fetched = [
         collection
         for collection, wanted in (
-            (MATT_SKILLS, args.matt_skills),
             (PSTACK, args.pstack),
         )
         if wanted
@@ -4161,9 +4353,14 @@ def manage_model_invocation(args: argparse.Namespace) -> int:
 
 def main(argv: Optional[list[str]] = None) -> int:
     raw_args = list(sys.argv[1:] if argv is None else argv)
+    if raw_args and raw_args[0] == "--symphony":
+        import skills_cli
+        return skills_cli.main(["symphony", *raw_args[1:]])
     args = parser().parse_args(raw_args)
     try:
         bundled = available_skills()
+        if args.matt_ref is not None and args.matt_skills:
+            raise InstallError("--matt-ref is retired; curated forks are versioned in this checkout")
         if args.uninstall or args.all_skills or args.orphans:
             # Ahead of every other branch so a removal cannot be silently
             # traded for a report or an install; the combinations are rejected
@@ -4257,7 +4454,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "the terminal from Python: run install.ps1 in PowerShell or "
                 "Windows Terminal for the dashboard."
             )
-        selected = args.skill or bundled
+        selected = args.skill or ([] if args.matt_skills else bundled)
         unknown = sorted(set(selected) - set(bundled))
         if unknown:
             raise InstallError(f"unknown skill: {', '.join(unknown)}")
@@ -4280,8 +4477,6 @@ def main(argv: Optional[list[str]] = None) -> int:
             raise InstallError(
                 "--graphify cannot be combined with --target; use --scope instead"
             )
-        if args.matt_skills and not args.dry_run:
-            args.matt_git = require_git("--matt-skills")
         if args.pstack and not args.dry_run:
             args.pstack_git = require_git("--pstack")
         if args.graphify and not args.dry_run:

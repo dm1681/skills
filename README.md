@@ -304,10 +304,10 @@ Useful options:
 --project-dir PATH
 --skill NAME                 repeatable; defaults to all skills
 --mode copy|link             copy is the cross-platform default
---matt-skills                install all Matt Pocock skills for chosen agents
+--curated-skills             install the supported local Matt-derived subset
+--matt-skills                compatibility alias for --curated-skills
 --no-matt-skills             skip Matt Pocock skills (the default)
---matt-ref REF               tag, branch, or commit of mattpocock/skills to
-                             install; defaults to the pinned revision
+--matt-ref REF               retired; update curated fork source deliberately
 --pstack                     install all pstack skills for chosen agents
 --no-pstack                  skip pstack skills (the default)
 --pstack-ref REF             tag, branch, or commit of cursor/plugins to
@@ -350,8 +350,8 @@ Examples:
 # Install this collection plus Graphify for shared agents and Claude Code.
 ./install.sh --agent all --graphify
 
-# Also install the Matt Pocock engineering skills (third-party opt-in).
-./install.sh --agent all --matt-skills
+# Install the supported repository-owned Matt-derived subset.
+./install.sh --agent all --curated-skills
 
 # Install both into one project's Codex skill directory.
 ./install.sh --agent codex --scope project --project-dir /path/to/repo --graphify
@@ -377,38 +377,31 @@ checkout stays the single source of truth:
 Whatever is already at those paths is moved into `~/.skills-backups/` first,
 and reruns that would not change anything report `unchanged`.
 
+The shared instructions include [Linear work tracking and handoffs](docs/linear-workflow.md).
+Add a verified project mapping to each target repo's `AGENTS.md`; connector
+access is configured separately per device. Check the
+[instruction-loading matrix](docs/agent-support.md#global-instruction-loading):
+the two installed files are not automatically discovered by every agent, and
+copy mode alone does not fix a discovery gap.
+
 `uv` is recommended; Python 3.9 or newer can be used as a fallback. Existing
 differing installations are never overwritten silently. With `--force`, the
 old directory is moved into an adjacent `.skills-backups/` directory (outside
 the scanned skills root) before the new version is installed.
 
-### Optional Matt Pocock engineering skills
+### Curated Matt-derived skills and Symphony
 
-Matt Pocock's [`mattpocock/skills`](https://github.com/mattpocock/skills)
-collection provides `implement`, `tdd`, and `code-review` workflows. No skill in
-this collection requires them, so the dashboard does not offer to fetch them and
-never prompts for a third-party download.
+The supported Matt-derived subset is owned and versioned in this repository.
+Choose its skills under YOUR SKILLS or use `./install.sh --curated-skills`.
+`--matt-skills` remains a compatibility alias; `--matt-ref` is retired. Existing
+unrelated installs are preserved. See [curation and migration](docs/matt-pocock-skills.md).
 
-Opt in explicitly with `--matt-skills`. It needs `git` and nothing else: the
-installer shallow-fetches one pinned revision of the upstream repository into a
-temporary checkout,
-
-```sh
-git init --quiet
-git fetch --quiet --depth 1 https://github.com/mattpocock/skills.git v1.2.3
-git -c core.autocrlf=false -c core.eol=lf checkout --quiet --detach FETCH_HEAD
-```
-
-then copies every skill it finds into the exact selected roots, including the
-preferred user-scoped `~/.agents/skills` directory, under the same conflict
-backup policy used for bundled skills. The pin is a constant in `install.py`, so
-updating is a reviewed commit and `git diff v1.2.3..v1.3.0 -- skills/` shows what
-an update would change. The commit behind the tag is pinned alongside it, so a
-default install stops rather than proceeding if upstream force-moves the tag. Track upstream instead with `--matt-ref main`, or pin an
-exact commit by passing its SHA. After installation, run
-`/setup-matt-pocock-skills` once inside the target repository. See
-[`docs/matt-pocock-skills.md`](docs/matt-pocock-skills.md) for what is installed
-and the operational boundary.
+Symphony setup is project-only and initially targets Linux/WSL. Run
+`skills symphony setup --project-dir ...`, install its pinned runtime with
+`skills symphony install-runtime`, and check readiness with `skills symphony check`.
+The dashboard exposes setup with **Y**. Setup never starts workers; explicit
+`skills symphony start --accept-preview` verifies the exact project's completed
+setup issue first. See [setup, lifecycle and validation](docs/symphony.md).
 
 ### Optional pstack skills
 
@@ -421,7 +414,7 @@ under the dashboard's **External tools** group, which fetches it only when
 selected.
 
 Opt in explicitly with `--pstack`. It needs `git` and nothing else, and runs
-the same pinned fetch, byte verification, and copy that `--matt-skills` does —
+the shared pinned fetch, byte verification, and copy machinery —
 one implementation, parameterized. Two differences follow from pstack living
 inside a monorepo: the byte check is scoped to `pstack/`, and discovery is
 rooted at `pstack/skills/` so a sibling plugin can never be picked up.
