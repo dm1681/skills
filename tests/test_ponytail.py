@@ -32,7 +32,7 @@ class PonytailTests(unittest.TestCase):
         )
         self.assertEqual(
             "fb1bc6909ac3ef82d5c22106e32ef682b0cff66788fa915fb9b53b15c9d2f3ab",
-            hashlib.sha256((SOURCE / "LICENSE").read_text().encode()).hexdigest(),
+            hashlib.sha256((SOURCE / "LICENSE").read_text(encoding="utf-8").encode("utf-8")).hexdigest(),
         )
 
     def test_upstream_edits_are_detected_but_crlf_is_accepted(self):
@@ -41,11 +41,11 @@ class PonytailTests(unittest.TestCase):
             shutil.copytree(SOURCE, root / "ponytail")
             entry = next(e for e in install.VENDORED_SKILLS if e.skill == "ponytail")
             path = root / "ponytail" / "SKILL.md"
-            original = path.read_text()
+            original = path.read_text(encoding="utf-8")
             with patch.object(install, "SOURCE_ROOT", root), patch.object(install, "VENDORED_SKILLS", (entry,)):
                 path.write_bytes(original.replace("\n", "\r\n").encode())
                 self.assertEqual([], install.vendored_status())
-                path.write_text(original + "\nChanged upstream instructions.\n")
+                path.write_text(original + "\nChanged upstream instructions.\n", encoding="utf-8")
                 self.assertIn("edited here instead of upstream", install.vendored_status()[0])
 
     def test_isolated_copy_and_link_install_and_repeat(self):
