@@ -91,8 +91,10 @@ def write_managed(path: Path, text: str, old_hash: str = "") -> str:
             raise Error(f"Preserving edited file: {path}; reconcile it before setup")
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
-    with temporary.open("x", encoding="utf-8") as stream:
-        stream.write(text)
+    # Hash and persist the same bytes on every host; text-mode newline
+    # translation would otherwise make our own output look like a user edit.
+    with temporary.open("xb") as stream:
+        stream.write(text.encode("utf-8"))
     temporary.replace(path)
     return hashlib.sha256(text.encode()).hexdigest()
 

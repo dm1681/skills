@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import hashlib
 import json
 import os
 import subprocess
@@ -41,6 +42,20 @@ class SymphonyTests(unittest.TestCase):
         self.assertEqual(before[paths[0]][0], paths[0].read_bytes())
         workflow = self.project / '.symphony/WORKFLOW.md'
         self.assertEqual(before[workflow], (workflow.read_bytes(), workflow.stat().st_mtime_ns))
+
+    def test_managed_workflow_hash_survives_host_newline_translation(self):
+        real_open = Path.open
+        def windows_text_open(path, mode='r', *args, **kwargs):
+            if 'b' not in mode and any(flag in mode for flag in ('w', 'x')):
+                kwargs.setdefault('newline', '\r\n')
+            return real_open(path, mode, *args, **kwargs)
+        workflow = self.project / 'managed.md'
+        with mock.patch.object(Path, 'open', windows_text_open):
+            digest = symphony.write_managed(workflow, 'first\nsecond\n')
+            self.assertEqual(hashlib.sha256(workflow.read_bytes()).hexdigest(), digest)
+            self.assertEqual(digest, symphony.write_managed(workflow, 'first\nsecond\n', digest))
+            updated = symphony.write_managed(workflow, 'changed\n', digest)
+        self.assertEqual(hashlib.sha256(workflow.read_bytes()).hexdigest(), updated)
 
     def test_user_edited_workflow_is_preserved_on_setup(self):
         workflow = self.project / '.symphony/WORKFLOW.md'
@@ -104,7 +119,7 @@ class SymphonyTests(unittest.TestCase):
                 symphony.start(self.project)
             launch.assert_not_called()
             symphony.start(self.project, accept_preview=True)
-        self.assertEqual(str(self.project / '.symphony/WORKFLOW.md'), launch.call_args.args[1][-1])
+        self.assertEqual(str(self.project.resolve() / '.symphony/WORKFLOW.md'), launch.call_args.args[1][-1])
         self.assertIn(symphony.PREVIEW_FLAG, launch.call_args.args[1])
 
     def test_setup_rejects_workspace_root_that_could_remove_interactive_project(self):

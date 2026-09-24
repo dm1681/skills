@@ -7,11 +7,13 @@ validation boundary is recorded first.
 The accepted handoff supersedes conflicting recommendations in the original
 [upstream assessment](symphony-upstream-assessment.md).
 
-## Current setup status — September 23, 2026
+## Current setup status — September 24, 2026 UTC
 
-**Implementation review passed; changes are ready for commit and push. Human
-acceptance and live dispatch remain separate gates.** All earlier blocked credential/template statements below
-are retained as history and are superseded by this section.
+**The reviewed integration was published as `17b578f` on main. The user approved
+landing by moving DIE-60 to Merging.** A CI portability repair follows that
+commit: use the latest remote main, GitHub run and live DIE-60 state as the
+completion evidence. Live dispatch still requires a separate explicit action.
+Earlier checkpoint statements below are historical.
 
 - WSL uv, gh and Graphify are installed. GitHub CLI is authenticated as dm1681;
   configured Codex login and repository SSH access are verified.
@@ -32,14 +34,21 @@ are retained as history and are superseded by this section.
   assignees and Backlog defaults. Master playbook is now version 1.4.
   [Template evidence](../templates/README.md). Existing DIE-58/DIE-59 were not
   changed; their separate scopes and authorization remain authoritative.
-- Final no-dispatch readiness returns 3 solely because DIE-60 is not Done after
-  human review. This is the intended gate, not an authentication/runtime failure.
-- Precommit validation: 17 skills; 525 tests, 524 passed and one Windows-only skip.
-  Full-suite log: `/tmp/skills-symphony-precommit-tests.log`.
-  Graphify AST update succeeded with the existing .toc partial-parse warning.
+- Before acceptance, no-dispatch readiness returned 3 solely because DIE-60 was
+  not Done. Rerun it after the issue is completed; setup/check never dispatch.
+- Initial remote CI for `17b578f` passed Linux and launcher jobs but failed
+  macOS/Windows. macOS exposed a noncanonical test path; Windows exposed both
+  path-separator assumptions and newline translation making generated-file
+  hashes disagree with the written bytes. No prior Windows cleanup error recurred.
+- The CI repair writes generated workflow bytes without host newline conversion
+  and corrects path assertions. A regression reproduced the hash failure on Linux
+  before the fix. Required local validation passed: 17 skills; 526 tests,
+  525 passed and one Windows-only skip. Log:
+  `/tmp/skills-symphony-ci-fix-tests.log`. Remote CI must verify the repaired head.
+- Graphify AST update succeeded with the existing .toc partial-parse warning.
   Real sandbox enforcement, exact skill discovery and app-server command execution
-  passed on the fixed project-local Codex. No live model-worker trial or remote
-  CI run is claimed.
+  passed on the fixed project-local Codex. No live model-worker trial, native
+  Windows Symphony support or other-device instruction loading is claimed.
 
 ### Precommit review — September 24, 2026 UTC
 
@@ -93,13 +102,12 @@ issues receive the updated text immediately. Existing copied issues do not.
 
 ## Exact next action and gates
 
-1. Commit and push the reviewed integration when requested. Changes remain
-   uncommitted on main at `d8641f5c793a510addb44a06cb42c7db6bc0af69`;
-   preserve the transferred pre-existing work. Review is complete; the commit/sync
-   boundary must be established before a remote-cloned worker uses these changes.
-2. Mark DIE-60 Done only after the human accepts the evidence; then rerun the
-   credential-loading readiness command above. Do not treat key provisioning
-   or template updates as approval of that evidence.
+1. Verify the latest local/remote main match and all CI jobs pass for that exact
+   commit. The CI portability repair follows the original `17b578f` integration.
+2. Read DIE-60's live state/evidence. The user's Merging transition is recorded
+   approval; after successful landing checks, mark Done if still Merging and
+   reread the issue. Preserve any intervening human state change. Rerun the
+   credential-loading readiness command above and record its result on DIE-60.
 3. Obtain a separate explicit start instruction before a bounded supervised
    issue trial. Setup is complete, but no worker has been dispatched and no
    unattended execution outcome has been validated.
