@@ -127,6 +127,8 @@ The core instruction skill is vendored from
 at commit `356918eba965ee1eac64bd3a7f0dd02108350de5`, with its MIT license
 included. Its upstream contents are pinned in `install.VENDORED_SKILLS` for
 offline drift detection; the provenance note in `SKILL.md` explains re-syncs.
+See [provenance, vetting, and validation](docs/ponytail.md) for the import scope
+and known instruction limitation.
 
 Install it through the existing installer:
 
