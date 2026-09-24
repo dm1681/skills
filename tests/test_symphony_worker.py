@@ -114,18 +114,29 @@ class WorkerTests(unittest.TestCase):
 
     @unittest.skipIf(os.name == "nt", "Linux/WSL process groups")
     def test_relay_signal_terminates_child(self):
-        process = self.relay('import os,time; print(os.getpid(),flush=True); time.sleep(60)')
-        try:
-            import select
-            self.assertTrue(select.select([process.stdout], [], [], 5)[0])
-            pid = int(process.stdout.readline())
-            process.send_signal(signal.SIGTERM)
-            process.communicate(timeout=8)
-            self.assertEqual(143, process.returncode)
-            with self.assertRaises(ProcessLookupError): os.kill(pid, 0)
-        finally:
-            if process.poll() is None:
-                process.kill(); process.communicate()
+        for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+            with self.subTest(signal=signum):
+                process = self.relay('import os,time; print(os.getpid(),flush=True); time.sleep(60)')
+                try:
+                    import select
+                    self.assertTrue(select.select([process.stdout], [], [], 5)[0])
+                    pid = int(process.stdout.readline())
+                    process.send_signal(signum)
+                    process.communicate(timeout=8)
+                    self.assertEqual(128 + signum, process.returncode)
+                    with self.assertRaises(ProcessLookupError): os.kill(pid, 0)
+                finally:
+                    if process.poll() is None:
+                        process.kill(); process.communicate()
+
+    @unittest.skipIf(os.name == "nt", "Linux/WSL stdio relay")
+    def test_real_child_does_not_inherit_git_routing_or_tracker_secret(self):
+        with mock.patch.dict(os.environ, {"GIT_DIR": "/wrong/git", "GIT_WORK_TREE": "/wrong/tree",
+                                         "GIT_INDEX_FILE": "/wrong/index", "LINEAR_API_KEY": "synthetic"}):
+            process = self.relay('import os; print(any(k.startswith("GIT_") or k == "LINEAR_API_KEY" for k in os.environ))')
+        output, errors = process.communicate(timeout=5)
+        self.assertEqual(0, process.returncode, errors)
+        self.assertEqual(b"False", output.strip())
 
     def test_worker_entrypoint_uses_adapter_and_keeps_native_codex_config(self):
         config = {"project_dir": str(self.project), "workspace_root": str(self.root), "codex": "/native/codex"}

@@ -10,6 +10,11 @@ import sys
 from pathlib import Path
 
 
+def worker_environment(env: dict) -> dict:
+    """Use repository Git configuration, not inherited shell routing overrides."""
+    return {key: value for key, value in env.items() if not key.startswith("GIT_") and key != "LINEAR_API_KEY"}
+
+
 def writable_roots(project: Path, root: Path, cwd: Path) -> list[str]:
     """Accept only a marked, standalone clone directly under the configured root."""
     for path in (project, root, cwd):
@@ -62,14 +67,14 @@ def prepare_request(line: bytes, project: Path, root: Path, cwd: Path) -> bytes:
 def run_server(command: list[str], project: Path, root: Path, cwd: Path, env: dict) -> int:
     """Relay requests only; native stdout/stderr go directly to Symphony."""
     writable_roots(project, root, cwd)
-    child = subprocess.Popen(command, cwd=cwd, env=env, stdin=subprocess.PIPE, start_new_session=True)
+    child = subprocess.Popen(command, cwd=cwd, env=worker_environment(env), stdin=subprocess.PIPE, start_new_session=True)
     previous = {}
 
     def interrupt(signum, _frame):
         raise SystemExit(128 + signum)
 
     try:
-        for signum in (signal.SIGTERM, signal.SIGINT):
+        for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
             previous[signum] = signal.signal(signum, interrupt)
         pending = b""
         while child.poll() is None:
@@ -130,7 +135,7 @@ for target in sys.argv[1:]:
     raise SystemExit("sandbox allowed a write outside the worker clone")
 print("git-isolation-ok")
 '''
-    env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_") and key != "LINEAR_API_KEY"}
+    env = worker_environment(os.environ)
     result = subprocess.run([
         codex, "-c", 'sandbox_mode="workspace-write"', "-c",
         "sandbox_workspace_write.writable_roots=" + json.dumps(policy["writableRoots"]),

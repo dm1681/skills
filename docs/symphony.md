@@ -143,6 +143,9 @@ are rejected. Approval, network and temporary-directory policies are preserved.
 The configured Codex executable stays native for login, help and discovery;
 projects do not need to replace it with their own Git adapter. The launcher
 relays JSON lines and cleans up its child process group on shutdown.
+SIGINT, SIGTERM and SIGHUP all use that cleanup. Both the real worker and readiness
+probe clear inherited `GIT_*` variables so a parent shell cannot redirect Git away
+from the validated clone; repository Git configuration remains available.
 
 Readiness now creates a disposable repository under the configured workspace root
 and uses the same validated roots to run a real native sandbox commit. It also
