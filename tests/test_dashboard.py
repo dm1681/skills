@@ -455,6 +455,20 @@ class DashboardTests(DashboardCase):
                 [row.skill for row in app.rows()], BUNDLED + EXTERNAL + [GLOBAL]
             )
 
+    async def test_ponytail_is_selectable_as_a_bundled_skill(self) -> None:
+        app = self.app()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            row = next(row for row in app.rows() if row.skill == "ponytail")
+            self.assertFalse(row.external)
+            app.selected.clear()
+            row.focus()
+            await pilot.press("space")
+            self.assertIn("ponytail", app.selected)
+            entry = next(entry for entry in app.plan() if entry[0] == "ponytail")
+            self.assertEqual("install", entry[2])
+            self.assertFalse(entry[3])
+
     async def test_down_moves_focus_even_when_the_list_overflows(self) -> None:
         """The scroll container must not swallow the arrow keys; it did once,
         whenever the list was long enough to scroll."""
