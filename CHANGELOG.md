@@ -7,6 +7,12 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Symphony integration and curated skills (pending major release)
 
+- Grant only a validated worker clone's Git metadata through the shared launcher;
+  reject redirected/shared metadata and unexpected writable roots. Readiness now
+  proves a native sandbox commit works and parent/sibling writes remain denied.
+- Use 30-second polling and Codex response deadlines for generated workflows to
+  reduce shared Linear quota pressure and tolerate thread startup latency.
+
 - Add project-only Linux/WSL Symphony setup, runtime installation, readiness and
   explicit start, plus a dashboard setup form. Start verifies the exact project's
   Done setup issue, required lifecycle states and local worker discovery/sandbox.

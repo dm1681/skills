@@ -79,6 +79,11 @@ or disable it with `--no-dashboard`; rerunning setup with `--port` enables it.
 The first pilot uses one concurrent worker and upstream's 20-turn invocation
 limit; that limit is not a task-wide cost or lifetime bound.
 
+Generated workflows poll every 30 seconds and allow 30 seconds for Codex protocol
+responses, including thread startup. Linear API-key quotas are shared per user
+across projects and keys, so account for every running service when tuning polling.
+Rerun setup to apply these defaults to an existing unedited managed workflow.
+
 ## Runtime provenance
 
 The upstream engine is pinned to
@@ -130,8 +135,24 @@ Changing a project's executable does not update a running desktop app's bundled
 backend; diagnose that backend separately. Do not disable sandboxing or unmount
 WSLg as a workaround.
 
-Readiness also exercises a disposable Linux sandbox command. A sandbox failure
-blocks start; host execution used by an interactive developer is not a substitute.
+The shared worker launcher grants Git access through `symphony_worker.py`. Before
+each `turn/start`, it validates the canonical workspace, project marker and real
+`.git` directory, then adds only the clone and its `.git` to the turn's writable
+roots. Linked worktrees, redirected or shared Git metadata, and unexpected roots
+are rejected. Approval, network and temporary-directory policies are preserved.
+The configured Codex executable stays native for login, help and discovery;
+projects do not need to replace it with their own Git adapter. The launcher
+relays JSON lines and cleans up its child process group on shutdown.
+
+Readiness now creates a disposable repository under the configured workspace root
+and uses the same validated roots to run a real native sandbox commit. It also
+proves parent and sibling writes fail. Git or isolation failure blocks start;
+host execution used by an interactive developer is not a substitute. A workspace
+root under a directory already writable by the sandbox (such as default `/tmp`)
+cannot pass that isolation proof. Use a dedicated workspace root instead.
+This check creates no model turn and does not fetch, push or change service state.
+Run the optional native regression explicitly with
+`SYMPHONY_TEST_CODEX=/absolute/path/to/codex uv run python -m unittest discover -s tests -p test_symphony_worker.py`.
 `check --offline` still checks local prerequisites and reports the unverified
 Linear gate, returning 3. Exit 0 means checks passed; 3 means not ready; 2 reports
 invalid configuration or a refused operation.
