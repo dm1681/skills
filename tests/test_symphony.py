@@ -196,6 +196,8 @@ class SymphonyTests(unittest.TestCase):
         self.assertFalse((issue/'.agents/skills/implement').exists())
         self.assertTrue((issue/'.agents/skills/land/land_watch.py').is_file())
         self.assertEqual('', subprocess.check_output(['git','status','--porcelain'],cwd=issue,text=True).strip())
+        self.assertEqual([str(issue.resolve()), str(issue.resolve() / '.git')],
+                         symphony.symphony_worker.writable_roots(self.project.resolve(), issue.parent.resolve(), issue.resolve()))
         with mock.patch.object(Path,'cwd',return_value=issue), self.assertRaisesRegex(install.InstallError,'not empty'):
             symphony.prepare_workspace(self.project)
 
