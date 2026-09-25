@@ -5,12 +5,19 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+- Add a read-only machine-wide Symphony web monitor with local endpoint registration,
+  isolated polling, freshness/coverage reporting and synthetic browser validation.
+  Linux/WSL only; project execution and readiness remain unchanged.
+
+
 ### Symphony integration and curated skills (pending major release)
 
 - Report startup, Git/isolation, account access, bootstrap and worker delivery as
   separate readiness evidence, including explicit skipped checks. Add opt-in
   bounded fresh-clone validation and a synthetic worker-to-draft-PR rehearsal
   with durable receipts, retained artifacts and a Human Review boundary.
+  Keep publication credentials out of the rehearsal model environment and validate
+  its recorded commit in a separate clone, excluding worker-controlled local files.
 
 - Add optional fresh-worker bootstrap declarations for preinstalled Python,
   locked uv dependencies, explicit download policy, writable workspace caches and
