@@ -7,6 +7,9 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Symphony integration and curated skills (pending major release)
 
+- Add optional fresh-worker bootstrap declarations for preinstalled Python,
+  locked uv dependencies, explicit download policy, writable workspace caches and
+  required tools; source-only projects keep their existing setup behavior.
 - Grant only a validated worker clone's Git metadata through the shared launcher;
   reject redirected/shared metadata and unexpected writable roots. Readiness now
   proves a native sandbox commit works and parent/sibling writes remain denied.

@@ -79,6 +79,68 @@ or disable it with `--no-dashboard`; rerunning setup with `--port` enables it.
 The first pilot uses one concurrent worker and upstream's 20-turn invocation
 limit; that limit is not a task-wide cost or lifetime bound.
 
+## Fresh-worker bootstrap
+
+Source-only projects need no extra configuration. For Python dependencies, keep
+a small JSON declaration in the project and import it during setup:
+
+```json
+{
+  "python": "/usr/bin/python3.12",
+  "python_version": "3.12",
+  "dependencies": "uv",
+  "download_policy": "never",
+  "cache_dir": ".symphony-cache",
+  "required_tools": ["git"],
+  "timeout_seconds": 300
+}
+```
+
+```sh
+skills symphony setup --project-dir /path/to/project \
+  --bootstrap-file /path/to/project/worker-bootstrap.json \
+  --validation-command 'uv run --no-sync python -m unittest discover -s tests'
+```
+
+Setup copies the declaration into local `.symphony/project.json`; it does not run
+it, install dependencies or start a service. Reimport after changing the JSON.
+Other setup calls (including dashboard saves) preserve it; importing `{}` removes
+the bootstrap requirements. Old configurations remain valid. Machine-specific
+interpreter paths belong in local configuration; portable declarations can use a
+PATH executable name. Readiness checks probe local prerequisites and cache access,
+but only a fresh issue clone proves dependency bootstrap succeeds.
+
+The hook checks a **preinstalled** Python with an optional exact major.minor or
+major.minor.patch match. It never downloads an interpreter. `dependencies` is
+`none` by default; `uv` requires preinstalled uv and committed `pyproject.toml`
+and `uv.lock`, then runs `uv sync --locked --python <selected> --no-python-downloads`.
+`download_policy` defaults to `never`, adding `--offline`; choose `allow` explicitly
+to permit uv dependency downloads. A missing/stale lock or missing offline package
+fails bootstrap instead of silently regenerating the lock. uv offline mode controls
+uv's network use, not arbitrary network activity in project build scripts.
+The repository clone itself still uses the configured Git transport.
+
+Caches must be workspace-relative (default `.symphony-cache`), resolve inside the
+clone and pass an actual write probe. The same `UV_CACHE_DIR`, `PIP_CACHE_DIR`,
+`XDG_CACHE_HOME`, `UV_PYTHON`, `UV_PYTHON_DOWNLOADS`, `UV_OFFLINE` and workspace-local
+`UV_PROJECT_ENVIRONMENT` reach the bootstrap and worker. Offline dependency projects
+must supply local dependency artifacts in the clone, or explicitly allow the initial
+download; an empty fresh cache cannot satisfy uncached third-party dependencies.
+The hook does not reuse or write the interactive checkout's cache. Interactive
+`VIRTUAL_ENV`, `PYTHONHOME` and `PYTHONPATH` are removed. Use `uv run --no-sync` for
+the prepared venv, or `"$SYMPHONY_PYTHON"` for the selected base interpreter in validation
+commands; bare `python` still follows PATH. Worker cache and venv are Git-excluded.
+
+Optional `required_tools` names/absolute paths are checked without invoking them.
+Browser, media and model tooling stays project-owned: the shared hook does not
+install browsers, download models or launch applications. Dependency installers can
+execute project build steps, so bootstrap is for trusted dependency definitions.
+Failures identify the interpreter/tool, cache or locked-sync blocker. Dependency
+sync has a configurable 1–3600 second timeout; generated hook timeouts allow another
+60 seconds for clone/provisioning. A failed bootstrap produces no ready worker marker.
+Changing bootstrap settings requires reprovisioning existing issue workspaces;
+the launcher rejects mismatched declarations instead of using stale dependencies.
+
 Generated workflows poll every 30 seconds and allow 30 seconds for Codex protocol
 responses, including thread startup. Linear API-key quotas are shared per user
 across projects and keys, so account for every running service when tuning polling.
