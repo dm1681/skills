@@ -623,6 +623,7 @@ def dispatch(args) -> int:
         if args.offline:
             problems = check(project, remote=False)
         else:
+            load(project)
             import symphony_linear
             try:
                 problems = symphony_linear.check_project(project)
