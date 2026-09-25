@@ -110,30 +110,18 @@ class SymphonyTests(unittest.TestCase):
                 symphony.linear_gate(self.config)
         self.assertNotIn('test-secret', symphony.config_path(self.project).read_text())
 
-    def test_start_does_not_exec_if_gate_or_readiness_fails(self):
-        with mock.patch.object(symphony, 'check', return_value=['Setup issue must be Done']), mock.patch.object(os, 'execv') as launch:
-            with self.assertRaises(install.InstallError):
-                symphony.start(self.project, accept_preview=True)
-        launch.assert_not_called()
-
-    @mock.patch("symphony_registry.register_config")
-    def test_start_requires_preview_acknowledgement_and_passes_managed_workflow(self, register):
-        with mock.patch.object(symphony, 'check', return_value=[]), mock.patch.object(os, 'execv') as launch:
+    def test_start_requires_preview_acknowledgement_and_uses_linear_app(self):
+        with mock.patch('symphony_linear.run', return_value=0) as launch:
             with self.assertRaisesRegex(install.InstallError, 'accept-preview'):
                 symphony.start(self.project)
             launch.assert_not_called()
-            register.assert_not_called()
-            symphony.start(self.project, accept_preview=True)
-            register.assert_called_once_with(self.config)
-        self.assertEqual(str(self.project.resolve() / '.symphony/WORKFLOW.md'), launch.call_args.args[1][-1])
-        self.assertIn(symphony.PREVIEW_FLAG, launch.call_args.args[1])
+            self.assertEqual(0, symphony.start(self.project, accept_preview=True))
+            launch.assert_called_once_with(self.project, __import__('symphony_linear').DEFAULT_FILE, True)
 
-    def test_monitoring_metadata_failure_does_not_add_a_startup_gate(self):
-        with mock.patch.object(symphony, "check", return_value=[]), mock.patch("symphony_registry.register_config", side_effect=OSError("private diagnostic")), mock.patch.object(os, "execv") as launch, contextlib.redirect_stderr(io.StringIO()) as output:
-            symphony.start(self.project, accept_preview=True)
-        launch.assert_called_once()
-        self.assertIn("monitoring registration unavailable", output.getvalue())
-        self.assertNotIn("private diagnostic", output.getvalue())
+    def test_online_cli_check_uses_linear_app(self):
+        with mock.patch('symphony_linear.check_project', return_value=[]) as check, contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(0, skills_cli.main(['symphony', 'check', '--project-dir', str(self.project)]))
+        check.assert_called_once_with(self.project.resolve())
 
     def test_setup_rejects_workspace_root_that_could_remove_interactive_project(self):
         for path in [self.project, self.project.parent]:
@@ -209,8 +197,6 @@ class SymphonyTests(unittest.TestCase):
         self.assertFalse((issue/'.agents/skills/implement').exists())
         self.assertTrue((issue/'.agents/skills/land/land_watch.py').is_file())
         self.assertEqual('', subprocess.check_output(['git','status','--porcelain'],cwd=issue,text=True).strip())
-        self.assertEqual([str(issue.resolve()), str(issue.resolve() / '.git')],
-                         symphony.symphony_worker.writable_roots(self.project.resolve(), issue.parent.resolve(), issue.resolve()))
         with mock.patch.object(Path,'cwd',return_value=issue), self.assertRaisesRegex(install.InstallError,'not empty'):
             symphony.prepare_workspace(self.project)
 
@@ -219,10 +205,10 @@ class SymphonyTests(unittest.TestCase):
         rows = [{'name': name, 'path': str(self.project / '.agents/skills' / name / 'SKILL.md'), 'enabled': True} for name in names]
         unwanted = {'name': 'viz-driven-dev', 'path': str(self.project / 'elsewhere/SKILL.md'), 'enabled': True}
         with mock.patch.object(symphony, 'skills_list', side_effect=[rows+[unwanted], rows+[{**unwanted,'enabled':False}]]):
-            flags = symphony.worker_overrides({'codex':'codex'}, self.project)
+            flags = symphony.worker_overrides({'codex':'codex', 'model_routing':'off'}, self.project)
         self.assertIn('enabled=false', flags[1])
         with mock.patch.object(symphony, 'skills_list', return_value=rows+[unwanted]), self.assertRaisesRegex(install.InstallError, 'refusing worker launch'):
-            symphony.worker_overrides({'codex':'codex'}, self.project)
+            symphony.worker_overrides({'codex':'codex', 'model_routing':'off'}, self.project)
 
 
 class AuthenticationTests(unittest.TestCase):

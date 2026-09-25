@@ -22,6 +22,7 @@ import symphony_artifacts
 import symphony_bootstrap
 import symphony_worker
 import symphony_identity
+import symphony_models
 
 REVISION = "be10a1b79df723d6d7612b5651c8522704dafb2e"
 UPSTREAM = "https://github.com/openai/symphony.git"
@@ -83,6 +84,8 @@ def validate_config(config: dict) -> None:
         raise Error("Workspace root must not be the interactive project or its ancestor")
     if config["revision"] != REVISION:
         raise Error("Runtime revision differs from the supported pin")
+    if config.get("model_routing", "auto") not in ("auto", "off"):
+        raise Error("model_routing must be auto or off")
     symphony_identity.validate(config)
     symphony_artifacts.validate(config)
 
@@ -122,7 +125,7 @@ def setup(project: Path, **options) -> dict:
         "codex": shutil.which("codex") or "codex", "dashboard_port": 8788,
         "workspace_root": str(project / ".symphony" / "workspaces"),
         "revision": REVISION, "repo_url": "", "base_branch": "main",
-        "validation_command": "", "generated": {},
+        "validation_command": "", "model_routing": "auto", "generated": {},
     }
     dashboard_enabled = options.pop("dashboard_enabled", None)
     for key, value in options.items():
@@ -162,7 +165,7 @@ def render_workflow(config: dict) -> str:
         "hooks": {"after_create": command_string(config, "prepare-workspace")},
         "agent": {"max_concurrent_agents": 1, "max_turns": 20},
         "codex": {"command": command_string(config, "worker"), "approval_policy": "never", "read_timeout_ms": 30000,
-                  "thread_sandbox": "workspace-write", "turn_sandbox_policy": {"type": "workspaceWrite", "networkAccess": True}},
+                  "thread_sandbox": "danger-full-access", "turn_sandbox_policy": {"type": "dangerFullAccess"}},
         "server": {"host": "127.0.0.1", "port": config["dashboard_port"]},
     }
     if config.get("bootstrap", {}).get("dependencies") == "uv":
@@ -180,7 +183,7 @@ def linear_gate(config: dict, query=None) -> dict:
         if not token:
             raise Error("LINEAR_API_KEY is unavailable; setup issue cannot be verified")
         def query(document, variables):
-            request = urllib.request.Request("https://api.linear.app/graphql", data=json.dumps({"query": document, "variables": variables}).encode(), headers={"Content-Type": "application/json", "Authorization": token})
+            request = urllib.request.Request(os.environ.get("SYMPHONY_LINEAR_ENDPOINT", "https://api.linear.app/graphql"), data=json.dumps({"query": document, "variables": variables}).encode(), headers={"Content-Type": "application/json", "Authorization": token})
             try:
                 with urllib.request.urlopen(request, timeout=20) as response:
                     value = json.load(response)
@@ -286,7 +289,7 @@ def build_runtime(project: Path) -> None:
 
 
 def probe_worker(config: dict) -> list[str]:
-    """Exercise discovery and the configured Linux sandbox without a model turn."""
+    """Check worker skill and model discovery without a model turn."""
     problems = []
     try:
         env = symphony_identity.environment(config, credentials=False)
@@ -313,12 +316,11 @@ def probe_worker(config: dict) -> list[str]:
             worker_overrides(config, cwd, env=env)
         except (Error, OSError) as exc:
             problems.append("Worker discovery failed: " + str(exc))
-        try:
-            symphony_worker.probe_git(config["codex"], Path(config["project_dir"]), root, cwd, env=env)
-            if config.get(symphony_artifacts.FIELD):
+        if config.get(symphony_artifacts.FIELD):
+            try:
                 symphony_artifacts.probe(config["codex"], cwd, symphony_worker.worker_environment(env))
-        except (Error, OSError, ValueError, subprocess.TimeoutExpired) as exc:
-            problems.append("Worker Git/isolation probe failed: " + str(exc))
+            except (Error, OSError, ValueError, subprocess.TimeoutExpired) as exc:
+                problems.append("Artifact credential check failed: " + str(exc))
     return problems
 
 
@@ -439,7 +441,7 @@ def prepare_workspace(project: Path) -> None:
             stream.write("/" + bootstrap.get("cache_dir", ".symphony-cache") + "/\n/.venv/\n")
 
 
-def skills_list(codex: str, cwd: Path, overrides=(), timeout=20, *, env=None) -> list[dict]:
+def skills_list(codex: str, cwd: Path, overrides=(), timeout=20, *, env=None, method="skills/list") -> list[dict]:
     """Protocol-only discovery: no thread or model turn, bounded process lifetime."""
     command = [codex, *overrides, "app-server"]
     env = symphony_worker.worker_environment(dict(os.environ if env is None else env))
@@ -472,9 +474,13 @@ def skills_list(codex: str, cwd: Path, overrides=(), timeout=20, *, env=None) ->
                         raise Error("Codex rejected the worker skill-discovery request")
                     if message.get("id") == 1:
                         send({"method": "initialized", "params": {}})
-                        send({"id": 2, "method": "skills/list", "params": {"cwds": [str(cwd)], "forceReload": True}})
+                        send({"id": 2, "method": method, "params": {"cwds": [str(cwd)], "forceReload": True} if method == "skills/list" else {"limit": 100, "includeHidden": False}})
                     elif message.get("id") == 2:
                         entries = message.get("result", {}).get("data", [])
+                        if method in ("model/list", "mcpServerStatus/list"):
+                            if message["result"].get("nextCursor"):
+                                raise Error("Codex protocol discovery is incomplete")
+                            return entries
                         if len(entries) != 1 or entries[0].get("errors"):
                             raise Error("Codex returned incomplete or invalid skill discovery")
                         return entries[0]["skills"]
@@ -495,6 +501,8 @@ def worker_overrides(config: dict, cwd: Path, *, env=None) -> list[str]:
     # credentials; live launch can reuse the already verified scoped identity.
     if env is None:
         env = symphony_identity.environment(config, credentials=False)
+    if config.get("model_routing", "auto") == "auto":
+        symphony_models.validate_catalog(skills_list(config["codex"], cwd, env=env, method="model/list"))
     allowed = {str((cwd / ".agents" / "skills" / name / "SKILL.md").resolve()) for name in WORKER_SKILLS + DELIVERY_SKILLS}
     discovered = skills_list(config["codex"], cwd, env=env)
     paths = {str(Path(row["path"]).resolve()) for row in discovered}
@@ -542,29 +550,28 @@ def run_worker(project: Path) -> None:
     provision_missing_worker_skills(cwd)
     env["SKILLS_SESSION_KIND"] = "symphony"
     overrides = worker_overrides(config, cwd, env=env)
+    if os.environ.get("SYMPHONY_LINEAR_APP") == "1":
+        overrides += ["-c", "features.apps=false"]
+        servers = skills_list(config["codex"], cwd, overrides, env=env, method="mcpServerStatus/list")
+        for server in servers:
+            if "linear" in json.dumps(server).lower() or server.get("name") == "codex_apps":
+                raise Error("Personal Linear MCP/app connection remains available; refusing app worker")
+    routing = symphony_models.Router(project.resolve(), cwd) if config.get("model_routing", "auto") == "auto" else None
     try:
-        code = symphony_worker.run_server([config["codex"], *overrides, "app-server"],
-                                         project.resolve(), Path(config["workspace_root"]), cwd, env)
+        code = symphony_worker.run_server([config["codex"], *overrides, "app-server"], cwd, env, routing=routing)
     except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
-        raise Error("Worker Git adapter refused launch/request: " + type(exc).__name__) from exc
+        raise Error("Worker launcher failed: " + type(exc).__name__) from exc
     raise SystemExit(code if code >= 0 else 128 - code)
 
 
-def start(project: Path, *, accept_preview=False) -> None:
+def start(project: Path, *, accept_preview=False) -> int:
     if not accept_preview:
         raise Error("Explicit start requires --accept-preview to acknowledge upstream's engineering preview")
-    problems = check(project)
-    if problems:
-        raise Error("Not ready:\n- " + "\n- ".join(problems))
-    config = load(project)
-    binary = runtime_binary(config)
-    import symphony_registry
+    import symphony_linear
     try:
-        symphony_registry.register_config(config)
-    except (OSError, ValueError):
-        print("Warning: monitoring registration unavailable; import this endpoint later with skills symphony register.", file=sys.stderr)
-    # Exec preserves upstream signal/cancellation handling; no second scheduler.
-    os.execv(str(binary), [str(binary), PREVIEW_FLAG, str(project.resolve() / ".symphony" / "WORKFLOW.md")])
+        return symphony_linear.run(project, symphony_linear.DEFAULT_FILE, accept_preview)
+    except (symphony_linear.Error, OSError, ValueError, KeyError) as exc:
+        raise Error("Symphony Linear app start failed; check app credentials and project access") from exc
 
 
 def add_parser(subcommands):
@@ -580,6 +587,7 @@ def add_parser(subcommands):
             for field in symphony_identity.FIELDS:
                 child.add_argument("--" + field.replace("_", "-"))
             child.add_argument("--artifact-publish-token-file", help="external owner-only upload key file; never the key value")
+            child.add_argument("--model-routing", choices=("auto", "off"))
             child.add_argument("--port", type=int, dest="dashboard_port")
             child.add_argument("--no-dashboard", action="store_true")
             child.add_argument("--bootstrap-file", type=Path, help="JSON worker prerequisites; {} disables bootstrap")
@@ -596,7 +604,7 @@ def dispatch(args) -> int:
     project = args.project_dir.resolve()
     action = args.symphony_action
     if action == "setup":
-        options = {key: getattr(args, key, None) for key in ("project_id", "project_slug", "setup_issue", "repo_url", "runtime_source", "workspace_root", "codex", "base_branch", "validation_command", "dashboard_port", "artifact_publish_token_file")}
+        options = {key: getattr(args, key, None) for key in ("project_id", "project_slug", "setup_issue", "repo_url", "runtime_source", "workspace_root", "codex", "base_branch", "validation_command", "dashboard_port", "artifact_publish_token_file", "model_routing")}
         options.update({key: getattr(args, key, None) for key in symphony_identity.FIELDS})
         if getattr(args, "no_dashboard", False):
             options["dashboard_enabled"] = False
@@ -612,7 +620,15 @@ def dispatch(args) -> int:
     elif action == "build-runtime":
         build_runtime(project)
     elif action == "check":
-        problems = check(project, remote=not args.offline)
+        if args.offline:
+            problems = check(project, remote=False)
+        else:
+            load(project)
+            import symphony_linear
+            try:
+                problems = symphony_linear.check_project(project)
+            except (symphony_linear.Error, OSError, ValueError, KeyError):
+                problems = ["Symphony Linear app credentials or workspace access are unavailable"]
         print("\n".join("not ready: " + problem for problem in problems) if problems else "Ready to start explicitly; no workers started.")
         return 3 if problems else 0
     elif action in ("check-git", "check-pr"):
@@ -621,7 +637,7 @@ def dispatch(args) -> int:
               "Read-only access check passed; no remote writes or workers started.")
         return 3 if problems else 0
     elif action == "start":
-        start(project, accept_preview=args.accept_preview)
+        return start(project, accept_preview=args.accept_preview)
     return 0
 
 
