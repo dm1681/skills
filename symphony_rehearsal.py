@@ -151,8 +151,22 @@ def isolated_environment(env):
     allowed = {"HOME", "PATH", "LANG", "TERM", "USER", "LOGNAME", "CODEX_HOME", "CODEX_SQLITE_HOME",
                "XDG_RUNTIME_DIR", "XDG_CACHE_HOME", "UV_CACHE_DIR", "PIP_CACHE_DIR", "UV_OFFLINE",
                "UV_PYTHON_DOWNLOADS", "UV_PROJECT_ENVIRONMENT", "SYMPHONY_PYTHON"}
-    return {key: value for key, value in symphony_worker.worker_environment(env).items()
-            if key in allowed or key.startswith("LC_")}
+    result = {key: value for key, value in symphony_worker.worker_environment(env).items()
+              if key in allowed or key.startswith("LC_")}
+    result["PATH"] = os.pathsep.join(part for part in result.get("PATH", os.defpath).split(os.pathsep)
+                                     if Path(part).is_absolute())
+    return result
+
+
+def controller_binary(name, env, cwd):
+    """Resolve a controller tool before the worker can add executables to its clone."""
+    for directory in env.get("PATH", os.defpath).split(os.pathsep):
+        if not Path(directory).is_absolute():
+            continue
+        candidate = (Path(directory) / name).resolve()
+        if candidate.is_file() and os.access(candidate, os.X_OK) and candidate != cwd and cwd not in candidate.parents:
+            return str(candidate)
+    raise Error(f"Controller tool unavailable outside the worker workspace: {name}")
 
 
 def validate(config, project, cwd, env, deadline):
@@ -161,19 +175,19 @@ def validate(config, project, cwd, env, deadline):
     run(["bash", "-lc", config["validation_command"]], cwd, isolated_environment(env), deadline)
 
 
-def validate_commit(config, project, cwd, env, deadline, base, head, marker, expected):
+def validate_commit(config, project, cwd, env, deadline, base, head, marker, expected, git_binary):
     """Reprovision trusted base; never copy the worker's index or ignored files."""
     with tempfile.TemporaryDirectory(dir=cwd.parent, prefix="validation-") as raw:
         clean = Path(raw).resolve()
         clean_env = provision(project, config, clean, env, deadline)
         def git(*args):
-            return run(["git", "-c", "core.hooksPath=/dev/null", *args], clean, clean_env, deadline)
+            return run([git_binary, "-c", "core.hooksPath=/dev/null", *args], clean, clean_env, deadline)
         if git("rev-parse", "HEAD") != base:
             raise Error("Repository base moved during rehearsal; explicitly start a new run")
         # Fetch objects over Git transport, without copying worker metadata.
         git("fetch", "--no-tags", str(cwd), head)
         git("checkout", "--detach", head)
-        committed = run(["git", "-c", "core.hooksPath=/dev/null", "show", f"{head}:{marker}"],
+        committed = run([git_binary, "-c", "core.hooksPath=/dev/null", "show", f"{head}:{marker}"],
                         clean, clean_env, deadline, strip=False)
         if committed != expected:
             raise Error("Committed rehearsal marker differs from the requested content")
@@ -184,14 +198,14 @@ def validate_commit(config, project, cwd, env, deadline, base, head, marker, exp
             raise Error("Validation changed tracked files in the recorded commit")
 
 
-def push_validated(config, cwd, env, deadline, head, branch):
+def push_validated(config, cwd, env, deadline, head, branch, git_binary):
     """Publish from fresh controller-owned Git metadata, never the worker's origin."""
     with tempfile.TemporaryDirectory(dir=cwd.parent, prefix="publication-") as raw:
         clean = Path(raw).resolve()
-        run(["git", "-c", "core.hooksPath=/dev/null", "clone", "--no-hardlinks", "--no-checkout",
+        run([git_binary, "-c", "core.hooksPath=/dev/null", "clone", "--no-hardlinks", "--no-checkout",
              "--", symphony_identity.clone_url(config), str(clean)], cwd.parent, env, deadline)
         def git(*args):
-            return run(["git", "-c", "core.hooksPath=/dev/null", *args], clean, env, deadline)
+            return run([git_binary, "-c", "core.hooksPath=/dev/null", *args], clean, env, deadline)
         git("fetch", "--no-tags", str(cwd), head)
         git("push", "origin", head + ":refs/heads/" + branch)
 
@@ -211,7 +225,13 @@ def validate_fresh_clone(project: Path, *, timeout=300):
             cwd = Path(raw).resolve()
             record["workspace"] = str(cwd)
             env = stage(path, record, "bootstrap", lambda: provision(project, config, cwd, env, deadline))
-            stage(path, record, "validation", lambda: validate(config, project, cwd, env, deadline))
+            def validate_clean():
+                validate(config, project, cwd, env, deadline)
+                git_binary = controller_binary("git", isolated_environment(env), cwd)
+                if run([git_binary, "-c", "core.hooksPath=/dev/null", "status", "--porcelain", "--untracked-files=no"],
+                       cwd, isolated_environment(env), deadline):
+                    raise Error("Validation changed tracked files in the fresh clone")
+            stage(path, record, "validation", validate_clean)
         record.update(status="pass", local_cleanup="complete")
         save(path, record)
         return path
@@ -223,8 +243,12 @@ def validate_fresh_clone(project: Path, *, timeout=300):
 
 def model_turn(config, project, cwd, env, prompt, deadline):
     """One native app-server turn using production skill selection and Git policy."""
-    import symphony_project as s
     env = isolated_environment(env)
+    for role in ("AUTHOR", "COMMITTER"):
+        if config.get("git_author_name"):
+            env[f"GIT_{role}_NAME"] = config["git_author_name"]
+            env[f"GIT_{role}_EMAIL"] = config["git_author_email"]
+    import symphony_project as s
     overrides = s.worker_overrides(config, cwd, env=env)
     env["SKILLS_SESSION_KIND"] = "symphony"
     proc = subprocess.Popen([config["codex"], *overrides, "app-server"], cwd=cwd, env=env,
@@ -268,7 +292,7 @@ def model_turn(config, project, cwd, env, prompt, deadline):
                     thread_id = message["result"]["thread"]["id"]
                     send({"id": 3, "method": "turn/start", "params": {
                         "threadId": thread_id, "cwd": str(cwd), "approvalPolicy": "never",
-                        "sandboxPolicy": {"type": "workspaceWrite", "networkAccess": False,
+                        "sandboxPolicy": {"type": "workspaceWrite", "networkAccess": True,
                                           "excludeTmpdirEnvVar": True, "excludeSlashTmp": True},
                         "input": [{"type": "text", "text": prompt}]}})
                 elif message.get("id") == 3:
@@ -311,6 +335,8 @@ def rehearse(project: Path, *, accept=False, timeout=300):
                 raise Error("; ".join(issues))
             return symphony_identity.environment(config)
         env = stage(path, record, "account_repository_access", access)
+        git_binary = controller_binary("git", env, cwd)
+        gh_binary = controller_binary("gh", env, cwd)
         cwd.mkdir(parents=True)
         env = stage(path, record, "bootstrap", lambda: provision(project, config, cwd, env, deadline))
         git_config = (cwd / ".git/config").read_bytes()
@@ -319,7 +345,7 @@ def rehearse(project: Path, *, accept=False, timeout=300):
             symphony_worker.writable_roots(project, root.resolve(), cwd)
             if (cwd / ".git/config").read_bytes() != git_config or (cwd / ".git/info/grafts").exists():
                 raise Error("Worker changed Git configuration; refusing controller Git commands")
-            return run(["git", "-c", "core.hooksPath=/dev/null", *args], cwd, env, deadline)
+            return run([git_binary, "-c", "core.hooksPath=/dev/null", *args], cwd, env, deadline)
         base = git("rev-parse", "HEAD")
         record["base_sha"] = base
         marker = "symphony-rehearsal.txt"
@@ -350,23 +376,23 @@ def rehearse(project: Path, *, accept=False, timeout=300):
             return head
         record["head_sha"] = stage(path, record, "synthetic_commit", verify)
         stage(path, record, "validation", lambda: validate_commit(
-            config, project, cwd, env, deadline, base, record["head_sha"], marker, expected))
+            config, project, cwd, env, deadline, base, record["head_sha"], marker, expected, git_binary))
         if verify() != record["head_sha"]:
             raise Error("Validation changed the synthetic commit")
-        stage(path, record, "push", lambda: push_validated(config, cwd, env, deadline, record["head_sha"], branch))
+        stage(path, record, "push", lambda: push_validated(config, cwd, env, deadline, record["head_sha"], branch, git_binary))
         def publish():
             body = path.parent / "pr-body.md"
             body.write_text("Synthetic Symphony readiness rehearsal. One worker-created marker commit and declared validation passed.\n\nHuman Review required. Close this PR after inspection; do not merge. No service was changed.\n")
-            url = run(["gh", "pr", "create", "--repo", config["github_repo"], "--base", config["base_branch"],
+            url = run([gh_binary, "pr", "create", "--repo", config["github_repo"], "--base", config["base_branch"],
                         "--head", branch, "--draft", "--title", "Symphony synthetic readiness rehearsal",
-                        "--body-file", str(body)], cwd, env, deadline)
+                        "--body-file", str(body)], path.parent, env, deadline)
             if not re.fullmatch(r"https://github\.com/" + re.escape(config["github_repo"]) + r"/pull/[0-9]+", url):
                 raise Error("PR creation returned an unexpected URL; inspect the recorded branch")
             return url
         record["pr_url"] = stage(path, record, "draft_pr", publish)
         def readback():
-            result = json.loads(run(["gh", "pr", "view", branch, "--repo", config["github_repo"],
-                       "--json", "url,state,isDraft,headRefOid,baseRefName,baseRefOid"], cwd, env, deadline))
+            result = json.loads(run([gh_binary, "pr", "view", branch, "--repo", config["github_repo"],
+                       "--json", "url,state,isDraft,headRefOid,baseRefName,baseRefOid"], path.parent, env, deadline))
             if (result.get("state") != "OPEN" or not result.get("isDraft") or
                     result.get("headRefOid") != record["head_sha"] or result.get("baseRefName") != config["base_branch"] or
                     result.get("baseRefOid") != record["base_sha"] or

@@ -358,10 +358,11 @@ skills symphony rehearse --project-dir /path/to/project \
 Configure the explicit repository/account/provider first. The rehearsal creates a
 unique isolated `codex/rehearsal-<id>` branch using the normal provisioning hook.
 It runs one native app-server turn with production skill selection and validated
-Git roots, no interactive approval and no worker network access. Discovery, the
+Git roots, no interactive approval and the same network access as a normal worker. Discovery, the
 model process and clean-clone validation receive only allowlisted runtime variables;
 authenticated environments stay with controller Git/PR operations.
-This does not isolate readable host credential files from trusted local tools.
+The model retains its configured Codex tools and can contact external services.
+The synthetic prompt forbids that contact; the rehearsal does not enforce the prompt as a network boundary.
 The synthetic task commits only `symphony-rehearsal.txt`. The controller checks the branch,
 origin, committed content, exact base parent, single commit and clean tree. It
 reprovisions the trusted base in a separate temporary clone, fetches the recorded
