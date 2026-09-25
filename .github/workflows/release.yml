@@ -69,7 +69,7 @@ jobs:
           # dashboard, `global/` is read by `--global-instructions`, and
           # `scripts/` holds the SessionStart hook `--cloud-bootstrap` registers.
           # Omitting any of them leaves an archive whose installer half-works.
-          cp -R skills docs scripts global templates curated-skills.json symphony_project.py symphony_registry.py symphony_monitor.py symphony_dashboard.py symphony_worker.py symphony_bootstrap.py symphony_identity.py symphony_readiness.py symphony_rehearsal.py install.py install.sh install.ps1 skills_cli.py skills_tui.py pyproject.toml uv.lock .python-version VERSION CHANGELOG.md README.md RELEASING.md AGENTS.md CLAUDE.md "dist/staging/${root}/"
+          cp -R skills docs scripts global templates curated-skills.json symphony_project.py symphony_artifacts.py symphony_registry.py symphony_monitor.py symphony_dashboard.py symphony_worker.py symphony_bootstrap.py symphony_identity.py symphony_readiness.py symphony_rehearsal.py install.py install.sh install.ps1 skills_cli.py skills_tui.py pyproject.toml uv.lock .python-version VERSION CHANGELOG.md README.md RELEASING.md AGENTS.md CLAUDE.md "dist/staging/${root}/"
           tar -C dist/staging -czf "dist/${root}.tar.gz" "$root"
           (cd dist/staging && zip -qr "../${root}.zip" "$root")
           (cd dist && sha256sum "${root}.tar.gz" "${root}.zip" > SHA256SUMS)

@@ -428,6 +428,43 @@ Use project membership, actual blocks/blocked-by dependencies, nonblocking relat
 links, the attached PR and persistent workpad. There is no need to link every task
 to the setup issue; the project startup gate checks that prerequisite.
 
+## Artifact publishing and Ponytail
+
+Workers include `ponytail` and `cloudflare-artifacts` in their explicit skill
+allowlist. New clones receive them during provisioning; resumed clones install
+missing allowlisted skills at launch without replacing existing skill edits.
+An already-running worker keeps the skill selection from its original launch.
+
+Cloudflare Artifacts uses an upload-only **artifact-library publishing key**,
+not a Cloudflare account API token. Keep it in an owner-only file outside the
+repository and all worker directories (0600 on Linux/WSL, in a private directory).
+The complete setup command is:
+
+```sh
+skills symphony setup --project-dir /path/to/project \
+  --artifact-publish-token-file /home/user/.config/cloudflare-artifacts/publisher-token
+skills symphony check --project-dir /path/to/project
+```
+
+Only the file path is saved in project configuration. The launcher supplies
+`ARTIFACT_PUBLISH_TOKEN_FILE` to that project's worker; it removes an inherited
+raw `ARTIFACT_PUBLISH_TOKEN` when a file is explicitly selected. Token values are
+never written to workflow prompts, repository files or command arguments.
+Install Node.js 22 or newer on the service's PATH. Readiness checks the file's
+location, ownership, permissions and format, checks Node, and verifies the key
+is readable inside the native worker sandbox without publishing an artifact.
+It does not prove that the remote service still accepts the key; actual uploads
+must still return the client's verified public URL.
+
+For an existing host, use its existing artifact-library publishing credential.
+For a new host, follow the skill's `references/credentials.md` to obtain an
+upload-only key from the library administrator. Do not provision a general
+Cloudflare account token. Publishing remains subject to the issue's authorized
+public-sharing scope; credential availability does not make private inputs or
+media publishable. Clear the configured path with `--artifact-publish-token-file
+""` to return to inherited credential settings. An inherited token or token-file
+environment variable must also be removed to revoke worker access entirely.
+
 ## Machine-wide monitoring (Linux / WSL)
 
 Launch the shared, read-only monitor from **any directory**, after the existing
