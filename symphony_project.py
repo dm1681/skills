@@ -282,24 +282,28 @@ def build_runtime(project: Path) -> None:
 def probe_worker(config: dict) -> list[str]:
     """Exercise discovery and the configured Linux sandbox without a model turn."""
     problems = []
+    try:
+        env = symphony_identity.environment(config, credentials=False)
+    except Error as exc:
+        return ["Worker identity configuration failed: " + str(exc)]
     probe_parent = Path(config["workspace_root"])
     probe_parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=probe_parent, prefix="readiness-") as raw:
         root = Path(raw)
         cwd = root / "worker"
         cwd.mkdir()
-        subprocess.run(["git", "init", "--quiet", "--template="], cwd=cwd, check=True)
+        subprocess.run(["git", "init", "--quiet", "--template="], cwd=cwd, env=env, check=True)
         (cwd / ".symphony-worker.json").write_text(json.dumps({"kind": "symphony", "project_dir": config["project_dir"]}))
         for name in WORKER_SKILLS:
             install.install_one(install.SOURCE_ROOT / name, cwd / ".agents/skills", "copy", False, False)
         for name in DELIVERY_SKILLS:
             install.install_one(RESOURCES / "skills" / name, cwd / ".agents/skills", "copy", False, False)
         try:
-            worker_overrides(config, cwd)
+            worker_overrides(config, cwd, env=env)
         except (Error, OSError) as exc:
             problems.append("Worker discovery failed: " + str(exc))
         try:
-            symphony_worker.probe_git(config["codex"], Path(config["project_dir"]), root, cwd)
+            symphony_worker.probe_git(config["codex"], Path(config["project_dir"]), root, cwd, env=env)
         except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
             problems.append("Worker Git/isolation probe failed: " + str(exc))
     return problems
@@ -418,11 +422,10 @@ def prepare_workspace(project: Path) -> None:
         stream.write("\n/.agents/skills/\n/.symphony-worker.json\n")
 
 
-def skills_list(codex: str, cwd: Path, overrides=(), timeout=20) -> list[dict]:
+def skills_list(codex: str, cwd: Path, overrides=(), timeout=20, *, env=None) -> list[dict]:
     """Protocol-only discovery: no thread or model turn, bounded process lifetime."""
     command = [codex, *overrides, "app-server"]
-    env = dict(os.environ)
-    env.pop("LINEAR_API_KEY", None)
+    env = symphony_worker.worker_environment(dict(os.environ if env is None else env))
     with tempfile.TemporaryFile() as errors:
         proc = subprocess.Popen(command, cwd=cwd, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors, start_new_session=True)
         selector = selectors.DefaultSelector()
@@ -470,15 +473,19 @@ def skills_list(codex: str, cwd: Path, overrides=(), timeout=20) -> list[dict]:
             proc.stdin.close(); proc.stdout.close()
 
 
-def worker_overrides(config: dict, cwd: Path) -> list[str]:
+def worker_overrides(config: dict, cwd: Path, *, env=None) -> list[str]:
+    # Discovery is a real child process too. Offline probes do not resolve
+    # credentials; live launch can reuse the already verified scoped identity.
+    if env is None:
+        env = symphony_identity.environment(config, credentials=False)
     allowed = {str((cwd / ".agents" / "skills" / name / "SKILL.md").resolve()) for name in WORKER_SKILLS + DELIVERY_SKILLS}
-    discovered = skills_list(config["codex"], cwd)
+    discovered = skills_list(config["codex"], cwd, env=env)
     paths = {str(Path(row["path"]).resolve()) for row in discovered}
     if not allowed <= paths:
         raise Error("Worker skills were not all discovered by this Codex build")
     entries = ["{path=" + json.dumps(path) + ",enabled=" + ("true" if path in allowed else "false") + "}" for path in sorted(paths)]
     overrides = ["-c", "skills.config=[" + ",".join(entries) + "]"]
-    verified = skills_list(config["codex"], cwd, overrides)
+    verified = skills_list(config["codex"], cwd, overrides, env=env)
     enabled = {str(Path(row["path"]).resolve()) for row in verified if row["enabled"]}
     if enabled != allowed:
         raise Error("Codex did not enforce the selected worker skill set; refusing worker launch")
@@ -491,9 +498,9 @@ def run_worker(project: Path) -> None:
     marker = json.loads((cwd / ".symphony-worker.json").read_text())
     if marker.get("kind") != "symphony" or marker.get("project_dir") != config["project_dir"]:
         raise Error("Missing explicit Symphony worker launch context")
-    overrides = worker_overrides(config, cwd)
     env = symphony_identity.environment(config)
     env["SKILLS_SESSION_KIND"] = "symphony"
+    overrides = worker_overrides(config, cwd, env=env)
     try:
         code = symphony_worker.run_server([config["codex"], *overrides, "app-server"],
                                          project.resolve(), Path(config["workspace_root"]), cwd, env)

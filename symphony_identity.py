@@ -22,7 +22,7 @@ def repository_path(url: str) -> str:
     """Extract owner/repository without resolving an SSH alias through DNS."""
     if "://" in url:
         parsed = urlsplit(url)
-        if parsed.password or parsed.query or parsed.fragment or (parsed.scheme == "https" and parsed.username):
+        if parsed.password or parsed.query or parsed.fragment or (parsed.scheme != "ssh" and parsed.username):
             raise Error("Repository URL must not contain credentials, query or fragment")
         path = parsed.path.lstrip("/")
     else:
@@ -68,6 +68,8 @@ def clone_url(config: dict) -> str:
     validate(config)
     if config.get("ssh_host"):
         return f"git@{config['ssh_host']}:{repository_path(config['repo_url'])}.git"
+    if "://" in config["repo_url"]:
+        return urlsplit(config["repo_url"]).geturl()
     return config["repo_url"]
 
 
@@ -92,10 +94,12 @@ def environment(config: dict, inherited=None, *, credentials=True) -> dict:
     # Ambient overrides could route another project's commands or leak diagnostics.
     for key in list(env):
         if key.startswith(("GIT_CONFIG_", "GIT_TRACE")) or key in {
-            "GIT_CONFIG", "GIT_CURL_VERBOSE", "GH_DEBUG", "GH_HOST", "GH_REPO",
-            "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN",
+            "GIT_CONFIG", "GIT_CURL_VERBOSE", "GH_DEBUG",
         }:
             env.pop(key)
+    if config.get("github_repo"):
+        for key in ("GH_HOST", "GH_REPO", "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"):
+            env.pop(key, None)
     if config.get("git_author_name"):
         for role in ("AUTHOR", "COMMITTER"):
             env[f"GIT_{role}_NAME"] = config["git_author_name"]
@@ -141,7 +145,7 @@ def check_access(config: dict, kind: str) -> list[str]:
         if kind == "git":
             # SSH access does not depend on an API token. HTTPS does.
             url = clone_url(config)
-            env = environment(config, credentials=url.startswith("https://"))
+            env = environment(config, credentials=urlsplit(url).scheme == "https")
             run(["git", "ls-remote", "--exit-code", "--", url, "HEAD"], env=env,
                 cwd=Path(config["project_dir"]),
                 failure="Git access failed; verify repo_url, SSH alias/config and key or HTTPS provider access")

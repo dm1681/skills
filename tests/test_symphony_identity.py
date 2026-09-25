@@ -72,6 +72,14 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual('git@work-alias:team/repo.git', identity.clone_url(config))
         self.assertEqual('ssh', env['GIT_SSH_VARIANT'])
 
+    def test_git_only_settings_preserve_existing_github_authentication(self):
+        config = {'git_author_name': 'Worker', 'git_author_email': 'worker@example.invalid'}
+        inherited = {'GH_TOKEN': self.token, 'GH_REPO': 'existing/repo', 'GH_HOST': 'github.com'}
+        env = identity.environment(config, inherited)
+        for key, value in inherited.items():
+            self.assertEqual(value, env[key])
+        self.assertEqual('Worker', env['GIT_AUTHOR_NAME'])
+
     def test_provider_errors_never_disclose_stdout_stderr_or_exception_details(self):
         failures = [self.response(self.token, 1), OSError(self.token),
                     subprocess.TimeoutExpired(self.token, 30, output=self.token, stderr=self.token),
@@ -96,6 +104,7 @@ class IdentityTests(unittest.TestCase):
                         dict(git_author_email=''), dict(ssh_host='-oProxyCommand=bad'),
                         dict(ssh_config='relative'), dict(github_repo='team/repo?token=bad'),
                         dict(repo_url='https://user:' + self.token + '@github.com/team/repo.git'),
+                        dict(repo_url='http://' + self.token + '@github.com/team/repo.git'),
                         dict(git_author_name='bad\nname')]:
             with self.subTest(fields=list(changes)), self.assertRaises(install.InstallError) as caught:
                 identity.validate({**self.config, **changes})
@@ -134,12 +143,45 @@ class IdentityTests(unittest.TestCase):
         self.assertIn('github_repo', identity.check_access({'project_dir': str(self.root)}, 'pr')[0])
 
     def test_https_git_uses_runtime_provider_and_credential_helper(self):
-        config = {**self.config, 'repo_url': 'https://github.com/team/repo.git'}
+        config = {**self.config, 'repo_url': 'HTTPS://github.com/team/repo.git'}
         with mock.patch.object(identity.subprocess, 'run', side_effect=[self.response(self.token), self.response('worker-account'), self.response('ref')]) as run:
             self.assertEqual([], identity.check_access(config, 'git'))
         env = run.call_args.kwargs['env']
         self.assertEqual('!gh auth git-credential', env['GIT_CONFIG_VALUE_1'])
+        self.assertIn('https://github.com/team/repo.git', run.call_args.args[0])
         self.assertNotIn(self.token, str(run.call_args.args))
+
+    def test_http_userinfo_is_rejected_before_setup_writes(self):
+        with self.assertRaisesRegex(install.InstallError, 'must not contain credentials'):
+            project.setup(self.root, repo_url='http://' + self.token + '@host/team/repo.git')
+        self.assertFalse(project.config_path(self.root).exists())
+
+    def test_discovery_uses_scoped_environment_for_both_servers_without_provider(self):
+        config = {**self.config, 'codex': 'codex'}
+        names = project.WORKER_SKILLS + project.DELIVERY_SKILLS
+        rows = [{'path': str(self.root / '.agents/skills' / name / 'SKILL.md'), 'enabled': True} for name in names]
+        with mock.patch.dict(os.environ, {'GH_TOKEN': self.token, 'GH_REPO': 'wrong/repo', 'GIT_DIR': '/wrong'}), \
+             mock.patch.object(identity.subprocess, 'run', side_effect=AssertionError('offline discovery resolved credentials')), \
+             mock.patch.object(project, 'skills_list', return_value=rows) as discovery:
+            project.worker_overrides(config, self.root)
+        self.assertEqual(2, discovery.call_count)
+        for call in discovery.call_args_list:
+            env = call.kwargs['env']
+            self.assertEqual('team/repo', env['GH_REPO'])
+            self.assertEqual('Worker', env['GIT_AUTHOR_NAME'])
+            self.assertNotIn('GH_TOKEN', env)
+            self.assertNotIn('GIT_DIR', env)
+
+    def test_native_probe_uses_same_sanitized_environment_as_discovery(self):
+        config = {**self.config, 'codex': 'codex', 'workspace_root': str(self.root / 'workspaces')}
+        with mock.patch.dict(os.environ, {'GH_TOKEN': self.token, 'GH_REPO': 'wrong/repo', 'GIT_DIR': '/wrong'}), \
+             mock.patch.object(project, 'worker_overrides', return_value=[]), \
+             mock.patch.object(project.symphony_worker, 'probe_git') as probe:
+            self.assertEqual([], project.probe_worker(config))
+        env = probe.call_args.kwargs['env']
+        self.assertEqual('team/repo', env['GH_REPO'])
+        self.assertNotIn('GH_TOKEN', env)
+        self.assertNotIn('GIT_DIR', env)
 
     def test_authentication_ignores_unrelated_saved_github_accounts(self):
         config = {**self.config, 'codex': 'codex'}
@@ -177,7 +219,7 @@ class IdentityTests(unittest.TestCase):
         marker = worker / '.symphony-worker.json'
         marker.write_text(json.dumps(dict(kind='symphony', project_dir=str(self.root))))
         before = marker.read_bytes()
-        with mock.patch.object(Path, 'cwd', return_value=worker), mock.patch.object(project, 'worker_overrides', return_value=[]), \
+        with mock.patch.object(Path, 'cwd', return_value=worker), mock.patch.object(project, 'worker_overrides', return_value=[]) as discovery, \
              mock.patch.object(identity.subprocess, 'run', side_effect=[self.response(self.token), self.response('worker-account')]), \
              mock.patch.object(project.symphony_worker, 'run_server', return_value=0) as server, self.assertRaises(SystemExit):
             project.run_worker(self.root)
@@ -185,6 +227,7 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual(self.token, env['GH_TOKEN'])
         self.assertEqual('team/repo', env['GH_REPO'])
         self.assertEqual('symphony', env['SKILLS_SESSION_KIND'])
+        self.assertEqual(env, discovery.call_args.kwargs['env'])
         self.assertEqual(before, marker.read_bytes())
 
     def test_local_clone_commit_push_preserves_global_author_and_config(self):

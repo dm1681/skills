@@ -101,9 +101,13 @@ Providers must not write tokens to their own logs or files. The launcher verifie
 `gh api user` matches `--github-account` and fails closed for missing credentials,
 wrong accounts or provider errors. It never switches the user's gh account.
 
-Worker environments override inherited Git routing/config injection and GitHub
-token/repository/host overrides when identity is configured. For HTTPS github.com
+Worker environments override inherited Git routing/config injection when identity
+is configured. The GitHub identity triple overrides inherited GitHub tokens,
+repository and host; Git-author/SSH-only settings preserve existing GitHub auth.
+For HTTPS github.com
 clones, a process-only `gh auth git-credential` helper uses the same provider token.
+Discovery servers and sandbox readiness probes also receive scoped environments;
+offline probes clear ambient GitHub tokens without invoking the provider.
 For SSH, Git authentication remains the key selected by the alias/config, while
 PR APIs use the verified provider account. Global Git configuration, gh logins,
 the interactive checkout and other projects are not written. This uses the
