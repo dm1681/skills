@@ -191,3 +191,50 @@ transition is the dispatch trigger. Human Review is not an active state.
 Use project membership, actual blocks/blocked-by dependencies, nonblocking related
 links, the attached PR and persistent workpad. There is no need to link every task
 to the setup issue; the project startup gate checks that prerequisite.
+
+## Dynamic worker models
+
+Opt in per project with `skills symphony setup --project-dir /path/to/project
+--model-routing auto` (one shell command), then run `skills symphony check`.
+Set `--model-routing off` to inherit the existing Codex defaults again.
+Existing projects remain off until explicitly enabled. Selection applies to new
+worker processes; an already-running worker keeps its current policy.
+
+The shared launcher assesses the issue title and description locally, without
+extra Linear requests or a classifier model turn:
+
+| Profile | Model | Reasoning effort |
+| --- | --- | --- |
+| simple | gpt-6-luna | low |
+| standard | gpt-6-sol | medium |
+| complex | gpt-6-astra | high |
+
+Narrow documentation, spelling, formatting and rename titles qualify as simple.
+Architecture, security, authentication, sandbox, concurrency, migration and
+data-integrity signals select complex. Other or unrecognized issue contexts use
+standard. These are conservative rules, not an AI estimate of difficulty.
+Shared workflow instructions are excluded from the assessment.
+
+An issue label `symphony:simple`, `symphony:standard` or `symphony:complex`
+overrides the rules. Use exactly one; conflicting labels stop launch with an
+explanation. Explicit labels are fixed until changed on a later pickup. Codex
+model discovery verifies all three model/effort pairs before worker launch;
+unavailable profiles fail readiness rather than silently selecting another model.
+
+The operator-side `.symphony/model-routing/<issue>.json` stores the chosen model,
+effort, reason and escalation count across retries and disposable-clone cleanup.
+The worker is instructed to copy these into its existing workpad. At a later
+turn boundary it can request one promotion (simple to standard, or standard to
+complex) by writing `.git/symphony-model-escalation.json`:
+
+```json
+{"category":"complexity","reason":"Specific evidence of harder technical work"}
+```
+
+Permission, authentication, network, quota and missing-tool failures do not
+qualify. There is no automatic escalation based on retries or failed commands.
+Explicit label overrides cannot escalate. The cap is one promotion per issue,
+never above Astra/high; existing Symphony turn limits still apply. This is an
+escalation cap, not a token or spending limit. The launcher consumes the request
+on the next turn and records any accepted change in the selection record.
+Sandbox, network and approval policies remain independent of model selection.

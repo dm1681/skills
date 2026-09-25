@@ -18,6 +18,7 @@ import urllib.request
 from pathlib import Path
 
 import install
+import symphony_models
 import symphony_worker
 
 REVISION = "be10a1b79df723d6d7612b5651c8522704dafb2e"
@@ -70,6 +71,8 @@ def validate_config(config: dict) -> None:
         raise Error("Dashboard port must be between 1 and 65535")
     if "dashboard_port" not in config:
         raise Error("Missing dashboard_port in Symphony configuration")
+    if config.get("model_routing", "off") not in ("off", "auto"):
+        raise Error("model_routing must be off or auto")
     generated = config.get("generated")
     if not isinstance(generated, dict) or any(not isinstance(value, str) for value in generated.values()):
         raise Error("Invalid generated-file hashes in Symphony configuration")
@@ -294,7 +297,7 @@ def probe_worker(config: dict) -> list[str]:
             install.install_one(RESOURCES / "skills" / name, cwd / ".agents/skills", "copy", False, False)
         try:
             worker_overrides(config, cwd)
-        except (Error, OSError) as exc:
+        except (Error, OSError, ValueError) as exc:
             problems.append("Worker discovery failed: " + str(exc))
         try:
             symphony_worker.probe_git(config["codex"], Path(config["project_dir"]), root, cwd)
@@ -403,7 +406,7 @@ def prepare_workspace(project: Path) -> None:
         stream.write("\n/.agents/skills/\n/.symphony-worker.json\n")
 
 
-def skills_list(codex: str, cwd: Path, overrides=(), timeout=20) -> list[dict]:
+def skills_list(codex: str, cwd: Path, overrides=(), timeout=20, method="skills/list") -> list[dict]:
     """Protocol-only discovery: no thread or model turn, bounded process lifetime."""
     command = [codex, *overrides, "app-server"]
     env = dict(os.environ)
@@ -437,9 +440,13 @@ def skills_list(codex: str, cwd: Path, overrides=(), timeout=20) -> list[dict]:
                         raise Error("Codex rejected the worker skill-discovery request")
                     if message.get("id") == 1:
                         send({"method": "initialized", "params": {}})
-                        send({"id": 2, "method": "skills/list", "params": {"cwds": [str(cwd)], "forceReload": True}})
+                        send({"id": 2, "method": method, "params": {"cwds": [str(cwd)], "forceReload": True} if method == "skills/list" else {"limit": 100, "includeHidden": False}})
                     elif message.get("id") == 2:
                         entries = message.get("result", {}).get("data", [])
+                        if method == "model/list":
+                            if message["result"].get("nextCursor"):
+                                raise Error("Codex model catalog is incomplete")
+                            return entries
                         if len(entries) != 1 or entries[0].get("errors"):
                             raise Error("Codex returned incomplete or invalid skill discovery")
                         return entries[0]["skills"]
@@ -456,6 +463,8 @@ def skills_list(codex: str, cwd: Path, overrides=(), timeout=20) -> list[dict]:
 
 
 def worker_overrides(config: dict, cwd: Path) -> list[str]:
+    if config.get("model_routing", "off") == "auto":
+        symphony_models.validate_catalog(skills_list(config["codex"], cwd, method="model/list"))
     allowed = {str((cwd / ".agents" / "skills" / name / "SKILL.md").resolve()) for name in WORKER_SKILLS + DELIVERY_SKILLS}
     discovered = skills_list(config["codex"], cwd)
     paths = {str(Path(row["path"]).resolve()) for row in discovered}
@@ -479,9 +488,10 @@ def run_worker(project: Path) -> None:
     overrides = worker_overrides(config, cwd)
     env = dict(os.environ, SKILLS_SESSION_KIND="symphony")
     env.pop("LINEAR_API_KEY", None)
+    routing = symphony_models.Router(project.resolve(), cwd) if config.get("model_routing", "off") == "auto" else None
     try:
         code = symphony_worker.run_server([config["codex"], *overrides, "app-server"],
-                                         project.resolve(), Path(config["workspace_root"]), cwd, env)
+                                         project.resolve(), Path(config["workspace_root"]), cwd, env, routing=routing)
     except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
         raise Error("Worker Git adapter refused launch/request: " + type(exc).__name__) from exc
     raise SystemExit(code if code >= 0 else 128 - code)
@@ -509,6 +519,7 @@ def add_parser(subcommands):
         if action == "setup":
             for flag in ("project-id", "project-slug", "setup-issue", "repo-url", "runtime-source", "workspace-root", "codex", "base-branch", "validation-command"):
                 child.add_argument("--" + flag)
+            child.add_argument("--model-routing", choices=("off", "auto"))
             child.add_argument("--port", type=int, dest="dashboard_port")
             child.add_argument("--no-dashboard", action="store_true")
         if action == "check":
@@ -522,7 +533,7 @@ def dispatch(args) -> int:
     project = args.project_dir.resolve()
     action = args.symphony_action
     if action == "setup":
-        options = {key: getattr(args, key, None) for key in ("project_id", "project_slug", "setup_issue", "repo_url", "runtime_source", "workspace_root", "codex", "base_branch", "validation_command", "dashboard_port")}
+        options = {key: getattr(args, key, None) for key in ("project_id", "project_slug", "setup_issue", "repo_url", "runtime_source", "workspace_root", "codex", "base_branch", "validation_command", "dashboard_port", "model_routing")}
         if getattr(args, "no_dashboard", False):
             options["dashboard_enabled"] = False
         setup(project, **options)
