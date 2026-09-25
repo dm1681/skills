@@ -18,6 +18,7 @@ import urllib.request
 from pathlib import Path
 
 import install
+import symphony_worker
 
 REVISION = "be10a1b79df723d6d7612b5651c8522704dafb2e"
 UPSTREAM = "https://github.com/openai/symphony.git"
@@ -151,10 +152,10 @@ def render_workflow(config: dict) -> str:
         "tracker": {"kind": "linear", "provider": {"project_slug": config["project_slug"]},
                     "active_states": ["Todo", "In Progress", "Merging", "Rework"],
                     "terminal_states": ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"]},
-        "polling": {"interval_ms": 5000}, "workspace": {"root": config["workspace_root"]},
+        "polling": {"interval_ms": 30000}, "workspace": {"root": config["workspace_root"]},
         "hooks": {"after_create": command_string(config, "prepare-workspace")},
         "agent": {"max_concurrent_agents": 1, "max_turns": 20},
-        "codex": {"command": command_string(config, "worker"), "approval_policy": "never",
+        "codex": {"command": command_string(config, "worker"), "approval_policy": "never", "read_timeout_ms": 30000,
                   "thread_sandbox": "workspace-write", "turn_sandbox_policy": {"type": "workspaceWrite", "networkAccess": True}},
         "server": {"host": "127.0.0.1", "port": config["dashboard_port"]},
     }
@@ -279,10 +280,14 @@ def build_runtime(project: Path) -> None:
 def probe_worker(config: dict) -> list[str]:
     """Exercise discovery and the configured Linux sandbox without a model turn."""
     problems = []
-    probe_parent = Path(config["project_dir"]) / ".symphony"
+    probe_parent = Path(config["workspace_root"])
+    probe_parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=probe_parent, prefix="readiness-") as raw:
-        cwd = Path(raw)
+        root = Path(raw)
+        cwd = root / "worker"
+        cwd.mkdir()
         subprocess.run(["git", "init", "--quiet", "--template="], cwd=cwd, check=True)
+        (cwd / ".symphony-worker.json").write_text(json.dumps({"kind": "symphony", "project_dir": config["project_dir"]}))
         for name in WORKER_SKILLS:
             install.install_one(install.SOURCE_ROOT / name, cwd / ".agents/skills", "copy", False, False)
         for name in DELIVERY_SKILLS:
@@ -292,12 +297,9 @@ def probe_worker(config: dict) -> list[str]:
         except (Error, OSError) as exc:
             problems.append("Worker discovery failed: " + str(exc))
         try:
-            result = subprocess.run([config["codex"], "-c", 'sandbox_mode="workspace-write"', "sandbox", "--", "/bin/sh", "-c", "printf sandbox-ok"], cwd=cwd, capture_output=True, text=True, timeout=20)
-            if result.returncode != 0 or result.stdout.strip() != "sandbox-ok":
-                detail = (result.stderr or result.stdout).splitlines()
-                problems.append("Worker sandbox probe failed: " + (detail[0] if detail else str(result.returncode)))
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            problems.append("Worker sandbox probe failed: " + type(exc).__name__)
+            symphony_worker.probe_git(config["codex"], Path(config["project_dir"]), root, cwd)
+        except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+            problems.append("Worker Git/isolation probe failed: " + str(exc))
     return problems
 
 
@@ -376,7 +378,7 @@ def prepare_workspace(project: Path) -> None:
     branch = f"codex/{cwd.name}"
     for ref in (branch, config["base_branch"]):
         subprocess.run(["git", "check-ref-format", "--branch", ref], cwd=cwd, check=True, capture_output=True)
-    subprocess.run(["git", "clone", "--no-checkout", "--", config["repo_url"], "."], cwd=cwd, check=True)
+    subprocess.run(["git", "clone", "--no-hardlinks", "--no-checkout", "--", config["repo_url"], "."], cwd=cwd, check=True)
     # Recover a published issue branch after workspace cleanup, otherwise branch
     # from the configured base (which need not be the remote's default branch).
     remote_branch = f"refs/remotes/origin/{branch}"
@@ -477,7 +479,12 @@ def run_worker(project: Path) -> None:
     overrides = worker_overrides(config, cwd)
     env = dict(os.environ, SKILLS_SESSION_KIND="symphony")
     env.pop("LINEAR_API_KEY", None)
-    os.execvpe(config["codex"], [config["codex"], *overrides, "app-server"], env)
+    try:
+        code = symphony_worker.run_server([config["codex"], *overrides, "app-server"],
+                                         project.resolve(), Path(config["workspace_root"]), cwd, env)
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        raise Error("Worker Git adapter refused launch/request: " + type(exc).__name__) from exc
+    raise SystemExit(code if code >= 0 else 128 - code)
 
 
 def start(project: Path, *, accept_preview=False) -> None:
