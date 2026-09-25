@@ -172,13 +172,16 @@ class RehearsalTests(unittest.TestCase):
         # Local Git clone and commit are real; remote API/write boundaries are fixtures.
         config={**self.config,'github_repo':'owner/repo'}
         real_run=rehearsal.run
-        for extra in (False,True,"config", "hidden-tracked", "hidden-untracked"):
+        for extra in (False,True,"config", "hidden-tracked", "hidden-untracked", "marker-blob", "base-moved"):
             with self.subTest(extra=extra):
                 def model(config,proj,cwd,env,prompt,deadline):
-                    (cwd/'symphony-rehearsal.txt').write_text(cwd.name+'\n')
+                    (cwd/'symphony-rehearsal.txt').write_text('wrong committed content\n' if extra == 'marker-blob' else cwd.name+'\n')
                     if extra is True: (cwd/'unexpected').write_text('must not publish')
                     if extra == 'config': self.git('config','core.sshCommand','untrusted',cwd=cwd)
                     self.git('add','.',cwd=cwd);self.git('commit','-qm','rehearsal',cwd=cwd)
+                    if extra == 'marker-blob':
+                        (cwd/'symphony-rehearsal.txt').write_text(cwd.name+'\n')
+                        self.git('update-index','--assume-unchanged','symphony-rehearsal.txt',cwd=cwd)
                     if extra == 'hidden-tracked':
                         self.git('update-index', '--assume-unchanged', 'README.md', cwd=cwd)
                         (cwd/'README.md').write_text('hidden validation bypass')
@@ -192,7 +195,7 @@ class RehearsalTests(unittest.TestCase):
                     self.assertFalse((cwd/'hidden-helper').exists())
                     self.assertEqual('symphony-rehearsal.txt', self.git('diff', '--name-only', 'HEAD~', 'HEAD', cwd=cwd))
                 calls=[]
-                def run(command,cwd,env,deadline):
+                def run(command,cwd,env,deadline,**kwargs):
                     calls.append(command)
                     if command[:1]==['gh'] or (command[:1]==['git'] and 'push' in command):
                         self.assertEqual('controller-fixture-token', env.get('GH_TOKEN'))
@@ -200,16 +203,18 @@ class RehearsalTests(unittest.TestCase):
                     if command[:3]==['gh','pr','create']: return 'https://github.com/owner/repo/pull/1'
                     if command[:3]==['gh','pr','view']:
                         return json.dumps({'url':'https://github.com/owner/repo/pull/1','state':'OPEN','isDraft':True,
-                                           'headRefOid':self.git('rev-parse','HEAD',cwd=cwd),'baseRefName':'main'})
-                    return real_run(command,cwd,env,deadline)
+                                           'headRefOid':self.git('rev-parse','HEAD',cwd=cwd),'baseRefName':'main',
+                                           'baseRefOid':('0'*40 if extra == 'base-moved' else self.git('rev-parse','main',cwd=cwd))})
+                    return real_run(command,cwd,env,deadline,**kwargs)
                 with mock.patch.object(project,'load',return_value=config), mock.patch.object(symphony_identity,'check_access',return_value=[]), \
                      mock.patch.object(symphony_identity,'environment',return_value={**os.environ, 'GH_TOKEN':'controller-fixture-token'}), mock.patch.object(symphony_identity,'clone_url',return_value=str(self.source)), \
                      mock.patch.object(rehearsal,'model_turn',side_effect=model), mock.patch.object(rehearsal,'validate',side_effect=validate), \
                      mock.patch.object(rehearsal,'run',side_effect=run):
-                    if extra is True or extra == 'config':
+                    if extra is True or extra in ('config', 'marker-blob', 'base-moved'):
                         with self.assertRaisesRegex(project.Error,'retained workspace'):
                             rehearsal.rehearse(self.source,accept=True)
-                        self.assertFalse(any(c[:1]==['git'] and 'push' in c for c in calls))
+                        if extra != 'base-moved':
+                            self.assertFalse(any(c[:1]==['git'] and 'push' in c for c in calls))
                     else:
                         path=rehearsal.rehearse(self.source,accept=True)
                         record=json.loads(path.read_text())
@@ -218,6 +223,8 @@ class RehearsalTests(unittest.TestCase):
                         self.assertFalse(record['merged'])
                         self.assertTrue(Path(record['workspace']).is_dir())
                         self.assertTrue(any('--draft' in c for c in calls))
+                        self.assertTrue(any(c[:1]==['git'] and 'push' in c and c[-1].startswith(record['head_sha'] + ':') for c in calls))
+                        self.assertTrue(any(c[:3]==['gh','pr','view'] and 'baseRefOid' in c[-1] for c in calls))
                         self.assertFalse(list(Path(config['workspace_root']).glob('validation-*')))
 
     def test_native_protocol_turn_uses_shared_roots_and_no_approvals(self):
