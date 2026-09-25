@@ -384,13 +384,16 @@ def prepare_workspace(project: Path) -> None:
     if not config["repo_url"] or not config["validation_command"]:
         raise Error("Repository URL and validation command must be configured")
     env = symphony_identity.environment(config)
-    def git(*args):
+    def git(*args, timeout=30):
         return symphony_identity.run(["git", *args], env=env, cwd=cwd,
-                                    failure="Worker Git preparation failed; run symphony check-git and verify base_branch")
+                                    failure="Worker Git preparation failed; run symphony check-git and verify base_branch",
+                                    timeout=timeout)
     branch = f"codex/{cwd.name}"
     for ref in (branch, config["base_branch"]):
         git("check-ref-format", "--branch", ref)
-    git("clone", "--no-hardlinks", "--no-checkout", "--", symphony_identity.clone_url(config), ".")
+    # Keep the existing hook lifecycle in charge of provisioning duration;
+    # credential/API deadlines must not become a limit on large clones or LFS.
+    git("clone", "--no-hardlinks", "--no-checkout", "--", symphony_identity.clone_url(config), ".", timeout=None)
     # Recover a published issue branch after workspace cleanup, otherwise branch
     # from the configured base (which need not be the remote's default branch).
     remote_branch = f"refs/remotes/origin/{branch}"
@@ -398,7 +401,7 @@ def prepare_workspace(project: Path) -> None:
     if exists.returncode not in (0, 1):
         raise Error("Could not verify the remote issue branch")
     source = remote_branch if exists.returncode == 0 else f"refs/remotes/origin/{config['base_branch']}"
-    git("checkout", "--no-track", "-b", branch, source)
+    git("checkout", "--no-track", "-b", branch, source, timeout=None)
     # Preserve project instructions. Only the worker's skill roots are provisioned.
     root = cwd / ".agents" / "skills"
     if cwd not in root.resolve().parents:

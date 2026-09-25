@@ -116,6 +116,18 @@ class IdentityTests(unittest.TestCase):
         self.assertIn('SSH alias/config', problems[0])
         self.assertNotIn(self.token, str(problems))
 
+    def test_repository_only_identity_cannot_fall_back_to_default_account(self):
+        config = {'github_repo': 'team/repo', 'repo_url': 'git@work:team/repo.git'}
+        with mock.patch.object(identity.subprocess, 'run') as run:
+            with self.assertRaisesRegex(install.InstallError, 'requires github_repo, github_account and credential_provider'):
+                identity.environment(config, {'GH_TOKEN': self.token})
+        run.assert_not_called()
+
+    def test_provider_keeps_bounded_timeout(self):
+        with mock.patch.object(identity.subprocess, 'run', side_effect=[self.response(self.token), self.response('worker-account')]) as run:
+            identity.environment(self.config)
+        self.assertEqual([30, 30], [call.kwargs['timeout'] for call in run.call_args_list])
+
     def test_pr_permission_failure_and_missing_repo_are_actionable(self):
         with mock.patch.object(identity.subprocess, 'run', side_effect=[self.response(self.token), self.response('worker-account'), self.response('false')]):
             self.assertIn('push permission', identity.check_access(self.config, 'pr')[0])
@@ -190,8 +202,12 @@ class IdentityTests(unittest.TestCase):
         worker = Path(config['workspace_root']) / 'DIE-123'
         worker.mkdir(parents=True)
         before = home_config.read_bytes()
-        with mock.patch.dict(os.environ, inherited, clear=True), mock.patch.object(Path, 'cwd', return_value=worker):
+        with mock.patch.dict(os.environ, inherited, clear=True), mock.patch.object(Path, 'cwd', return_value=worker), \
+             mock.patch.object(identity.subprocess, 'run', wraps=subprocess.run) as commands:
             project.prepare_workspace(self.root)
+        provisioning = [call for call in commands.call_args_list if call.args[0][:2] in (['git', 'clone'], ['git', 'checkout'])]
+        self.assertEqual(2, len(provisioning))
+        self.assertTrue(all(call.kwargs['timeout'] is None for call in provisioning))
         env = identity.environment(config, inherited)
         git(worker, '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '--allow-empty', '-m', 'worker', env=env)
         git(worker, '-c', 'core.hooksPath=/dev/null', 'push', 'origin', 'HEAD:refs/heads/test-worker', env=env)

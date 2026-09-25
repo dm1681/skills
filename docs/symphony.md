@@ -76,6 +76,8 @@ shell command. Both Git author and committer are set in each worker environment.
 GitHub repository selection is explicit `owner/repository` on github.com and must
 match the clone URL's repository path; SSH aliases need no DNS resolution for
 this comparison. Enterprise GitHub is not supported by these identity options.
+Repository, account and provider must be configured together; repository-only
+settings are rejected rather than falling back to the active gh account.
 
 The credential provider is a trusted executable at an absolute path, invoked
 without arguments in the project directory. It receives `GH_REPO`, `GH_HOST` and

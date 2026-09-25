@@ -49,7 +49,7 @@ def validate(config: dict) -> None:
     account = config.get("github_account", "")
     if account and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]*", account):
         raise Error("github_account must be a GitHub login")
-    if account or config.get("credential_provider"):
+    if repo or account or config.get("credential_provider"):
         if not all(config.get(key) for key in ("github_repo", "github_account", "credential_provider")):
             raise Error("Explicit GitHub identity requires github_repo, github_account and credential_provider")
     url = config.get("repo_url", "")
@@ -71,10 +71,10 @@ def clone_url(config: dict) -> str:
     return config["repo_url"]
 
 
-def run(command: list[str], *, env: dict, cwd: Path, failure: str) -> subprocess.CompletedProcess:
+def run(command: list[str], *, env: dict, cwd: Path, failure: str, timeout=30) -> subprocess.CompletedProcess:
     """Never relay subprocess output or exception details containing credentials."""
     try:
-        result = subprocess.run(command, cwd=cwd, env=dict(env), capture_output=True, text=True, timeout=30)
+        result = subprocess.run(command, cwd=cwd, env=dict(env), capture_output=True, text=True, timeout=timeout)
     except (OSError, ValueError, subprocess.TimeoutExpired):
         raise Error(failure + " (unavailable or timed out)") from None
     if result.returncode:
