@@ -386,7 +386,8 @@ def rehearse(project: Path, *, accept=False, timeout=300):
             url = run([gh_binary, "pr", "create", "--repo", config["github_repo"], "--base", config["base_branch"],
                         "--head", branch, "--draft", "--title", "Symphony synthetic readiness rehearsal",
                         "--body-file", str(body)], path.parent, env, deadline)
-            if not re.fullmatch(r"https://github\.com/" + re.escape(config["github_repo"]) + r"/pull/[0-9]+", url):
+            if not re.fullmatch(r"https://github\.com/" + re.escape(config["github_repo"]) + r"/pull/[0-9]+",
+                                url, flags=re.IGNORECASE):
                 raise Error("PR creation returned an unexpected URL; inspect the recorded branch")
             return url
         record["pr_url"] = stage(path, record, "draft_pr", publish)
