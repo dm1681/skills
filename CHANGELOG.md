@@ -7,6 +7,9 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Symphony integration and curated skills (pending major release)
 
+- Add opt-in per-task model/effort routing with local complexity rules, Linear
+  label overrides, model availability checks and one durable complexity promotion.
+
 - Grant only a validated worker clone's Git metadata through the shared launcher;
   reject redirected/shared metadata and unexpected writable roots. Readiness now
   proves a native sandbox commit works and parent/sibling writes remain denied.

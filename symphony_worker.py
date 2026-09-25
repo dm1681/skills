@@ -49,7 +49,7 @@ def writable_roots(project: Path, root: Path, cwd: Path) -> list[str]:
     return [str(cwd), str(git)]
 
 
-def prepare_request(line: bytes, project: Path, root: Path, cwd: Path) -> bytes:
+def prepare_request(line: bytes, project: Path, root: Path, cwd: Path, routing=None) -> bytes:
     request = json.loads(line)
     if not isinstance(request, dict):
         raise ValueError("Expected a JSON-RPC object")
@@ -67,10 +67,12 @@ def prepare_request(line: bytes, project: Path, root: Path, cwd: Path) -> bytes:
         raise ValueError("Unexpected writable roots outside the worker clone")
     # All other fields, including network and approval policy, pass through intact.
     policy["writableRoots"] = allowed
+    if routing is not None:
+        routing.apply(params)
     return json.dumps(request).encode() + b"\n"
 
 
-def run_server(command: list[str], project: Path, root: Path, cwd: Path, env: dict) -> int:
+def run_server(command: list[str], project: Path, root: Path, cwd: Path, env: dict, routing=None) -> int:
     """Relay requests only; native stdout/stderr go directly to Symphony."""
     writable_roots(project, root, cwd)
     child = subprocess.Popen(command, cwd=cwd, env=worker_environment(env), stdin=subprocess.PIPE, start_new_session=True)
@@ -89,7 +91,7 @@ def run_server(command: list[str], project: Path, root: Path, cwd: Path, env: di
             block = os.read(sys.stdin.fileno(), 65536)
             if not block:
                 if pending:
-                    child.stdin.write(prepare_request(pending, project, root, cwd))
+                    child.stdin.write(prepare_request(pending, project, root, cwd, routing))
                 child.stdin.close()
                 return child.wait(timeout=10)
             pending += block
@@ -97,7 +99,7 @@ def run_server(command: list[str], project: Path, root: Path, cwd: Path, env: di
                 raise ValueError("Worker request exceeds 16 MiB")
             while b"\n" in pending:
                 line, pending = pending.split(b"\n", 1)
-                child.stdin.write(prepare_request(line + b"\n", project, root, cwd))
+                child.stdin.write(prepare_request(line + b"\n", project, root, cwd, routing))
                 child.stdin.flush()
         return child.returncode
     except BrokenPipeError:

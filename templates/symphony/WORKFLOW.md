@@ -24,7 +24,7 @@ Issue context:
 Identifier: {{ issue.identifier }}
 Title: {{ issue.title }}
 Current status: {{ issue.state }}
-Labels: {{ issue.labels }}
+Labels: {{ issue.labels | join: ", " }}
 URL: {{ issue.url }}
 
 Description:
