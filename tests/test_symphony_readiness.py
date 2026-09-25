@@ -190,7 +190,7 @@ class RehearsalTests(unittest.TestCase):
         # Local Git clone and commit are real; remote API/write boundaries are fixtures.
         config={**self.config,'github_repo':'owner/repo'}
         real_run=rehearsal.run
-        for extra in (False,True,"config", "hidden-tracked", "hidden-untracked", "marker-blob", "base-moved", "wrong-parent", "validation-tracked"):
+        for extra in (False,True,"canonical-case", "config", "hidden-tracked", "hidden-untracked", "marker-blob", "base-moved", "wrong-parent", "validation-tracked"):
             with self.subTest(extra=extra):
                 def model(config,proj,cwd,env,prompt,deadline):
                     if extra == 'wrong-parent':
@@ -228,9 +228,10 @@ class RehearsalTests(unittest.TestCase):
                         return ''
                     if name=='gh' and command[1:3]==['pr','create']:
                         self.assertEqual('evidence',cwd.parent.name)
-                        return 'https://github.com/owner/repo/pull/1'
+                        return 'https://github.com/Owner/Repo/pull/1' if extra=='canonical-case' else 'https://github.com/owner/repo/pull/1'
                     if name=='gh' and command[1:3]==['pr','view']:
-                        return json.dumps({'url':'https://github.com/owner/repo/pull/1','state':'OPEN','isDraft':True,
+                        url='https://github.com/Owner/Repo/pull/1' if extra=='canonical-case' else 'https://github.com/owner/repo/pull/1'
+                        return json.dumps({'url':url,'state':'OPEN','isDraft':True,
                                            'headRefOid':self.git('rev-parse','HEAD',cwd=Path(config['workspace_root'])/command[3].split('/')[-1]),'baseRefName':'main',
                                            'baseRefOid':('0'*40 if extra == 'base-moved' else self.git('rev-parse','main',cwd=self.source))})
                     return real_run(command,cwd,env,deadline,**kwargs)
