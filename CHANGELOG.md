@@ -7,6 +7,9 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Symphony integration and curated skills (pending major release)
 
+- Add optional fresh-worker bootstrap declarations for preinstalled Python,
+  locked uv dependencies, explicit download policy, writable workspace caches and
+  required tools; source-only projects keep their existing setup behavior.
 - Add project worker Git authors, SSH alias/config/executable selection and
   explicit GitHub repository/account identity with runtime credential providers.
   Separate read-only Git and PR access checks suppress credential diagnostics;

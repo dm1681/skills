@@ -18,6 +18,7 @@ import urllib.request
 from pathlib import Path
 
 import install
+import symphony_bootstrap
 import symphony_worker
 import symphony_identity
 
@@ -54,6 +55,7 @@ def load(project: Path) -> dict:
 
 def validate_config(config: dict) -> None:
     """Recheck editable configuration before setup writes or runtime actions."""
+    symphony_bootstrap.validate(config.get("bootstrap", {}))
     for key in ("project_dir", "runtime_source", "workspace_root", "codex", "revision",
                 "repo_url", "base_branch", "project_id", "project_slug", "setup_issue",
                 "validation_command"):
@@ -161,6 +163,8 @@ def render_workflow(config: dict) -> str:
                   "thread_sandbox": "workspace-write", "turn_sandbox_policy": {"type": "workspaceWrite", "networkAccess": True}},
         "server": {"host": "127.0.0.1", "port": config["dashboard_port"]},
     }
+    if config.get("bootstrap", {}).get("dependencies") == "uv":
+        document["hooks"]["timeout_ms"] = (config["bootstrap"].get("timeout_seconds", 300) + 60) * 1000
     prompt = (RESOURCES / "WORKFLOW.md").read_text(encoding="utf-8").replace("<base_branch>", config["base_branch"])
     return "---\n" + json.dumps(document, indent=2) + "\n---\n\n" + prompt
 
@@ -292,6 +296,10 @@ def probe_worker(config: dict) -> list[str]:
         root = Path(raw)
         cwd = root / "worker"
         cwd.mkdir()
+        try:
+            env = symphony_bootstrap.environment(config.get("bootstrap", {}), cwd, base_env=env)
+        except Error as exc:
+            problems.append(str(exc))
         subprocess.run(["git", "init", "--quiet", "--template="], cwd=cwd, env=env, check=True)
         (cwd / ".symphony-worker.json").write_text(json.dumps({"kind": "symphony", "project_dir": config["project_dir"]}))
         for name in WORKER_SKILLS:
@@ -415,11 +423,15 @@ def prepare_workspace(project: Path) -> None:
     for name in DELIVERY_SKILLS:
         install.install_one(RESOURCES / "skills" / name, root, "copy", False, False)
     install.write_receipt(root, list(WORKER_SKILLS + DELIVERY_SKILLS), "copy", False)
-    context = {"kind": "symphony", "project_dir": config["project_dir"], "base_branch": config["base_branch"], "validation_command": config["validation_command"]}
+    bootstrap = config.get("bootstrap", {})
+    symphony_bootstrap.prepare(bootstrap, cwd, base_env=env)
+    context = {"kind": "symphony", "project_dir": config["project_dir"], "base_branch": config["base_branch"], "validation_command": config["validation_command"], "bootstrap": bootstrap}
     (cwd / ".symphony-worker.json").write_text(json.dumps(context, indent=2) + "\n")
     # Worker provisioning must never become part of the feature PR.
     with (cwd / ".git" / "info" / "exclude").open("a") as stream:
         stream.write("\n/.agents/skills/\n/.symphony-worker.json\n")
+        if bootstrap:
+            stream.write("/" + bootstrap.get("cache_dir", ".symphony-cache") + "/\n/.venv/\n")
 
 
 def skills_list(codex: str, cwd: Path, overrides=(), timeout=20, *, env=None) -> list[dict]:
@@ -498,7 +510,10 @@ def run_worker(project: Path) -> None:
     marker = json.loads((cwd / ".symphony-worker.json").read_text())
     if marker.get("kind") != "symphony" or marker.get("project_dir") != config["project_dir"]:
         raise Error("Missing explicit Symphony worker launch context")
+    if marker.get("bootstrap", {}) != config.get("bootstrap", {}):
+        raise Error("Worker bootstrap declaration changed; reprovision the issue workspace before launching")
     env = symphony_identity.environment(config)
+    env = symphony_bootstrap.environment(config.get("bootstrap", {}), cwd, base_env=env)
     env["SKILLS_SESSION_KIND"] = "symphony"
     overrides = worker_overrides(config, cwd, env=env)
     try:
@@ -535,6 +550,7 @@ def add_parser(subcommands):
                 child.add_argument("--" + field.replace("_", "-"))
             child.add_argument("--port", type=int, dest="dashboard_port")
             child.add_argument("--no-dashboard", action="store_true")
+            child.add_argument("--bootstrap-file", type=Path, help="JSON worker prerequisites; {} disables bootstrap")
         if action == "check":
             child.add_argument("--offline", action="store_true")
         if action == "start":
@@ -550,6 +566,11 @@ def dispatch(args) -> int:
         options.update({key: getattr(args, key, None) for key in symphony_identity.FIELDS})
         if getattr(args, "no_dashboard", False):
             options["dashboard_enabled"] = False
+        if getattr(args, "bootstrap_file", None) is not None:
+            try:
+                options["bootstrap"] = json.loads(args.bootstrap_file.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as exc:
+                raise Error("Cannot read bootstrap JSON; supply a readable JSON object") from exc
         setup(project, **options)
         print(f"Configured {config_path(project)}; no workers started. Run skills symphony check.")
     elif action == "install-runtime":
