@@ -19,6 +19,7 @@ from pathlib import Path
 
 import install
 import symphony_worker
+import symphony_identity
 
 REVISION = "be10a1b79df723d6d7612b5651c8522704dafb2e"
 UPSTREAM = "https://github.com/openai/symphony.git"
@@ -79,6 +80,7 @@ def validate_config(config: dict) -> None:
         raise Error("Workspace root must not be the interactive project or its ancestor")
     if config["revision"] != REVISION:
         raise Error("Runtime revision differs from the supported pin")
+    symphony_identity.validate(config)
 
 
 def write_managed(path: Path, text: str, old_hash: str = "") -> str:
@@ -306,6 +308,10 @@ def probe_worker(config: dict) -> list[str]:
 def authentication_problems(config: dict) -> list[str]:
     """Check CLI login without exposing credential-bearing diagnostic output."""
     problems = []
+    try:
+        env = symphony_identity.environment(config)
+    except Error as exc:
+        return [str(exc)]
     probes = (
         ("gh", ["auth", "status", "--hostname", "github.com"],
          "GitHub CLI is not authenticated; run gh auth login in the service environment"),
@@ -313,10 +319,12 @@ def authentication_problems(config: dict) -> list[str]:
          "Codex is not authenticated; log in with the configured executable"),
     )
     for executable, args, message in probes:
+        if executable == "gh" and config.get("credential_provider"):
+            continue  # environment() verified this token; ignore unrelated saved accounts.
         if not shutil.which(executable):
             continue  # The executable check already reports this prerequisite.
         try:
-            result = subprocess.run([executable, *args], capture_output=True, timeout=20)
+            result = subprocess.run([executable, *args], env=env, capture_output=True, timeout=20)
         except (OSError, subprocess.TimeoutExpired):
             problems.append(f"Authentication check failed or timed out: {Path(executable).name}")
         else:
@@ -375,18 +383,22 @@ def prepare_workspace(project: Path) -> None:
         raise Error("New issue workspace is not empty; preserving its contents")
     if not config["repo_url"] or not config["validation_command"]:
         raise Error("Repository URL and validation command must be configured")
+    env = symphony_identity.environment(config)
+    def git(*args):
+        return symphony_identity.run(["git", *args], env=env, cwd=cwd,
+                                    failure="Worker Git preparation failed; run symphony check-git and verify base_branch")
     branch = f"codex/{cwd.name}"
     for ref in (branch, config["base_branch"]):
-        subprocess.run(["git", "check-ref-format", "--branch", ref], cwd=cwd, check=True, capture_output=True)
-    subprocess.run(["git", "clone", "--no-hardlinks", "--no-checkout", "--", config["repo_url"], "."], cwd=cwd, check=True)
+        git("check-ref-format", "--branch", ref)
+    git("clone", "--no-hardlinks", "--no-checkout", "--", symphony_identity.clone_url(config), ".")
     # Recover a published issue branch after workspace cleanup, otherwise branch
     # from the configured base (which need not be the remote's default branch).
     remote_branch = f"refs/remotes/origin/{branch}"
-    exists = subprocess.run(["git", "show-ref", "--verify", "--quiet", remote_branch], cwd=cwd)
+    exists = subprocess.run(["git", "show-ref", "--verify", "--quiet", remote_branch], cwd=cwd, env=env, capture_output=True, timeout=30)
     if exists.returncode not in (0, 1):
         raise Error("Could not verify the remote issue branch")
     source = remote_branch if exists.returncode == 0 else f"refs/remotes/origin/{config['base_branch']}"
-    subprocess.run(["git", "checkout", "--no-track", "-b", branch, source], cwd=cwd, check=True)
+    git("checkout", "--no-track", "-b", branch, source)
     # Preserve project instructions. Only the worker's skill roots are provisioned.
     root = cwd / ".agents" / "skills"
     if cwd not in root.resolve().parents:
@@ -477,8 +489,8 @@ def run_worker(project: Path) -> None:
     if marker.get("kind") != "symphony" or marker.get("project_dir") != config["project_dir"]:
         raise Error("Missing explicit Symphony worker launch context")
     overrides = worker_overrides(config, cwd)
-    env = dict(os.environ, SKILLS_SESSION_KIND="symphony")
-    env.pop("LINEAR_API_KEY", None)
+    env = symphony_identity.environment(config)
+    env["SKILLS_SESSION_KIND"] = "symphony"
     try:
         code = symphony_worker.run_server([config["codex"], *overrides, "app-server"],
                                          project.resolve(), Path(config["workspace_root"]), cwd, env)
@@ -502,13 +514,15 @@ def start(project: Path, *, accept_preview=False) -> None:
 def add_parser(subcommands):
     parser = subcommands.add_parser("symphony", help="project-only Symphony setup, checks and explicit start")
     actions = parser.add_subparsers(dest="symphony_action", required=True)
-    for action in ("setup", "check", "install-runtime", "build-runtime", "start"):
+    for action in ("setup", "check", "check-git", "check-pr", "install-runtime", "build-runtime", "start"):
         child = actions.add_parser(action)
         child.add_argument("--project-dir", type=Path, default=Path.cwd())
         child.set_defaults(handler=dispatch)
         if action == "setup":
             for flag in ("project-id", "project-slug", "setup-issue", "repo-url", "runtime-source", "workspace-root", "codex", "base-branch", "validation-command"):
                 child.add_argument("--" + flag)
+            for field in symphony_identity.FIELDS:
+                child.add_argument("--" + field.replace("_", "-"))
             child.add_argument("--port", type=int, dest="dashboard_port")
             child.add_argument("--no-dashboard", action="store_true")
         if action == "check":
@@ -523,6 +537,7 @@ def dispatch(args) -> int:
     action = args.symphony_action
     if action == "setup":
         options = {key: getattr(args, key, None) for key in ("project_id", "project_slug", "setup_issue", "repo_url", "runtime_source", "workspace_root", "codex", "base_branch", "validation_command", "dashboard_port")}
+        options.update({key: getattr(args, key, None) for key in symphony_identity.FIELDS})
         if getattr(args, "no_dashboard", False):
             options["dashboard_enabled"] = False
         setup(project, **options)
@@ -534,6 +549,11 @@ def dispatch(args) -> int:
     elif action == "check":
         problems = check(project, remote=not args.offline)
         print("\n".join("not ready: " + problem for problem in problems) if problems else "Ready to start explicitly; no workers started.")
+        return 3 if problems else 0
+    elif action in ("check-git", "check-pr"):
+        problems = symphony_identity.check_access(load(project), action.removeprefix("check-"))
+        print("\n".join("not ready: " + problem for problem in problems) if problems else
+              "Read-only access check passed; no remote writes or workers started.")
         return 3 if problems else 0
     elif action == "start":
         start(project, accept_preview=args.accept_preview)
