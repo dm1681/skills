@@ -311,9 +311,84 @@ cannot pass that isolation proof. Use a dedicated workspace root instead.
 This check creates no model turn and does not fetch, push or change service state.
 Run the optional native regression explicitly with
 `SYMPHONY_TEST_CODEX=/absolute/path/to/codex uv run python -m unittest discover -s tests -p test_symphony_worker.py`.
-`check --offline` still checks local prerequisites and reports the unverified
-Linear gate, returning 3. Exit 0 means checks passed; 3 means not ready; 2 reports
-invalid configuration or a refused operation.
+`check --offline` still checks local prerequisites and reports unverified online
+checks, returning 3. Exit 0 means startup prerequisites passed; it does **not**
+mean a worker delivered a PR. Exit 3 means required checks failed or were skipped;
+2 reports invalid configuration or a refused operation.
+
+## Readiness evidence and explicit rehearsal
+
+The CLI and dashboard show each check as **pass**, **fail** or **skipped**, with
+remediation. `check --json` exposes those rows, `startup_ready` and
+`delivery_ready`. Ordinary checks always leave `delivery_ready` false. Runtime
+integrity, generated workflow, tools, native Git/isolation, declared bootstrap
+prerequisites, CLI authentication, repository access, explicit PR-account access
+and the Linear gate are separate rows. Process startup and worker delivery are
+explicitly skipped: neither an existing service nor an echo proves delivery.
+Old projects without an explicit GitHub identity keep their startup behavior;
+their PR-account check is visibly skipped. Read-only repository permissions and
+PR enumeration do not prove a push or PR creation will succeed.
+
+For a trusted repository, explicitly execute its declared bootstrap and validation
+in a disposable clone, with one total deadline (1–3600 seconds):
+
+```sh
+skills symphony check --project-dir /path/to/project --bootstrap --timeout 300
+```
+
+This uses the normal worker provisioning hook, declared download policy, scoped
+identity and cache, then runs `validation_command` under the native workspace
+sandbox. It removes the temporary clone and retains a sanitized JSON receipt in
+`.symphony/evidence/bootstrap-<id>/evidence.json`. Offline checks skip this phase;
+requesting it offline cannot pass. Setup, ordinary checks, the dashboard and
+service start never run this validation implicitly. Only declare validation
+commands that are safe for this environment; no application/media/model work is
+added by the shared code.
+
+The separate **rehearse** action requires explicit authorization for one paid model
+turn, declared bootstrap/validation, a remote branch and a draft PR:
+
+```sh
+skills symphony rehearse --project-dir /path/to/project \
+  --accept-rehearsal --timeout 300
+```
+
+Configure the explicit repository/account/provider first. The rehearsal creates a
+unique isolated `codex/rehearsal-<id>` branch using the normal provisioning hook.
+It runs one native app-server turn with production skill selection and validated
+Git roots, no interactive approval and no worker network access. The synthetic
+task commits only `symphony-rehearsal.txt`. The controller checks the branch,
+origin, exact content, single commit and clean tree, runs declared validation,
+then pushes and creates a draft PR. A readback must match the validated SHA, base,
+open state and draft flag. Existing readiness checks do not invoke this command.
+This is a worker-to-PR proof, not a test of the upstream scheduler or live service.
+
+The deadline covers access checks, provisioning, discovery, the model turn,
+validation and publication. Child process groups are terminated at completion or
+failure (cleanup may take a few additional seconds). No retry, automatic merge,
+Linear state mutation, service restart or service reconfiguration is performed.
+A timeout during a remote write may leave a branch or PR even if its receipt says
+failure; inspect the exact recorded branch before repeating an operation.
+
+Evidence lives outside the disposable worker directory at
+`.symphony/evidence/rehearsal-<id>/evidence.json`, with per-phase results,
+base/head SHA, repository, unique branch, workspace and PR URL when available.
+Raw worker transcripts, tool output, environment variables and credentials are
+not persisted. Failed or interrupted runs never count as passing evidence.
+Preserve these receipts outside this checkout before removing the checkout.
+Rehearsal workspaces and remote artifacts are retained on both success and
+failure for inspection. A new invocation uses a new ID and never adopts an old
+branch or overwrites previous evidence.
+
+**Human Review is the boundary.** Inspect the receipt and synthetic draft PR;
+never merge that PR or use it to authorize operational rollout. After inspection,
+cleanup is explicitly manual: close the recorded draft PR, delete only its exact
+`codex/rehearsal-<id>` remote branch, and remove only the recorded local rehearsal
+workspace. Keep the receipt. For example, using the configured account/provider
+environment, `gh pr close <recorded-url> --repo <recorded-repository>` and
+`git push origin --delete <recorded-branch>` close and delete those remote artifacts.
+No setup/check command performs this cleanup. The normal implementation PR still
+follows Human Review → Merging; this diagnostic never substitutes for approval.
 
 ## Issue lifecycle and review
 

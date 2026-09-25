@@ -7,6 +7,11 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Symphony integration and curated skills (pending major release)
 
+- Report startup, Git/isolation, account access, bootstrap and worker delivery as
+  separate readiness evidence, including explicit skipped checks. Add opt-in
+  bounded fresh-clone validation and a synthetic worker-to-draft-PR rehearsal
+  with durable receipts, retained artifacts and a Human Review boundary.
+
 - Add optional fresh-worker bootstrap declarations for preinstalled Python,
   locked uv dependencies, explicit download policy, writable workspace caches and
   required tools; source-only projects keep their existing setup behavior.

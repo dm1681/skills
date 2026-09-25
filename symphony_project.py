@@ -346,38 +346,8 @@ def authentication_problems(config: dict) -> list[str]:
 
 
 def check(project: Path, *, remote=True) -> list[str]:
-    config = load(project)
-    problems = []
-    for key in ("repo_url", "validation_command"):
-        if not config.get(key):
-            problems.append(f"Missing {key}; supply the project's repository and validation command")
-    if sys.platform != "linux":
-        problems.append("Only Linux/WSL is supported by this integration")
-    for binary in ("git", "bash", "sh", "gh", config["codex"]):
-        if not shutil.which(binary):
-            problems.append(f"Required executable is unavailable: {binary}")
-    try:
-        source = verify_runtime(config)
-        if not (source / "package.json").is_file() and not shutil.which("erl"):
-            problems.append("Erlang is required for the source-built escript")
-        if not runtime_binary(config).is_file():
-            problems.append("Symphony executable is missing; run skills symphony build-runtime")
-    except Error as exc:
-        problems.append(str(exc))
-    workflow = project.resolve() / ".symphony" / "WORKFLOW.md"
-    if not workflow.is_file() or workflow.is_symlink() or workflow.read_text() != render_workflow(config):
-        problems.append("Generated WORKFLOW.md does not match project configuration; rerun setup")
-    if shutil.which(config["codex"]) and shutil.which("git"):
-        problems.extend(probe_worker(config))
-    if remote:
-        problems.extend(authentication_problems(config))
-        try:
-            linear_gate(config)
-        except Error as exc:
-            problems.append(str(exc))
-    else:
-        problems.append("Linear setup-issue gate not checked offline; startup readiness is unverified")
-    return problems
+    import symphony_readiness
+    return symphony_readiness.problems(symphony_readiness.report(project, remote=remote))
 
 
 def workspace(config: dict) -> Path:
@@ -539,7 +509,7 @@ def start(project: Path, *, accept_preview=False) -> None:
 def add_parser(subcommands):
     parser = subcommands.add_parser("symphony", help="project-only Symphony setup, checks and explicit start")
     actions = parser.add_subparsers(dest="symphony_action", required=True)
-    for action in ("setup", "check", "check-git", "check-pr", "install-runtime", "build-runtime", "start"):
+    for action in ("setup", "check", "check-git", "check-pr", "install-runtime", "build-runtime", "start", "rehearse"):
         child = actions.add_parser(action)
         child.add_argument("--project-dir", type=Path, default=Path.cwd())
         child.set_defaults(handler=dispatch)
@@ -553,6 +523,12 @@ def add_parser(subcommands):
             child.add_argument("--bootstrap-file", type=Path, help="JSON worker prerequisites; {} disables bootstrap")
         if action == "check":
             child.add_argument("--offline", action="store_true")
+            child.add_argument("--bootstrap", action="store_true", help="explicit fresh-clone bootstrap and declared validation")
+            child.add_argument("--json", action="store_true")
+            child.add_argument("--timeout", type=int, default=300)
+        if action == "rehearse":
+            child.add_argument("--accept-rehearsal", action="store_true")
+            child.add_argument("--timeout", type=int, default=300)
         if action == "start":
             child.add_argument("--accept-preview", action="store_true")
     return parser
@@ -578,9 +554,15 @@ def dispatch(args) -> int:
     elif action == "build-runtime":
         build_runtime(project)
     elif action == "check":
-        problems = check(project, remote=not args.offline)
-        print("\n".join("not ready: " + problem for problem in problems) if problems else "Ready to start explicitly; no workers started.")
-        return 3 if problems else 0
+        import symphony_readiness
+        result = symphony_readiness.report(project, remote=not args.offline,
+                                           bootstrap=args.bootstrap, timeout=args.timeout)
+        print(json.dumps(result, indent=2) if args.json else symphony_readiness.render(result))
+        return 0 if result["startup_ready"] else 3
+    elif action == "rehearse":
+        import symphony_rehearsal
+        evidence = symphony_rehearsal.rehearse(project, accept=args.accept_rehearsal, timeout=args.timeout)
+        print(f"Rehearsal evidence: {evidence}; Human Review required; no merge or service change.")
     elif action in ("check-git", "check-pr"):
         problems = symphony_identity.check_access(load(project), action.removeprefix("check-"))
         print("\n".join("not ready: " + problem for problem in problems) if problems else
