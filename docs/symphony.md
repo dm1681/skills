@@ -337,8 +337,10 @@ skills symphony check --project-dir /path/to/project --bootstrap --timeout 300
 ```
 
 This uses the normal worker provisioning hook, declared download policy, scoped
-identity and cache, then runs `validation_command` under the native workspace
-sandbox. It removes the temporary clone and retains a sanitized JSON receipt in
+identity and cache, then runs `validation_command` in the disposable clone as a
+bounded controller process with an allowlisted environment. The native worker
+Git/isolation probe is a separate check. It removes the temporary clone and
+retains a sanitized JSON receipt in
 `.symphony/evidence/bootstrap-<id>/evidence.json`. Offline checks skip this phase;
 requesting it offline cannot pass. Setup, ordinary checks, the dashboard and
 service start never run this validation implicitly. Only declare validation
@@ -356,18 +358,19 @@ skills symphony rehearse --project-dir /path/to/project \
 Configure the explicit repository/account/provider first. The rehearsal creates a
 unique isolated `codex/rehearsal-<id>` branch using the normal provisioning hook.
 It runs one native app-server turn with production skill selection and validated
-Git roots, no interactive approval and no worker network access. Controller GitHub
-tokens and Git/SSH credential environment overrides are removed before discovery
-and the model process; authenticated environments stay with controller operations.
+Git roots, no interactive approval and no worker network access. Discovery, the
+model process and clean-clone validation receive only allowlisted runtime variables;
+authenticated environments stay with controller Git/PR operations.
 This does not isolate readable host credential files from trusted local tools.
 The synthetic task commits only `symphony-rehearsal.txt`. The controller checks the branch,
-origin, exact content, single commit and clean tree, then reprovisions the trusted
-base in a separate temporary clone, fetches the recorded worker commit and checks
-it out for declared validation. Worker index flags, exclusions and ignored files
-are never copied into validation. If the upstream base moved during the run, the
-rehearsal fails and requires an explicit new invocation. The validation clone is
-removed on success or failure. The controller then pushes and creates a draft PR.
-A readback must match the validated SHA, base, open state and draft flag.
+origin, committed content, exact base parent, single commit and clean tree. It
+reprovisions the trusted base in a separate temporary clone, fetches the recorded
+worker commit and checks it out for declared validation. Worker index flags,
+exclusions and ignored files are never copied into validation. Tracked changes
+made by validation or a moved base reject the run. The validation clone is removed
+on success or failure. The controller pushes the recorded SHA from a separate
+controller-owned Git clone and creates a draft PR. A readback must match the
+validated head and base SHA, open state and draft flag.
 Existing readiness checks do not invoke this command.
 This is a worker-to-PR proof, not a test of the upstream scheduler or live service.
 
