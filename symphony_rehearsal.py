@@ -68,7 +68,7 @@ def stop(proc):
     proc.wait()
 
 
-def run(command, cwd, env, deadline):
+def run(command, cwd, env, deadline, *, strip=True):
     """Bound process groups and suppress potentially secret-bearing tool output."""
     with tempfile.TemporaryFile() as output:
         try:
@@ -84,7 +84,8 @@ def run(command, cwd, env, deadline):
             if code:
                 raise Error(f"Rehearsal command failed (exit {code}); verify tools, bootstrap and declared validation")
             output.seek(0)
-            return output.read(1024 * 1024).decode(errors="replace").strip()
+            result = output.read(1024 * 1024).decode(errors="replace")
+            return result.strip() if strip else result
         finally:
             stop(proc)
 
@@ -150,7 +151,7 @@ def validate(config, project, cwd, env, deadline):
          "bash", "-lc", config["validation_command"]], cwd, env, deadline)
 
 
-def validate_commit(config, project, cwd, env, deadline, base, head):
+def validate_commit(config, project, cwd, env, deadline, base, head, marker, expected):
     """Reprovision trusted base; never copy the worker's index or ignored files."""
     with tempfile.TemporaryDirectory(dir=cwd.parent, prefix="validation-") as raw:
         clean = Path(raw).resolve()
@@ -162,6 +163,10 @@ def validate_commit(config, project, cwd, env, deadline, base, head):
         # Fetch objects over Git transport, without copying worker metadata.
         git("fetch", "--no-tags", str(cwd), head)
         git("checkout", "--detach", head)
+        committed = run(["git", "-c", "core.hooksPath=/dev/null", "show", f"{head}:{marker}"],
+                        clean, clean_env, deadline, strip=False)
+        if committed != expected:
+            raise Error("Committed rehearsal marker differs from the requested content")
         validate(config, project, clean, clean_env, deadline)
         if git("rev-parse", "HEAD") != head:
             raise Error("Validation changed the recorded commit")
@@ -326,10 +331,10 @@ def rehearse(project: Path, *, accept=False, timeout=300):
             return git("rev-parse", "HEAD")
         record["head_sha"] = stage(path, record, "synthetic_commit", verify)
         stage(path, record, "validation", lambda: validate_commit(
-            config, project, cwd, env, deadline, base, record["head_sha"]))
+            config, project, cwd, env, deadline, base, record["head_sha"], marker, expected))
         if verify() != record["head_sha"]:
             raise Error("Validation changed the synthetic commit")
-        stage(path, record, "push", lambda: git("push", "origin", "HEAD:refs/heads/" + branch))
+        stage(path, record, "push", lambda: git("push", "origin", record["head_sha"] + ":refs/heads/" + branch))
         def publish():
             body = path.parent / "pr-body.md"
             body.write_text("Synthetic Symphony readiness rehearsal. One worker-created marker commit and declared validation passed.\n\nHuman Review required. Close this PR after inspection; do not merge. No service was changed.\n")
@@ -342,9 +347,10 @@ def rehearse(project: Path, *, accept=False, timeout=300):
         record["pr_url"] = stage(path, record, "draft_pr", publish)
         def readback():
             result = json.loads(run(["gh", "pr", "view", branch, "--repo", config["github_repo"],
-                       "--json", "url,state,isDraft,headRefOid,baseRefName"], cwd, env, deadline))
+                       "--json", "url,state,isDraft,headRefOid,baseRefName,baseRefOid"], cwd, env, deadline))
             if (result.get("state") != "OPEN" or not result.get("isDraft") or
                     result.get("headRefOid") != record["head_sha"] or result.get("baseRefName") != config["base_branch"] or
+                    result.get("baseRefOid") != record["base_sha"] or
                     result.get("url") != record["pr_url"]):
                 raise Error("Rehearsal PR readback did not match the validated commit and review boundary")
             record["pr_url"] = result["url"]
