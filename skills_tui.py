@@ -797,10 +797,9 @@ class SymphonySetup(ModalScreen):
 
     @work(thread=True, exclusive=True)
     def check_readiness(self):
-        import symphony_project
         try:
-            problems = symphony_project.check(self.project_dir)
-            text = "\n".join("Not ready: " + item for item in problems) if problems else "Ready for an explicit start. No workers started."
+            import symphony_readiness
+            text = symphony_readiness.render(symphony_readiness.report(self.project_dir))
         except (OSError, install.InstallError) as exc:
             text = str(exc)
         self.app.call_from_thread(self.query_one("#symphony-result", Static).update, text)

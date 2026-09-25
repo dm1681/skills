@@ -28,7 +28,7 @@ class ProjectSetupFormTests(unittest.IsolatedAsyncioTestCase):
                     config = symphony_project.load(project)
                     self.assertEqual('DIE-123', config['setup_issue'])
                     self.assertEqual(9191, config['dashboard_port'])
-                    with mock.patch.object(symphony_project, 'check', return_value=['Setup issue is not Done']):
+                    with mock.patch('symphony_readiness.report', return_value={'startup_ready':False, 'checks':[{'status':'fail', 'name':'linear_gate', 'detail':'Setup issue is not Done', 'remediation':'Complete setup review'}]}):
                         await pilot.click('#symphony-check')
                         await pilot.pause(.2)
                     self.assertIn('not Done', str(app.screen.query_one('#symphony-result').content))
