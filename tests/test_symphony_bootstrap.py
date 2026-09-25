@@ -22,7 +22,9 @@ class BootstrapTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        # macOS exposes its temp directory through /var -> /private/var;
+        # worker markers use the canonical project path from setup.
+        self.root = Path(self.temp.name).resolve()
         self.cwd = self.root / "worker with spaces"
         self.cwd.mkdir()
         self.env = mock.patch.dict(os.environ, {"HOME": str(self.root), "SKILLS_PLUGIN_STATUS": "off"})
