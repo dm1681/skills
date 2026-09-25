@@ -381,3 +381,116 @@ public-sharing scope; credential availability does not make private inputs or
 media publishable. Clear the configured path with `--artifact-publish-token-file
 ""` to return to inherited credential settings. An inherited token or token-file
 environment variable must also be removed to revoke worker access entirely.
+
+## Machine-wide monitoring (Linux / WSL)
+
+Launch the shared, read-only monitor from **any directory**, after the existing
+PATH setup (`./install.sh --setup-path`):
+
+```sh
+skills symphony dashboard --port 8790
+```
+
+Without PATH setup, use `python3 /absolute/path/to/skills/skills_cli.py symphony
+dashboard --port 8790`. Open `http://127.0.0.1:8790`. The monitor binds only to
+IPv4 loopback. A port conflict fails without stopping or rebinding any process;
+choose another monitor port. The default instance port remains 8788. The monitor
+never launches, stops, restarts, retries or dispatches workers. Refreshing or
+closing the page only changes observation; Ctrl-C stops the monitor itself.
+
+Supported `skills symphony start` launches register their configured endpoint
+**after** the existing readiness gate passes, just before upstream execution.
+Registration is metadata, not evidence of a running service. A registry write
+failure warns without adding a new startup gate. Existing services
+do not need restarting: import their project configuration explicitly:
+
+```sh
+skills symphony register --project-dir /home/me/projects/alpha
+skills symphony register --project-dir /home/me/projects/beta
+```
+
+For an externally launched instance, specify its existing address and optional
+display name. This does not edit project configuration or invoke hooks:
+
+```sh
+skills symphony register --project-dir /home/me/projects/other \
+  --endpoint http://127.0.0.1:9001 --name Other
+skills symphony register --project-dir /home/me/projects/disabled --disabled
+```
+
+The registry is `~/.dm1681-symphony.json` (private permissions, locked atomic
+updates). `SKILLS_SYMPHONY_REGISTRY` overrides it for integration and tests;
+`--registry /absolute/path/registry.json` overrides it for dashboard/register.
+Duplicate canonical endpoints share one stable instance ID and count once.
+Distinct endpoints retain separate identities even for the same issue identifier
+or project. A project with multiple endpoint registrations is intentional:
+when retiring an endpoint, remove its entry from the registry while no registration
+command is running. Changing a configuration does not silently rebind or replace
+an already-running instance. Do not include credentials in display names or paths.
+Only canonical project paths, display names, endpoint origins and instance IDs
+are persisted; repository credentials, workflow and environment are never copied.
+
+Only explicit HTTP loopback origins with ports are accepted: `localhost`
+(normalized to `127.0.0.1`), numeric IPv4 loopback, or `[::1]`. Credentials,
+queries, fragments, extra paths and remote hosts are rejected. Polling bypasses
+HTTP proxies and never follows redirects. No filesystem or port scans occur.
+Up to 64 endpoints are supported; `--refresh` defaults to 5 seconds (1–300), and
+`--timeout` defaults to 2 seconds (0.1–30). Each endpoint is polled independently;
+opening multiple browser tabs does not multiply the upstream polling rate.
+
+The page shows all registered instances, active/retrying workers, project and
+status filters, source-dashboard and available Linear links, elapsed runtime,
+recognized event names, observation freshness and supported usage. Counts and
+usage follow the project filter, not the status filter. Token/runtime sums show
+how many fresh instances supplied each metric. They describe the instances'
+current runtimes, can reset on restart, and are **not lifetime history or cost**.
+The pinned API does not supply issue titles. Missing values are unavailable;
+private messages, retry errors, workspace paths and raw prompts are not exposed.
+
+Troubleshooting:
+
+- **Empty / configured:** register existing instances; configured means no
+  successful observation yet, not zero workers. Registration does not start them.
+- **Disabled:** the project has no HTTP dashboard; sessions cannot be observed.
+  An explicit registration does not enable or restart it.
+- **Unreachable:** the endpoint is offline, timed out, redirected, or returned a
+  non-success response. Check the source dashboard address independently.
+- **Incompatible:** the JSON state response is malformed, unsupported, or reports
+  snapshot unavailability. The adapter targets the pinned runtime above; changing
+  runtime versions requires verifying their API contract.
+- **Stale / partial coverage:** old source timestamps, missing endpoints or failed
+  polls exclude those sessions and usage from current totals. Last success remains
+  visible. Recovery is automatic on the next successful fresh poll. A broken
+  registry is reported, not silently treated as an empty machine.
+
+Coverage is the registered endpoints reachable in this Linux environment / WSL
+distribution. It does not discover every physical-host process, native Windows,
+other WSL distributions, other users or remote machines. There is no multi-user
+authentication or execution control surface. No Linear/GitHub credentials are
+needed for monitoring.
+
+### Reproducible monitor validation
+
+`tests/fixtures/symphony/state.json` matches the pinned upstream presenter (source
+links are beside it). Run deterministic tests with:
+
+```sh
+uv run python -m unittest discover -s tests -p test_symphony_monitor.py -v
+```
+
+For browser evidence with the already-installed optional Playwright tooling:
+
+```sh
+/path/to/playwright/python scripts/prove_symphony_dashboard.py \
+  --output .symphony/dashboard-proof
+```
+
+The proof launches two synthetic local state servers and the shared CLI from
+outside a project directory. It exercises duplicate registration, shared issue
+identifiers, filters, links, escaping, offline/recovery, incompatible/disabled,
+empty states and read-only HTTP requests. It saves screenshots and a JSON result.
+It does not start Symphony, consume model turns, or contact Linear/GitHub.
+Playwright is a validation tool, not a runtime dependency of the dashboard.
+
+Checked-in [synthetic browser evidence](evidence/symphony-monitor/README.md)
+records the two-instance walkthrough and failure isolation.

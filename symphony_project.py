@@ -558,12 +558,17 @@ def start(project: Path, *, accept_preview=False) -> None:
         raise Error("Not ready:\n- " + "\n- ".join(problems))
     config = load(project)
     binary = runtime_binary(config)
+    import symphony_registry
+    try:
+        symphony_registry.register_config(config)
+    except (OSError, ValueError):
+        print("Warning: monitoring registration unavailable; import this endpoint later with skills symphony register.", file=sys.stderr)
     # Exec preserves upstream signal/cancellation handling; no second scheduler.
     os.execv(str(binary), [str(binary), PREVIEW_FLAG, str(project.resolve() / ".symphony" / "WORKFLOW.md")])
 
 
 def add_parser(subcommands):
-    parser = subcommands.add_parser("symphony", help="project-only Symphony setup, checks and explicit start")
+    parser = subcommands.add_parser("symphony", help="Symphony setup, explicit start and read-only machine-wide monitoring")
     actions = parser.add_subparsers(dest="symphony_action", required=True)
     for action in ("setup", "check", "check-git", "check-pr", "install-runtime", "build-runtime", "start"):
         child = actions.add_parser(action)
@@ -582,6 +587,8 @@ def add_parser(subcommands):
             child.add_argument("--offline", action="store_true")
         if action == "start":
             child.add_argument("--accept-preview", action="store_true")
+    import symphony_dashboard
+    symphony_dashboard.add_parsers(actions)
     return parser
 
 

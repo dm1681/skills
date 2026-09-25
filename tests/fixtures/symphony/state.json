@@ -1,0 +1,9 @@
+{
+  "generated_at": "2026-09-24T12:00:00Z",
+  "counts": {"running": 1, "retrying": 1, "blocked": 0},
+  "running": [{"issue_id": "fixture-issue", "issue_identifier": "DIE-123", "issue_url": "https://linear.app/example/issue/DIE-123", "state": "In Progress", "worker_host": null, "workspace_path": "/synthetic/project", "session_id": "session-123", "turn_count": 2, "last_event": "turn_completed", "last_message": "PRIVATE_PROMPT_SENTINEL", "started_at": "2026-09-24T11:55:00Z", "last_event_at": "2026-09-24T11:59:59Z", "tokens": {"input_tokens": 200, "output_tokens": 50, "total_tokens": 250}}],
+  "retrying": [{"issue_id": "retry-issue", "issue_identifier": "DIE-124", "issue_url": null, "attempt": 2, "due_at": "2026-09-24T12:00:20Z", "error": "PRIVATE_ERROR_SENTINEL", "worker_host": null, "workspace_path": "/synthetic/project"}],
+  "blocked": [],
+  "codex_totals": {"input_tokens": 200, "output_tokens": 50, "total_tokens": 250, "seconds_running": 300},
+  "rate_limits": null
+}
