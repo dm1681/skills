@@ -10,6 +10,7 @@ except ModuleNotFoundError:
     raise unittest.SkipTest('Textual is optional; scripted setup is tested separately')
 
 import symphony_project
+import symphony_linear
 
 
 class ProjectSetupFormTests(unittest.IsolatedAsyncioTestCase):
@@ -28,7 +29,7 @@ class ProjectSetupFormTests(unittest.IsolatedAsyncioTestCase):
                     config = symphony_project.load(project)
                     self.assertEqual('DIE-123', config['setup_issue'])
                     self.assertEqual(9191, config['dashboard_port'])
-                    with mock.patch.object(symphony_project, 'check', return_value=['Setup issue is not Done']):
+                    with mock.patch.object(symphony_linear, 'check_project', return_value=['Setup issue is not Done']):
                         await pilot.click('#symphony-check')
                         await pilot.pause(.2)
                     self.assertIn('not Done', str(app.screen.query_one('#symphony-result').content))

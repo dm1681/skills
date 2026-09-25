@@ -38,17 +38,20 @@ port or a universal two-environment launcher.
    ```
 
    `--accept-preview` acknowledges upstream's engineering-preview requirement.
-   The launcher rechecks readiness and replaces itself with upstream Symphony;
-   polling, retries, continuation, cancellation and workspace cleanup stay in
-   the upstream engine. Stop with the normal process interrupt (Ctrl-C).
+   The launcher authenticates as the Symphony Linear app, rechecks readiness,
+   and starts upstream Symphony. Polling, retries, continuation, cancellation
+   and workspace cleanup stay in the upstream engine. Stop with Ctrl-C.
 
-`LINEAR_API_KEY` must be available to the service environment; interactive app
-connectors do not provision it. Codex and `gh` must be installed and authenticated
+Configure the Symphony Linear app credentials once per service host using
+[`symphony_linear.py save`](symphony-linear-app.md). The standard `start` command
+uses that app identity and fails closed if credentials or team access are missing;
+it does not fall back to a personal Linear key. `skills symphony check` uses the
+same app identity without dispatching workers. Codex and `gh` must be installed and authenticated
 for the chosen Linux environment. Online readiness checks verify both CLI login
 statuses with bounded timeouts and suppress credential-bearing diagnostics.
 Offline checks leave authentication unverified. Credentials stay out of generated files and
-are not copied by setup. Upstream removes the tracker secret before starting
-Codex; the discovery helper also removes it.
+are not copied by setup. The app gateway keeps OAuth tokens outside workers;
+the discovery helper also removes the gateway key.
 
 ## Project worker Git and GitHub identity
 
@@ -276,44 +279,28 @@ excludes home/admin/system skills, including `viz-driven-dev`, rather than merel
 changing a trigger description. It does not assume a separate `CODEX_HOME`
 hides `$HOME/.agents/skills`. Discovery probes create no model turn.
 
-The skills pilot is verified with Linux Codex **0.156.1**. The desktop-bundled
-0.155.0-alpha.16.3 rejected WSLg's duplicate filesystem mount at
-`/mnt/wslg/distro` while protecting its daemon socket. The verified stable
-release masks that alias inside restricted execution and passes workspace-write
-isolation checks without changing host mounts. If you encounter that exact
-failure, install an official verified Linux release and select its absolute path
-with `skills symphony setup --codex /path/to/codex`. The current command form is
-`codex -c 'sandbox_mode="workspace-write"' sandbox -- /bin/sh -c 'printf sandbox-ok'`.
-Changing a project's executable does not update a running desktop app's bundled
-backend; diagnose that backend separately. Do not disable sandboxing or unmount
-WSLg as a workaround.
-
-The shared worker launcher grants Git access through `symphony_worker.py`. Before
-each `turn/start`, it validates the canonical workspace, project marker and real
-`.git` directory, then adds only the clone and its `.git` to the turn's writable
-roots. Linked worktrees, redirected or shared Git metadata, and unexpected roots
-are rejected. Approval, network and temporary-directory policies are preserved.
-The configured Codex executable stays native for login, help and discovery;
-projects do not need to replace it with their own Git adapter. The launcher
-relays JSON lines and cleans up its child process group on shutdown.
-SIGINT, SIGTERM and SIGHUP all use that cleanup. Both the real worker and readiness
-probe clear inherited Git metadata-routing variables (such as `GIT_DIR`,
-`GIT_WORK_TREE`, and `GIT_INDEX_FILE`). Transport authentication settings such as
-`GIT_SSH_COMMAND`, `GIT_ASKPASS`, and `GIT_CONFIG_*` remain available so private
-repository fetches and pushes use the same credentials as provisioning.
-
-Readiness now creates a disposable repository under the configured workspace root
-and uses the same validated roots to run a real native sandbox commit. It also
-proves parent and sibling writes fail. Git or isolation failure blocks start;
-host execution used by an interactive developer is not a substitute. A workspace
-root under a directory already writable by the sandbox (such as default `/tmp`)
-cannot pass that isolation proof. Use a dedicated workspace root instead.
-This check creates no model turn and does not fetch, push or change service state.
-Run the optional native regression explicitly with
-`SYMPHONY_TEST_CODEX=/absolute/path/to/codex uv run python -m unittest discover -s tests -p test_symphony_worker.py`.
+Generated workers use `danger-full-access` and `approval_policy: never`. Git
+commits work without a per-clone writable-root adapter. Full access includes
+every path the worker's OS user can write, including other projects and mounted
+Windows files; use a dedicated account or container when that scope is too broad.
+The shared `symphony_worker.py` relay remains only for dynamic model/effort
+selection and process-group cleanup. It clears inherited Git routing variables
+and the Linear gateway key while retaining configured Git/GitHub transport auth.
+Startup does not perform synthetic Git or sandbox readiness probes.
 `check --offline` still checks local prerequisites and reports the unverified
 Linear gate, returning 3. Exit 0 means checks passed; 3 means not ready; 2 reports
 invalid configuration or a refused operation.
+
+## Dynamic worker models
+
+New projects default to `--model-routing auto`; use `--model-routing off` to
+inherit the Codex default. Existing configurations retain an explicit setting.
+The local router selects Luna/low for narrow documentation changes, Sol/medium
+for ordinary work, and Astra/high for architecture, security or concurrency work.
+An issue label `symphony:simple`, `symphony:standard` or `symphony:complex`
+overrides the rule. The router verifies all three model/effort pairs before
+launch and records the decision in `.symphony/model-routing/`. It can accept one
+reasoned complexity promotion on a later turn. No extra model turn is used.
 
 ## Issue lifecycle and review
 

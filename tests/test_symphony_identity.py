@@ -157,7 +157,7 @@ class IdentityTests(unittest.TestCase):
         self.assertFalse(project.config_path(self.root).exists())
 
     def test_discovery_uses_scoped_environment_for_both_servers_without_provider(self):
-        config = {**self.config, 'codex': 'codex'}
+        config = {**self.config, 'codex': 'codex', 'model_routing': 'off'}
         names = project.WORKER_SKILLS + project.DELIVERY_SKILLS
         rows = [{'path': str(self.root / '.agents/skills' / name / 'SKILL.md'), 'enabled': True} for name in names]
         with mock.patch.dict(os.environ, {'GH_TOKEN': self.token, 'GH_REPO': 'wrong/repo', 'GIT_DIR': '/wrong'}), \
@@ -171,17 +171,6 @@ class IdentityTests(unittest.TestCase):
             self.assertEqual('Worker', env['GIT_AUTHOR_NAME'])
             self.assertNotIn('GH_TOKEN', env)
             self.assertNotIn('GIT_DIR', env)
-
-    def test_native_probe_uses_same_sanitized_environment_as_discovery(self):
-        config = {**self.config, 'codex': 'codex', 'workspace_root': str(self.root / 'workspaces')}
-        with mock.patch.dict(os.environ, {'GH_TOKEN': self.token, 'GH_REPO': 'wrong/repo', 'GIT_DIR': '/wrong'}), \
-             mock.patch.object(project, 'worker_overrides', return_value=[]), \
-             mock.patch.object(project.symphony_worker, 'probe_git') as probe:
-            self.assertEqual([], project.probe_worker(config))
-        env = probe.call_args.kwargs['env']
-        self.assertEqual('team/repo', env['GH_REPO'])
-        self.assertNotIn('GH_TOKEN', env)
-        self.assertNotIn('GIT_DIR', env)
 
     def test_authentication_ignores_unrelated_saved_github_accounts(self):
         config = {**self.config, 'codex': 'codex'}

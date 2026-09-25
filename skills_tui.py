@@ -797,12 +797,12 @@ class SymphonySetup(ModalScreen):
 
     @work(thread=True, exclusive=True)
     def check_readiness(self):
-        import symphony_project
+        import symphony_linear
         try:
-            problems = symphony_project.check(self.project_dir)
+            problems = symphony_linear.check_project(self.project_dir)
             text = "\n".join("Not ready: " + item for item in problems) if problems else "Ready for an explicit start. No workers started."
-        except (OSError, install.InstallError) as exc:
-            text = str(exc)
+        except (OSError, ValueError, install.InstallError, symphony_linear.Error):
+            text = "Symphony Linear app credentials or workspace access are unavailable."
         self.app.call_from_thread(self.query_one("#symphony-result", Static).update, text)
 
     def action_close(self):

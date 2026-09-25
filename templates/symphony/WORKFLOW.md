@@ -24,7 +24,7 @@ Issue context:
 Identifier: {{ issue.identifier }}
 Title: {{ issue.title }}
 Current status: {{ issue.state }}
-Labels: {{ issue.labels }}
+Labels: {{ issue.labels | join: ", " }}
 URL: {{ issue.url }}
 
 Description:
@@ -95,7 +95,7 @@ Otherwise include the verified issue state in the completion report.
 - `Todo` -> queued; immediately transition to `In Progress` before active work.
   - Special case: if a PR is already attached, treat as feedback/rework loop (run full PR feedback sweep, address or explicitly push back, revalidate, return to `Human Review`).
 - `In Progress` -> implementation actively underway.
-- `Human Review` -> PR is attached and validated; waiting on human approval.
+- `Human Review` -> read the workpad Handoff: ready for acceptance, or blocked and needing intervention under the blocked-access exception.
 - `Merging` -> approved by human; execute the `land` skill flow (do not call `gh pr merge` directly).
 - `Rework` -> reviewer requested changes; planning + implementation required.
 - `Done` -> terminal state; no further action required.
@@ -160,6 +160,29 @@ Otherwise include the verified issue state in the completion report.
       - resulting `HEAD` short SHA.
 10. Compact context and proceed to execution.
 
+## Human-comment protocol (required)
+
+On every pickup or resumption in an active state, read all Linear issue comments,
+including replies, alongside the workpad. Identify human questions and requests
+without a substantive worker answer.
+
+- Answer unanswered human questions directly in their comment threads using
+  `parentId`. If threaded replies are unavailable, post a comment quoting the
+  question and identifying its source. A workpad edit is not a reply.
+- Record change requests and evidence in the workpad; reply with the result or
+  specific blocker. Reuse adequate existing answers to avoid duplicates on retries.
+- Before every Human Review transition, reread issue comments and answer all
+  outstanding human questions. If an answer is unknown, explain why.
+- Keep a `### Handoff` section near the top of the workpad. Set it to `In progress`
+  on resumption. Before Human Review, use **Ready for acceptance** only when the
+  completion bar is met, or **Blocked — needs intervention** only under the
+  documented blocked-access exception. Leave unmet boxes unchecked.
+- Verify replies and the workpad by reading them back before changing state.
+  If posting fails, do not claim the question was answered.
+
+Direct answers are exceptions to restrictions on comments outside the workpad.
+Progress and completion summaries stay in the workpad.
+
 ## PR feedback sweep protocol (required)
 
 When a ticket has an attached PR, run this protocol before moving to `Human Review`:
@@ -192,7 +215,7 @@ Use this only when completion is blocked by missing required tools or missing au
 
 1.  Determine current repo state (`branch`, `git status`, `HEAD`) and verify the kickoff `pull` sync result is already recorded in the workpad before implementation continues.
 2.  If current issue state is `Todo`, move it to `In Progress`; otherwise leave the current state unchanged.
-3.  Load the existing workpad comment and treat it as the active execution checklist.
+3.  Run the human-comment protocol, then load the existing workpad as the active execution checklist.
     - Edit it liberally whenever reality changes (scope, risks, validation approach, discovered tasks).
 4.  Implement against the hierarchical TODOs and keep the comment current:
     - Check off completed items.
@@ -259,7 +282,7 @@ Use this only when completion is blocked by missing required tools or missing au
 - Step 1/2 checklist is fully complete and accurately reflected in the single workpad comment.
 - Acceptance criteria and required ticket-provided validation items are complete.
 - Validation/tests are green for the latest commit.
-- PR feedback sweep is complete and no actionable comments remain.
+- Human-comment protocol and PR feedback sweep are complete; human questions have visible replies and no actionable feedback remains.
 - PR checks are green, branch is pushed, and PR is linked on the issue.
 - Required PR metadata is present (`symphony` label).
 - For app changes, the project's required runtime validation and evidence are complete.
@@ -278,7 +301,7 @@ Use this only when completion is blocked by missing required tools or missing au
   title/description/acceptance criteria, same-project assignment, a `related`
   link to the current issue, and `blockedBy` when the follow-up depends on the
   current issue.
-- Do not move to `Human Review` unless the `Completion bar before Human Review` is satisfied.
+- Move to `Human Review` only after the completion bar is satisfied or the documented blocked-access exception applies; record the distinct Handoff outcome in either case.
 - In `Human Review`, do not make changes; wait and poll.
 - If state is terminal (`Done`), do nothing and shut down.
 - Keep issue text concise, specific, and reviewer-oriented.
@@ -290,6 +313,10 @@ Use this exact structure for the persistent workpad comment and keep it updated 
 
 ````md
 ## Codex Workpad
+
+### Handoff
+
+In progress
 
 ```text
 <hostname>:<abs-path>@<short-sha>

@@ -5,6 +5,9 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+- Default new Symphony workers to full Codex access and dynamic model/effort
+  routing. The standard start/check commands use a separate Linear app identity;
+  no per-service Linear launcher override or Git sandbox adapter is required.
 - Add a read-only machine-wide Symphony web monitor with local endpoint registration,
   isolated polling, freshness/coverage reporting and synthetic browser validation.
   Linux/WSL only; project execution and readiness remain unchanged.
@@ -23,9 +26,6 @@ All notable changes to this repository are documented here. Versions follow
   explicit GitHub repository/account identity with runtime credential providers.
   Separate read-only Git and PR access checks suppress credential diagnostics;
   global accounts remain unchanged and Windows keys can be reused from WSL.
-- Grant only a validated worker clone's Git metadata through the shared launcher;
-  reject redirected/shared metadata and unexpected writable roots. Readiness now
-  proves a native sandbox commit works and parent/sibling writes remain denied.
 - Use 30-second polling and Codex response deadlines for generated workflows to
   reduce shared Linear quota pressure and tolerate thread startup latency.
 

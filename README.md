@@ -401,6 +401,9 @@ unrelated installs are preserved. See [curation and migration](docs/matt-pocock-
 Symphony setup is project-only and initially targets Linux/WSL. Run
 `skills symphony setup --project-dir ...`, install its pinned runtime with
 `skills symphony install-runtime`, and check readiness with `skills symphony check`.
+New workers default to full Codex access and dynamic model/effort selection;
+configure the separate [Symphony Linear app](docs/symphony-linear-app.md) once on
+the service host before online checks or startup.
 The dashboard exposes setup with **Y**. Setup never starts workers; explicit
 `skills symphony start --accept-preview` verifies the exact project's completed
 setup issue first. See [setup, lifecycle and validation](docs/symphony.md).
