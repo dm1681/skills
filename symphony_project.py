@@ -288,42 +288,6 @@ def build_runtime(project: Path) -> None:
         subprocess.run(command, cwd=source / "elixir", check=True)
 
 
-def probe_worker(config: dict) -> list[str]:
-    """Check worker skill and model discovery without a model turn."""
-    problems = []
-    try:
-        env = symphony_identity.environment(config, credentials=False)
-        env = symphony_artifacts.environment(config, env)
-    except Error as exc:
-        return ["Worker identity configuration failed: " + str(exc)]
-    probe_parent = Path(config["workspace_root"])
-    probe_parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=probe_parent, prefix="readiness-") as raw:
-        root = Path(raw)
-        cwd = root / "worker"
-        cwd.mkdir()
-        try:
-            env = symphony_bootstrap.environment(config.get("bootstrap", {}), cwd, base_env=env)
-        except Error as exc:
-            problems.append(str(exc))
-        subprocess.run(["git", "init", "--quiet", "--template="], cwd=cwd, env=env, check=True)
-        (cwd / ".symphony-worker.json").write_text(json.dumps({"kind": "symphony", "project_dir": config["project_dir"]}))
-        for name in WORKER_SKILLS:
-            install.install_one(install.SOURCE_ROOT / name, cwd / ".agents/skills", "copy", False, False)
-        for name in DELIVERY_SKILLS:
-            install.install_one(RESOURCES / "skills" / name, cwd / ".agents/skills", "copy", False, False)
-        try:
-            worker_overrides(config, cwd, env=env)
-        except (Error, OSError) as exc:
-            problems.append("Worker discovery failed: " + str(exc))
-        if config.get(symphony_artifacts.FIELD):
-            try:
-                symphony_artifacts.probe(config["codex"], cwd, symphony_worker.worker_environment(env))
-            except (Error, OSError, ValueError, subprocess.TimeoutExpired) as exc:
-                problems.append("Artifact credential check failed: " + str(exc))
-    return problems
-
-
 def authentication_problems(config: dict) -> list[str]:
     """Check CLI login without exposing credential-bearing diagnostic output."""
     problems = []
@@ -374,8 +338,6 @@ def check(project: Path, *, remote=True) -> list[str]:
     workflow = project.resolve() / ".symphony" / "WORKFLOW.md"
     if not workflow.is_file() or workflow.is_symlink() or workflow.read_text() != render_workflow(config):
         problems.append("Generated WORKFLOW.md does not match project configuration; rerun setup")
-    if shutil.which(config["codex"]) and shutil.which("git"):
-        problems.extend(probe_worker(config))
     if remote:
         problems.extend(authentication_problems(config))
         try:

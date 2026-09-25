@@ -65,16 +65,6 @@ class ArtifactWorkerTests(unittest.TestCase):
         with self.assertRaisesRegex(artifacts.Error, 'Node.js 22'):
             artifacts.environment(self.config, {'PATH': '/fake'})
 
-    def test_sandbox_probe_never_puts_token_in_command_or_output(self):
-        env=artifacts.environment(self.config, {'PATH': '/fake'})
-        self.run.return_value=subprocess.CompletedProcess([],0,'artifact-key-readable','')
-        artifacts.probe('/fake/codex',self.cwd,env)
-        self.assertNotIn(self.token,repr(self.run.call_args))
-        self.assertIn('ARTIFACT_PUBLISH_TOKEN_FILE',repr(self.run.call_args))
-        self.run.return_value=subprocess.CompletedProcess([],1,'',self.token)
-        with self.assertRaises(artifacts.Error) as caught:artifacts.probe('/fake/codex',self.cwd,env)
-        self.assertNotIn(self.token,str(caught.exception))
-
     def test_existing_clones_receive_new_skills_without_replacing_edits(self):
         root=self.cwd/'.agents/skills'
         existing=root/'research';existing.mkdir(parents=True)

@@ -18,9 +18,6 @@ import symphony_project as symphony
 
 class SymphonyTests(unittest.TestCase):
     def setUp(self):
-        self.probe = mock.patch.object(symphony, "probe_worker", return_value=[])
-        self.probe.start()
-        self.addCleanup(self.probe.stop)
         self.auth = mock.patch.object(symphony, "authentication_problems", return_value=[])
         self.auth.start()
         self.addCleanup(self.auth.stop)
@@ -128,7 +125,7 @@ class SymphonyTests(unittest.TestCase):
             with self.assertRaisesRegex(install.InstallError, 'interactive project'):
                 symphony.setup(self.project, workspace_root=path)
 
-    def test_edited_configuration_is_rejected_before_startup_probes(self):
+    def test_edited_configuration_is_rejected_before_startup_checks(self):
         path = symphony.config_path(self.project)
         for field, value in (
             ('workspace_root', str(self.project.parent)),

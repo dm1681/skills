@@ -109,8 +109,8 @@ is configured. The GitHub identity triple overrides inherited GitHub tokens,
 repository and host; Git-author/SSH-only settings preserve existing GitHub auth.
 For HTTPS github.com
 clones, a process-only `gh auth git-credential` helper uses the same provider token.
-Discovery servers and sandbox readiness probes also receive scoped environments;
-offline probes clear ambient GitHub tokens without invoking the provider.
+Worker discovery servers receive scoped environments. Startup does not create
+a disposable worker to test access.
 For SSH, Git authentication remains the key selected by the alias/config, while
 PR APIs use the verified provider account. Global Git configuration, gh logins,
 the interactive checkout and other projects are not written. This uses the
@@ -201,8 +201,8 @@ it, install dependencies or start a service. Reimport after changing the JSON.
 Other setup calls (including dashboard saves) preserve it; importing `{}` removes
 the bootstrap requirements. Old configurations remain valid. Machine-specific
 interpreter paths belong in local configuration; portable declarations can use a
-PATH executable name. Readiness checks probe local prerequisites and cache access,
-but only a fresh issue clone proves dependency bootstrap succeeds.
+PATH executable name. A fresh issue clone verifies dependency bootstrap when a
+task starts.
 
 The hook checks a **preinstalled** Python with an optional exact major.minor or
 major.minor.patch match. It never downloads an interpreter. `dependencies` is
@@ -277,7 +277,7 @@ unselected discovered path through session configuration, then asks again. It
 refuses launch unless the enabled paths are exactly the selected set. This also
 excludes home/admin/system skills, including `viz-driven-dev`, rather than merely
 changing a trigger description. It does not assume a separate `CODEX_HOME`
-hides `$HOME/.agents/skills`. Discovery probes create no model turn.
+hides `$HOME/.agents/skills`. Worker discovery creates no model turn.
 
 Generated workers use `danger-full-access` and `approval_policy: never`. Git
 commits work without a per-clone writable-root adapter. Full access includes
@@ -286,7 +286,7 @@ Windows files; use a dedicated account or container when that scope is too broad
 The shared `symphony_worker.py` relay remains only for dynamic model/effort
 selection and process-group cleanup. It clears inherited Git routing variables
 and the Linear gateway key while retaining configured Git/GitHub transport auth.
-Startup does not perform synthetic Git or sandbox readiness probes.
+Startup does not create a synthetic worker or run sandbox readiness probes.
 `check --offline` still checks local prerequisites and reports the unverified
 Linear gate, returning 3. Exit 0 means checks passed; 3 means not ready; 2 reports
 invalid configuration or a refused operation.
