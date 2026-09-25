@@ -125,7 +125,7 @@ def run_server(command: list[str], project: Path, root: Path, cwd: Path, env: di
             signal.signal(signum, handler)
 
 
-def probe_git(codex: str, project: Path, root: Path, cwd: Path) -> None:
+def probe_git(codex: str, project: Path, root: Path, cwd: Path, *, env=None) -> None:
     """A real synthetic commit plus denied parent/sibling writes; no model turn."""
     request = {"method": "turn/start", "params": {"cwd": str(cwd), "sandboxPolicy": {"type": "workspaceWrite"}}}
     policy = json.loads(prepare_request(json.dumps(request).encode(), project, root, cwd))["params"]["sandboxPolicy"]
@@ -143,7 +143,7 @@ for target in sys.argv[1:]:
     raise SystemExit("sandbox allowed a write outside the worker clone")
 print("git-isolation-ok")
 '''
-    env = worker_environment(os.environ)
+    env = worker_environment(os.environ if env is None else env)
     result = subprocess.run([
         codex, "-c", 'sandbox_mode="workspace-write"', "-c",
         "sandbox_workspace_write.writable_roots=" + json.dumps(policy["writableRoots"]),
