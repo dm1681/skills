@@ -18,6 +18,7 @@ import urllib.request
 from pathlib import Path
 
 import install
+import symphony_artifacts
 import symphony_bootstrap
 import symphony_worker
 import symphony_identity
@@ -25,7 +26,7 @@ import symphony_identity
 REVISION = "be10a1b79df723d6d7612b5651c8522704dafb2e"
 UPSTREAM = "https://github.com/openai/symphony.git"
 RESOURCES = Path(__file__).resolve().parent / "templates" / "symphony"
-WORKER_SKILLS = ("codebase-design", "diagnosing-bugs", "tdd", "research", "writing-for-agents", "claude-handoff")
+WORKER_SKILLS = ("codebase-design", "diagnosing-bugs", "tdd", "research", "writing-for-agents", "claude-handoff", "ponytail", "cloudflare-artifacts")
 DELIVERY_SKILLS = ("linear", "commit", "pull", "push", "land")
 RUNTIME_ASSETS = {
     "x86_64": ("linux_x86_64", "08d7aac26747fdc14022ade870cf7e530a6343ab92a040f39a4294b27a0cd5af"),
@@ -83,6 +84,7 @@ def validate_config(config: dict) -> None:
     if config["revision"] != REVISION:
         raise Error("Runtime revision differs from the supported pin")
     symphony_identity.validate(config)
+    symphony_artifacts.validate(config)
 
 
 def write_managed(path: Path, text: str, old_hash: str = "") -> str:
@@ -288,6 +290,7 @@ def probe_worker(config: dict) -> list[str]:
     problems = []
     try:
         env = symphony_identity.environment(config, credentials=False)
+        env = symphony_artifacts.environment(config, env)
     except Error as exc:
         return ["Worker identity configuration failed: " + str(exc)]
     probe_parent = Path(config["workspace_root"])
@@ -312,7 +315,9 @@ def probe_worker(config: dict) -> list[str]:
             problems.append("Worker discovery failed: " + str(exc))
         try:
             symphony_worker.probe_git(config["codex"], Path(config["project_dir"]), root, cwd, env=env)
-        except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+            if config.get(symphony_artifacts.FIELD):
+                symphony_artifacts.probe(config["codex"], cwd, symphony_worker.worker_environment(env))
+        except (Error, OSError, ValueError, subprocess.TimeoutExpired) as exc:
             problems.append("Worker Git/isolation probe failed: " + str(exc))
     return problems
 
@@ -474,6 +479,25 @@ def worker_overrides(config: dict, cwd: Path, *, env=None) -> list[str]:
     return overrides
 
 
+def provision_missing_worker_skills(cwd: Path) -> None:
+    """Upgrade resumed clones without replacing existing project skill edits."""
+    root = cwd / ".agents" / "skills"
+    if cwd not in root.resolve().parents:
+        raise Error("Project skill root resolves outside the issue workspace")
+    added = []
+    for names, source in ((WORKER_SKILLS, install.SOURCE_ROOT), (DELIVERY_SKILLS, RESOURCES / "skills")):
+        for name in names:
+            destination = root / name
+            if destination.is_symlink():
+                raise Error("Worker skill directory must be a real copy")
+            if not destination.exists():
+                install.install_one(source / name, root, "copy", False, False)
+                added.append(name)
+    if added:
+        names = sorted(set(install.receipt_skills(root)) | set(added))
+        install.write_receipt(root, names, "copy", False)
+
+
 def run_worker(project: Path) -> None:
     config = load(project)
     cwd = workspace(config)
@@ -484,6 +508,8 @@ def run_worker(project: Path) -> None:
         raise Error("Worker bootstrap declaration changed; reprovision the issue workspace before launching")
     env = symphony_identity.environment(config)
     env = symphony_bootstrap.environment(config.get("bootstrap", {}), cwd, base_env=env)
+    env = symphony_artifacts.environment(config, env)
+    provision_missing_worker_skills(cwd)
     env["SKILLS_SESSION_KIND"] = "symphony"
     overrides = worker_overrides(config, cwd, env=env)
     try:
@@ -523,6 +549,7 @@ def add_parser(subcommands):
                 child.add_argument("--" + flag)
             for field in symphony_identity.FIELDS:
                 child.add_argument("--" + field.replace("_", "-"))
+            child.add_argument("--artifact-publish-token-file", help="external owner-only upload key file; never the key value")
             child.add_argument("--port", type=int, dest="dashboard_port")
             child.add_argument("--no-dashboard", action="store_true")
             child.add_argument("--bootstrap-file", type=Path, help="JSON worker prerequisites; {} disables bootstrap")
@@ -545,7 +572,7 @@ def dispatch(args) -> int:
     project = args.project_dir.resolve()
     action = args.symphony_action
     if action == "setup":
-        options = {key: getattr(args, key, None) for key in ("project_id", "project_slug", "setup_issue", "repo_url", "runtime_source", "workspace_root", "codex", "base_branch", "validation_command", "dashboard_port")}
+        options = {key: getattr(args, key, None) for key in ("project_id", "project_slug", "setup_issue", "repo_url", "runtime_source", "workspace_root", "codex", "base_branch", "validation_command", "dashboard_port", "artifact_publish_token_file")}
         options.update({key: getattr(args, key, None) for key in symphony_identity.FIELDS})
         if getattr(args, "no_dashboard", False):
             options["dashboard_enabled"] = False

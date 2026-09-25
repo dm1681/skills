@@ -19,6 +19,10 @@ All notable changes to this repository are documented here. Versions follow
   Keep publication credentials out of the rehearsal model environment and validate
   its recorded commit in a separate clone, excluding worker-controlled local files.
 
+- Enable Ponytail and Cloudflare Artifacts for workers, provision missing skills
+  in resumed clones, and support protected external publishing-key files with
+  Node.js and sandbox readability checks.
+
 - Add optional fresh-worker bootstrap declarations for preinstalled Python,
   locked uv dependencies, explicit download policy, writable workspace caches and
   required tools; source-only projects keep their existing setup behavior.
