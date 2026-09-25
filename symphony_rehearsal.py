@@ -146,11 +146,19 @@ def provision(project, config, cwd, env, deadline):
                                           cwd, base_env=env)
 
 
+def isolated_environment(env):
+    """Keep runtime paths, not controller credentials or unrelated host secrets."""
+    allowed = {"HOME", "PATH", "LANG", "TERM", "USER", "LOGNAME", "CODEX_HOME", "CODEX_SQLITE_HOME",
+               "XDG_RUNTIME_DIR", "XDG_CACHE_HOME", "UV_CACHE_DIR", "PIP_CACHE_DIR", "UV_OFFLINE",
+               "UV_PYTHON_DOWNLOADS", "UV_PROJECT_ENVIRONMENT", "SYMPHONY_PYTHON"}
+    return {key: value for key, value in symphony_worker.worker_environment(env).items()
+            if key in allowed or key.startswith("LC_")}
+
+
 def validate(config, project, cwd, env, deadline):
-    roots = symphony_worker.writable_roots(project, Path(config["workspace_root"]).resolve(), cwd)
-    run([config["codex"], "-c", 'sandbox_mode="workspace-write"', "-c",
-         "sandbox_workspace_write.writable_roots=" + json.dumps(roots), "sandbox", "--",
-         "bash", "-lc", config["validation_command"]], cwd, env, deadline)
+    # This controller-owned clone contains the trusted base or its exact marker commit.
+    symphony_worker.writable_roots(project, Path(config["workspace_root"]).resolve(), cwd)
+    run(["bash", "-lc", config["validation_command"]], cwd, isolated_environment(env), deadline)
 
 
 def validate_commit(config, project, cwd, env, deadline, base, head, marker, expected):
@@ -216,11 +224,7 @@ def validate_fresh_clone(project: Path, *, timeout=300):
 def model_turn(config, project, cwd, env, prompt, deadline):
     """One native app-server turn using production skill selection and Git policy."""
     import symphony_project as s
-    allowed = {"HOME", "PATH", "LANG", "TERM", "USER", "LOGNAME", "CODEX_HOME", "CODEX_SQLITE_HOME",
-               "XDG_RUNTIME_DIR", "XDG_CACHE_HOME", "UV_CACHE_DIR", "PIP_CACHE_DIR", "UV_OFFLINE",
-               "UV_PYTHON_DOWNLOADS", "UV_PROJECT_ENVIRONMENT", "SYMPHONY_PYTHON"}
-    env = {key: value for key, value in symphony_worker.worker_environment(env).items()
-           if key in allowed or key.startswith("LC_")}
+    env = isolated_environment(env)
     overrides = s.worker_overrides(config, cwd, env=env)
     env["SKILLS_SESSION_KIND"] = "symphony"
     proc = subprocess.Popen([config["codex"], *overrides, "app-server"], cwd=cwd, env=env,

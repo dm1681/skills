@@ -142,12 +142,13 @@ class RehearsalTests(unittest.TestCase):
         self.assertEqual('complete',record['local_cleanup'])
         self.assertEqual('main',self.git('branch','--show-current',cwd=self.source))
 
-    @unittest.skipUnless(os.environ.get('SYMPHONY_TEST_CODEX'), 'Set SYMPHONY_TEST_CODEX for native validation proof')
-    def test_native_validation_preserves_clone_cache_environment(self):
-        config=project.setup(self.source, repo_url=str(self.source),
-                             codex=os.environ['SYMPHONY_TEST_CODEX'],
-                             validation_command='test "$(uv cache dir)" = "$PWD/.symphony-cache/uv"')
-        path=rehearsal.validate_fresh_clone(self.source)
+    def test_isolated_validation_preserves_clone_cache_environment(self):
+        project.setup(self.source, repo_url=str(self.source),
+                             validation_command=('test "$(uv cache dir)" = "$PWD/.symphony-cache/uv" && '
+                                                 'test -z "${AWS_SECRET_ACCESS_KEY+x}" && '
+                                                 'python3 -c "import asyncio; asyncio.run(asyncio.to_thread(lambda: None))"'))
+        with mock.patch.dict(os.environ, {'AWS_SECRET_ACCESS_KEY':'fixture-secret'}):
+            path=rehearsal.validate_fresh_clone(self.source, timeout=20)
         self.assertEqual('pass',json.loads(path.read_text())['status'])
 
     def test_bootstrap_failure_has_durable_evidence_and_cleanup(self):
