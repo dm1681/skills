@@ -148,7 +148,8 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(self.spec, symphony.load(self.cwd)["bootstrap"])
 
     def test_launch_checks_declaration_and_passes_environment(self):
-        config = symphony.setup(self.cwd, repo_url="fixture", bootstrap=self.spec)
+        config = symphony.setup(self.cwd, repo_url="fixture", bootstrap=self.spec,
+                                git_author_name="Bootstrap Fixture", git_author_email="fixture@example.invalid")
         issue = Path(config["workspace_root"]) / "DIE-1"
         issue.mkdir(parents=True)
         marker = {"kind": "symphony", "project_dir": str(self.cwd), "bootstrap": self.spec}
@@ -161,6 +162,8 @@ class BootstrapTests(unittest.TestCase):
             self.assertEqual(0, result.exception.code)
             env = server.call_args.args[-1]
             self.assertEqual(sys.executable, env["UV_PYTHON"])
+            self.assertEqual("Bootstrap Fixture", env["GIT_AUTHOR_NAME"])
+            self.assertEqual("fixture@example.invalid", env["GIT_COMMITTER_EMAIL"])
             self.assertEqual(str(issue / ".symphony-cache" / "uv"), env["UV_CACHE_DIR"])
             self.assertNotIn("LINEAR_API_KEY", env)
             symphony.setup(self.cwd, bootstrap={**self.spec, "download_policy": "allow"})

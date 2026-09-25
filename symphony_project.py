@@ -20,6 +20,7 @@ from pathlib import Path
 import install
 import symphony_bootstrap
 import symphony_worker
+import symphony_identity
 
 REVISION = "be10a1b79df723d6d7612b5651c8522704dafb2e"
 UPSTREAM = "https://github.com/openai/symphony.git"
@@ -81,6 +82,7 @@ def validate_config(config: dict) -> None:
         raise Error("Workspace root must not be the interactive project or its ancestor")
     if config["revision"] != REVISION:
         raise Error("Runtime revision differs from the supported pin")
+    symphony_identity.validate(config)
 
 
 def write_managed(path: Path, text: str, old_hash: str = "") -> str:
@@ -284,6 +286,10 @@ def build_runtime(project: Path) -> None:
 def probe_worker(config: dict) -> list[str]:
     """Exercise discovery and the configured Linux sandbox without a model turn."""
     problems = []
+    try:
+        env = symphony_identity.environment(config, credentials=False)
+    except Error as exc:
+        return ["Worker identity configuration failed: " + str(exc)]
     probe_parent = Path(config["workspace_root"])
     probe_parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=probe_parent, prefix="readiness-") as raw:
@@ -291,21 +297,21 @@ def probe_worker(config: dict) -> list[str]:
         cwd = root / "worker"
         cwd.mkdir()
         try:
-            symphony_bootstrap.environment(config.get("bootstrap", {}), cwd)
+            env = symphony_bootstrap.environment(config.get("bootstrap", {}), cwd, base_env=env)
         except Error as exc:
             problems.append(str(exc))
-        subprocess.run(["git", "init", "--quiet", "--template="], cwd=cwd, check=True)
+        subprocess.run(["git", "init", "--quiet", "--template="], cwd=cwd, env=env, check=True)
         (cwd / ".symphony-worker.json").write_text(json.dumps({"kind": "symphony", "project_dir": config["project_dir"]}))
         for name in WORKER_SKILLS:
             install.install_one(install.SOURCE_ROOT / name, cwd / ".agents/skills", "copy", False, False)
         for name in DELIVERY_SKILLS:
             install.install_one(RESOURCES / "skills" / name, cwd / ".agents/skills", "copy", False, False)
         try:
-            worker_overrides(config, cwd)
+            worker_overrides(config, cwd, env=env)
         except (Error, OSError) as exc:
             problems.append("Worker discovery failed: " + str(exc))
         try:
-            symphony_worker.probe_git(config["codex"], Path(config["project_dir"]), root, cwd)
+            symphony_worker.probe_git(config["codex"], Path(config["project_dir"]), root, cwd, env=env)
         except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
             problems.append("Worker Git/isolation probe failed: " + str(exc))
     return problems
@@ -314,6 +320,10 @@ def probe_worker(config: dict) -> list[str]:
 def authentication_problems(config: dict) -> list[str]:
     """Check CLI login without exposing credential-bearing diagnostic output."""
     problems = []
+    try:
+        env = symphony_identity.environment(config)
+    except Error as exc:
+        return [str(exc)]
     probes = (
         ("gh", ["auth", "status", "--hostname", "github.com"],
          "GitHub CLI is not authenticated; run gh auth login in the service environment"),
@@ -321,10 +331,12 @@ def authentication_problems(config: dict) -> list[str]:
          "Codex is not authenticated; log in with the configured executable"),
     )
     for executable, args, message in probes:
+        if executable == "gh" and config.get("credential_provider"):
+            continue  # environment() verified this token; ignore unrelated saved accounts.
         if not shutil.which(executable):
             continue  # The executable check already reports this prerequisite.
         try:
-            result = subprocess.run([executable, *args], capture_output=True, timeout=20)
+            result = subprocess.run([executable, *args], env=env, capture_output=True, timeout=20)
         except (OSError, subprocess.TimeoutExpired):
             problems.append(f"Authentication check failed or timed out: {Path(executable).name}")
         else:
@@ -383,18 +395,25 @@ def prepare_workspace(project: Path) -> None:
         raise Error("New issue workspace is not empty; preserving its contents")
     if not config["repo_url"] or not config["validation_command"]:
         raise Error("Repository URL and validation command must be configured")
+    env = symphony_identity.environment(config)
+    def git(*args, timeout=30):
+        return symphony_identity.run(["git", *args], env=env, cwd=cwd,
+                                    failure="Worker Git preparation failed; run symphony check-git and verify base_branch",
+                                    timeout=timeout)
     branch = f"codex/{cwd.name}"
     for ref in (branch, config["base_branch"]):
-        subprocess.run(["git", "check-ref-format", "--branch", ref], cwd=cwd, check=True, capture_output=True)
-    subprocess.run(["git", "clone", "--no-hardlinks", "--no-checkout", "--", config["repo_url"], "."], cwd=cwd, check=True)
+        git("check-ref-format", "--branch", ref)
+    # Keep the existing hook lifecycle in charge of provisioning duration;
+    # credential/API deadlines must not become a limit on large clones or LFS.
+    git("clone", "--no-hardlinks", "--no-checkout", "--", symphony_identity.clone_url(config), ".", timeout=None)
     # Recover a published issue branch after workspace cleanup, otherwise branch
     # from the configured base (which need not be the remote's default branch).
     remote_branch = f"refs/remotes/origin/{branch}"
-    exists = subprocess.run(["git", "show-ref", "--verify", "--quiet", remote_branch], cwd=cwd)
+    exists = subprocess.run(["git", "show-ref", "--verify", "--quiet", remote_branch], cwd=cwd, env=env, capture_output=True, timeout=30)
     if exists.returncode not in (0, 1):
         raise Error("Could not verify the remote issue branch")
     source = remote_branch if exists.returncode == 0 else f"refs/remotes/origin/{config['base_branch']}"
-    subprocess.run(["git", "checkout", "--no-track", "-b", branch, source], cwd=cwd, check=True)
+    git("checkout", "--no-track", "-b", branch, source, timeout=None)
     # Preserve project instructions. Only the worker's skill roots are provisioned.
     root = cwd / ".agents" / "skills"
     if cwd not in root.resolve().parents:
@@ -405,7 +424,7 @@ def prepare_workspace(project: Path) -> None:
         install.install_one(RESOURCES / "skills" / name, root, "copy", False, False)
     install.write_receipt(root, list(WORKER_SKILLS + DELIVERY_SKILLS), "copy", False)
     bootstrap = config.get("bootstrap", {})
-    symphony_bootstrap.prepare(bootstrap, cwd)
+    symphony_bootstrap.prepare(bootstrap, cwd, base_env=env)
     context = {"kind": "symphony", "project_dir": config["project_dir"], "base_branch": config["base_branch"], "validation_command": config["validation_command"], "bootstrap": bootstrap}
     (cwd / ".symphony-worker.json").write_text(json.dumps(context, indent=2) + "\n")
     # Worker provisioning must never become part of the feature PR.
@@ -415,11 +434,10 @@ def prepare_workspace(project: Path) -> None:
             stream.write("/" + bootstrap.get("cache_dir", ".symphony-cache") + "/\n/.venv/\n")
 
 
-def skills_list(codex: str, cwd: Path, overrides=(), timeout=20) -> list[dict]:
+def skills_list(codex: str, cwd: Path, overrides=(), timeout=20, *, env=None) -> list[dict]:
     """Protocol-only discovery: no thread or model turn, bounded process lifetime."""
     command = [codex, *overrides, "app-server"]
-    env = dict(os.environ)
-    env.pop("LINEAR_API_KEY", None)
+    env = symphony_worker.worker_environment(dict(os.environ if env is None else env))
     with tempfile.TemporaryFile() as errors:
         proc = subprocess.Popen(command, cwd=cwd, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors, start_new_session=True)
         selector = selectors.DefaultSelector()
@@ -467,15 +485,19 @@ def skills_list(codex: str, cwd: Path, overrides=(), timeout=20) -> list[dict]:
             proc.stdin.close(); proc.stdout.close()
 
 
-def worker_overrides(config: dict, cwd: Path) -> list[str]:
+def worker_overrides(config: dict, cwd: Path, *, env=None) -> list[str]:
+    # Discovery is a real child process too. Offline probes do not resolve
+    # credentials; live launch can reuse the already verified scoped identity.
+    if env is None:
+        env = symphony_identity.environment(config, credentials=False)
     allowed = {str((cwd / ".agents" / "skills" / name / "SKILL.md").resolve()) for name in WORKER_SKILLS + DELIVERY_SKILLS}
-    discovered = skills_list(config["codex"], cwd)
+    discovered = skills_list(config["codex"], cwd, env=env)
     paths = {str(Path(row["path"]).resolve()) for row in discovered}
     if not allowed <= paths:
         raise Error("Worker skills were not all discovered by this Codex build")
     entries = ["{path=" + json.dumps(path) + ",enabled=" + ("true" if path in allowed else "false") + "}" for path in sorted(paths)]
     overrides = ["-c", "skills.config=[" + ",".join(entries) + "]"]
-    verified = skills_list(config["codex"], cwd, overrides)
+    verified = skills_list(config["codex"], cwd, overrides, env=env)
     enabled = {str(Path(row["path"]).resolve()) for row in verified if row["enabled"]}
     if enabled != allowed:
         raise Error("Codex did not enforce the selected worker skill set; refusing worker launch")
@@ -490,10 +512,10 @@ def run_worker(project: Path) -> None:
         raise Error("Missing explicit Symphony worker launch context")
     if marker.get("bootstrap", {}) != config.get("bootstrap", {}):
         raise Error("Worker bootstrap declaration changed; reprovision the issue workspace before launching")
-    overrides = worker_overrides(config, cwd)
-    env = symphony_bootstrap.environment(config.get("bootstrap", {}), cwd)
+    env = symphony_identity.environment(config)
+    env = symphony_bootstrap.environment(config.get("bootstrap", {}), cwd, base_env=env)
     env["SKILLS_SESSION_KIND"] = "symphony"
-    env.pop("LINEAR_API_KEY", None)
+    overrides = worker_overrides(config, cwd, env=env)
     try:
         code = symphony_worker.run_server([config["codex"], *overrides, "app-server"],
                                          project.resolve(), Path(config["workspace_root"]), cwd, env)
@@ -517,13 +539,15 @@ def start(project: Path, *, accept_preview=False) -> None:
 def add_parser(subcommands):
     parser = subcommands.add_parser("symphony", help="project-only Symphony setup, checks and explicit start")
     actions = parser.add_subparsers(dest="symphony_action", required=True)
-    for action in ("setup", "check", "install-runtime", "build-runtime", "start"):
+    for action in ("setup", "check", "check-git", "check-pr", "install-runtime", "build-runtime", "start"):
         child = actions.add_parser(action)
         child.add_argument("--project-dir", type=Path, default=Path.cwd())
         child.set_defaults(handler=dispatch)
         if action == "setup":
             for flag in ("project-id", "project-slug", "setup-issue", "repo-url", "runtime-source", "workspace-root", "codex", "base-branch", "validation-command"):
                 child.add_argument("--" + flag)
+            for field in symphony_identity.FIELDS:
+                child.add_argument("--" + field.replace("_", "-"))
             child.add_argument("--port", type=int, dest="dashboard_port")
             child.add_argument("--no-dashboard", action="store_true")
             child.add_argument("--bootstrap-file", type=Path, help="JSON worker prerequisites; {} disables bootstrap")
@@ -539,6 +563,7 @@ def dispatch(args) -> int:
     action = args.symphony_action
     if action == "setup":
         options = {key: getattr(args, key, None) for key in ("project_id", "project_slug", "setup_issue", "repo_url", "runtime_source", "workspace_root", "codex", "base_branch", "validation_command", "dashboard_port")}
+        options.update({key: getattr(args, key, None) for key in symphony_identity.FIELDS})
         if getattr(args, "no_dashboard", False):
             options["dashboard_enabled"] = False
         if getattr(args, "bootstrap_file", None) is not None:
@@ -555,6 +580,11 @@ def dispatch(args) -> int:
     elif action == "check":
         problems = check(project, remote=not args.offline)
         print("\n".join("not ready: " + problem for problem in problems) if problems else "Ready to start explicitly; no workers started.")
+        return 3 if problems else 0
+    elif action in ("check-git", "check-pr"):
+        problems = symphony_identity.check_access(load(project), action.removeprefix("check-"))
+        print("\n".join("not ready: " + problem for problem in problems) if problems else
+              "Read-only access check passed; no remote writes or workers started.")
         return 3 if problems else 0
     elif action == "start":
         start(project, accept_preview=args.accept_preview)

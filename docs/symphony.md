@@ -47,8 +47,99 @@ connectors do not provision it. Codex and `gh` must be installed and authenticat
 for the chosen Linux environment. Online readiness checks verify both CLI login
 statuses with bounded timeouts and suppress credential-bearing diagnostics.
 Offline checks leave authentication unverified. Credentials stay out of generated files and
-are not copied from Windows. Upstream removes the tracker secret before starting
+are not copied by setup. Upstream removes the tracker secret before starting
 Codex; the discovery helper also removes it.
+
+## Project worker Git and GitHub identity
+
+Configure these options through the CLI; the dashboard preserves them when it
+updates other settings. Existing configurations without identity options retain
+their inherited identity. For an explicit project account:
+
+```sh
+skills symphony setup --project-dir /path/to/project \
+  --repo-url git@github-work:team/repository.git \
+  --git-author-name 'Project Worker' --git-author-email worker@example.com \
+  --ssh-host github-work --ssh-config /home/operator/.ssh/config \
+  --github-repo team/repository --github-account project-account \
+  --credential-provider /home/operator/bin/project-github-token
+skills symphony check-git --project-dir /path/to/project
+skills symphony check-pr --project-dir /path/to/project
+```
+
+`--ssh-host` selects the alias used in fresh clones' origin URLs. If omitted,
+the configured URL is used unchanged. The existing SSH config should bind that
+alias to github.com, the intended key and `IdentitiesOnly yes`. `--ssh-config`
+selects an existing absolute config path; setup creates neither keys nor SSH
+configuration. `--ssh-executable` selects one executable (default `ssh`), not a
+shell command. Both Git author and committer are set in each worker environment.
+GitHub repository selection is explicit `owner/repository` on github.com and must
+match the clone URL's repository path; SSH aliases need no DNS resolution for
+this comparison. Enterprise GitHub is not supported by these identity options.
+Repository, account and provider must be configured together; repository-only
+settings are rejected rather than falling back to the active gh account.
+
+The credential provider is a trusted executable at an absolute path, invoked
+without arguments in the project directory. It receives `GH_REPO`, `GH_HOST` and
+`SYMPHONY_GITHUB_ACCOUNT`, but no inherited GitHub tokens or Linear key. It must
+return exactly one token on stdout, exit zero, and finish within 30 seconds.
+It may retrieve a token from an existing keychain, secret manager or external
+runtime secret file. A provider using an already authenticated gh account can be:
+
+```sh
+#!/bin/sh
+exec gh auth token --hostname github.com --user "$SYMPHONY_GITHUB_ACCOUNT"
+```
+
+Keep providers outside version control, make them executable, and never embed
+tokens in their source, arguments, repository URLs or configuration. Provider
+output and failure diagnostics are captured and suppressed. Setup stores only
+the executable path and public identity settings; it does not invoke providers.
+Credentials resolve afresh during clone, launch and online identity checks,
+remain in child-process memory, and must stay valid for that worker invocation.
+Providers must not write tokens to their own logs or files. The launcher verifies
+`gh api user` matches `--github-account` and fails closed for missing credentials,
+wrong accounts or provider errors. It never switches the user's gh account.
+
+Worker environments override inherited Git routing/config injection when identity
+is configured. The GitHub identity triple overrides inherited GitHub tokens,
+repository and host; Git-author/SSH-only settings preserve existing GitHub auth.
+For HTTPS github.com
+clones, a process-only `gh auth git-credential` helper uses the same provider token.
+Discovery servers and sandbox readiness probes also receive scoped environments;
+offline probes clear ambient GitHub tokens without invoking the provider.
+For SSH, Git authentication remains the key selected by the alias/config, while
+PR APIs use the verified provider account. Global Git configuration, gh logins,
+the interactive checkout and other projects are not written. This uses the
+documented [Git environment overrides](https://git-scm.com/docs/git) and
+[gh token/repository precedence](https://cli.github.com/manual/gh_help_environment).
+
+`check-git` reads remote HEAD with `git ls-remote`; for SSH it does not require
+the GitHub API provider. `check-pr` verifies the configured account, repository
+push permission and PR list access using GET requests. Exit 0 means that check
+passed, 3 means access is not ready, and 2 means invalid configuration. These
+commands never push, create a PR, dispatch workers or require the Linear setup
+gate. Read access and reported push permission cannot prove branch protection or
+a token's PR **write** permissions; those need a separately authorized integration
+trial. Ordinary installer tests use synthetic fixtures and local Git repositories.
+The existing `check` still verifies runtime/discovery, authentication and Linear
+readiness; run both access checks separately before an operational rollout.
+
+### Reuse Windows keys from WSL
+
+Key duplication is unnecessary. Where WSL Windows interoperability is enabled,
+select `--ssh-executable /mnt/c/Windows/System32/OpenSSH/ssh.exe` and the alias
+already defined in the Windows user's SSH config. Omit `--ssh-config` in this
+case so Windows OpenSSH uses its native config and key locations. This combines
+[WSL's supported Windows executable invocation](https://learn.microsoft.com/en-us/windows/wsl/filesystems#run-windows-tools-from-linux)
+with Git's SSH executable override; verify it with `check-git` from the actual
+service environment. Windows interop/agent availability can differ in services.
+Alternatively, an existing Windows-agent bridge exposed through `SSH_AUTH_SOCK`
+lets Linux SSH use the existing keys with a Linux SSH config. The installer does
+not install a bridge, copy private keys, alter permissions or change either
+machine's default account. Git key access and GitHub API token access are separate;
+the provider must also work in the WSL service environment. Native Windows key
+reuse is documented, not exercised by the Linux synthetic test suite.
 
 ## What setup writes
 
