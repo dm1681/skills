@@ -172,16 +172,30 @@ class RehearsalTests(unittest.TestCase):
         # Local Git clone and commit are real; remote API/write boundaries are fixtures.
         config={**self.config,'github_repo':'owner/repo'}
         real_run=rehearsal.run
-        for extra in (False,True,"config"):
+        for extra in (False,True,"config", "hidden-tracked", "hidden-untracked"):
             with self.subTest(extra=extra):
                 def model(config,proj,cwd,env,prompt,deadline):
                     (cwd/'symphony-rehearsal.txt').write_text(cwd.name+'\n')
                     if extra is True: (cwd/'unexpected').write_text('must not publish')
                     if extra == 'config': self.git('config','core.sshCommand','untrusted',cwd=cwd)
                     self.git('add','.',cwd=cwd);self.git('commit','-qm','rehearsal',cwd=cwd)
+                    if extra == 'hidden-tracked':
+                        self.git('update-index', '--assume-unchanged', 'README.md', cwd=cwd)
+                        (cwd/'README.md').write_text('hidden validation bypass')
+                    if extra == 'hidden-untracked':
+                        with (cwd/'.git/info/exclude').open('a') as stream:
+                            stream.write('\nhidden-helper\n')
+                        (cwd/'hidden-helper').write_text('hidden validation bypass')
+                def validate(config, proj, cwd, env, deadline):
+                    self.assertTrue(cwd.name.startswith('validation-'))
+                    self.assertEqual('fixture', (cwd/'README.md').read_text())
+                    self.assertFalse((cwd/'hidden-helper').exists())
+                    self.assertEqual('symphony-rehearsal.txt', self.git('diff', '--name-only', 'HEAD~', 'HEAD', cwd=cwd))
                 calls=[]
                 def run(command,cwd,env,deadline):
                     calls.append(command)
+                    if command[:1]==['gh'] or (command[:1]==['git'] and 'push' in command):
+                        self.assertEqual('controller-fixture-token', env.get('GH_TOKEN'))
                     if command[:1]==['git'] and 'push' in command: return ''
                     if command[:3]==['gh','pr','create']: return 'https://github.com/owner/repo/pull/1'
                     if command[:3]==['gh','pr','view']:
@@ -189,10 +203,10 @@ class RehearsalTests(unittest.TestCase):
                                            'headRefOid':self.git('rev-parse','HEAD',cwd=cwd),'baseRefName':'main'})
                     return real_run(command,cwd,env,deadline)
                 with mock.patch.object(project,'load',return_value=config), mock.patch.object(symphony_identity,'check_access',return_value=[]), \
-                     mock.patch.object(symphony_identity,'environment',return_value=dict(os.environ)), mock.patch.object(symphony_identity,'clone_url',return_value=str(self.source)), \
-                     mock.patch.object(rehearsal,'model_turn',side_effect=model), mock.patch.object(rehearsal,'validate'), \
+                     mock.patch.object(symphony_identity,'environment',return_value={**os.environ, 'GH_TOKEN':'controller-fixture-token'}), mock.patch.object(symphony_identity,'clone_url',return_value=str(self.source)), \
+                     mock.patch.object(rehearsal,'model_turn',side_effect=model), mock.patch.object(rehearsal,'validate',side_effect=validate), \
                      mock.patch.object(rehearsal,'run',side_effect=run):
-                    if extra:
+                    if extra is True or extra == 'config':
                         with self.assertRaisesRegex(project.Error,'retained workspace'):
                             rehearsal.rehearse(self.source,accept=True)
                         self.assertFalse(any(c[:1]==['git'] and 'push' in c for c in calls))
@@ -204,6 +218,7 @@ class RehearsalTests(unittest.TestCase):
                         self.assertFalse(record['merged'])
                         self.assertTrue(Path(record['workspace']).is_dir())
                         self.assertTrue(any('--draft' in c for c in calls))
+                        self.assertFalse(list(Path(config['workspace_root']).glob('validation-*')))
 
     def test_native_protocol_turn_uses_shared_roots_and_no_approvals(self):
         cwd=self.root/'workers'/'fixture'
@@ -211,7 +226,8 @@ class RehearsalTests(unittest.TestCase):
         self.git('init','-q','--template=',cwd=cwd)
         (cwd/'.symphony-worker.json').write_text(json.dumps({'kind':'symphony','project_dir':str(self.source)}))
         executable=self.root/'fake-codex'
-        executable.write_text('#!'+sys.executable+'\n'+'''import json, pathlib, sys
+        executable.write_text('#!'+sys.executable+'\n'+'''import json, os, pathlib, sys
+assert not any(key in os.environ for key in ('GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN', 'GIT_CONFIG_VALUE_0', 'SSH_AUTH_SOCK', 'GIT_ASKPASS'))
 for line in sys.stdin:
     request=json.loads(line)
     method=request.get('method')
@@ -227,8 +243,15 @@ for line in sys.stdin:
 ''')
         executable.chmod(0o700)
         config={**self.config,'codex':str(executable),'workspace_root':str(cwd.parent)}
-        with mock.patch.object(project,'worker_overrides',return_value=[]):
-            rehearsal.model_turn(config,self.source,cwd,dict(os.environ),'synthetic',time.monotonic()+5)
+        env = {**os.environ, 'GH_TOKEN':'fixture-secret', 'GITHUB_TOKEN':'fixture-secret',
+               'GH_ENTERPRISE_TOKEN':'fixture-secret', 'GITHUB_ENTERPRISE_TOKEN':'fixture-secret',
+               'GIT_CONFIG_VALUE_0':'fixture-secret', 'SSH_AUTH_SOCK':'fixture-agent', 'GIT_ASKPASS':'fixture-helper'}
+        def discovery(config, cwd, *, env):
+            self.assertFalse('GH_TOKEN' in env)
+            return []
+        with mock.patch.object(project,'worker_overrides',side_effect=discovery):
+            rehearsal.model_turn(config,self.source,cwd,env,'synthetic',time.monotonic()+5)
+        self.assertEqual('fixture-secret', env['GH_TOKEN'])
         request=json.loads((cwd/'request.json').read_text())
         params=request['params']
         self.assertEqual('never',params['approvalPolicy'])
@@ -254,3 +277,4 @@ for line in sys.stdin:
         self.assertEqual('fail',rows['validation']['status'])
         self.assertEqual('skipped',rows['push']['status'])
         self.assertEqual('skipped',rows['draft_pr']['status'])
+        self.assertFalse(list(Path(config['workspace_root']).glob('validation-*')))

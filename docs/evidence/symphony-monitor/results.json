@@ -1,0 +1,21 @@
+{
+  "passed": true,
+  "instances": 2,
+  "shared_issue": "DIE-123",
+  "duplicate_counting": false,
+  "checks": [
+    "outside-project launch",
+    "project/status filters",
+    "Linear/source links",
+    "escaping",
+    "private text excluded",
+    "disabled",
+    "offline",
+    "incompatible",
+    "recovery",
+    "empty",
+    "GET state only"
+  ],
+  "browser_errors": [],
+  "fixture_requests": 14
+}

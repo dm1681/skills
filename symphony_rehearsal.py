@@ -150,6 +150,23 @@ def validate(config, project, cwd, env, deadline):
          "bash", "-lc", config["validation_command"]], cwd, env, deadline)
 
 
+def validate_commit(config, project, cwd, env, deadline, base, head):
+    """Reprovision trusted base; never copy the worker's index or ignored files."""
+    with tempfile.TemporaryDirectory(dir=cwd.parent, prefix="validation-") as raw:
+        clean = Path(raw).resolve()
+        clean_env = provision(project, config, clean, env, deadline)
+        def git(*args):
+            return run(["git", "-c", "core.hooksPath=/dev/null", *args], clean, clean_env, deadline)
+        if git("rev-parse", "HEAD") != base:
+            raise Error("Repository base moved during rehearsal; explicitly start a new run")
+        # Fetch objects over Git transport, without copying worker metadata.
+        git("fetch", "--no-tags", str(cwd), head)
+        git("checkout", "--detach", head)
+        validate(config, project, clean, clean_env, deadline)
+        if git("rev-parse", "HEAD") != head:
+            raise Error("Validation changed the recorded commit")
+
+
 @bounded
 def validate_fresh_clone(project: Path, *, timeout=300):
     import symphony_project as s
@@ -178,8 +195,16 @@ def validate_fresh_clone(project: Path, *, timeout=300):
 def model_turn(config, project, cwd, env, prompt, deadline):
     """One native app-server turn using production skill selection and Git policy."""
     import symphony_project as s
-    overrides = s.worker_overrides(config, cwd, env=env)
     env = symphony_worker.worker_environment(env)
+    # Publication credentials belong only to controller-owned Git/gh processes.
+    for key in list(env):
+        if key.startswith("GIT_CONFIG_") or key in {
+            "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN",
+            "GIT_CONFIG", "GIT_ASKPASS", "SSH_ASKPASS", "SSH_AUTH_SOCK",
+            "GIT_SSH", "GIT_SSH_COMMAND", "SYMPHONY_GITHUB_ACCOUNT",
+        }:
+            env.pop(key)
+    overrides = s.worker_overrides(config, cwd, env=env)
     env["SKILLS_SESSION_KIND"] = "symphony"
     proc = subprocess.Popen([config["codex"], *overrides, "app-server"], cwd=cwd, env=env,
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -300,7 +325,8 @@ def rehearse(project: Path, *, accept=False, timeout=300):
                 raise Error("Worker changed origin; refusing publication")
             return git("rev-parse", "HEAD")
         record["head_sha"] = stage(path, record, "synthetic_commit", verify)
-        stage(path, record, "validation", lambda: validate(config, project, cwd, env, deadline))
+        stage(path, record, "validation", lambda: validate_commit(
+            config, project, cwd, env, deadline, base, record["head_sha"]))
         if verify() != record["head_sha"]:
             raise Error("Validation changed the synthetic commit")
         stage(path, record, "push", lambda: git("push", "origin", "HEAD:refs/heads/" + branch))
