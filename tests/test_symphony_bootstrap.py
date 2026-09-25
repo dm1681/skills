@@ -17,6 +17,7 @@ import symphony_bootstrap as bootstrap
 import symphony_project as symphony
 
 
+@unittest.skipIf(os.name == "nt", "Linux/WSL worker bootstrap and executable fixtures")
 class BootstrapTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
