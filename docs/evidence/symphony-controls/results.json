@@ -1,0 +1,17 @@
+{
+  "passed": true,
+  "manager": "deterministic fixture, not systemd",
+  "real_fake_processes": 2,
+  "duplicate_start_http_status": 409,
+  "checks": [
+    "stopped and running repositories",
+    "explicit Start",
+    "explicit Stop isolates repository",
+    "duplicate refusal",
+    "readiness failure starts no process",
+    "recovery",
+    "multiple tabs and browser closure"
+  ],
+  "browser_errors": [],
+  "limitation": "Real user-manager/cgroup tests remain blocked by user-bus access"
+}

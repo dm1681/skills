@@ -5,6 +5,12 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+- Extend the Symphony dashboard with explicit readiness-gated Start and scoped
+  Stop, shared source identity and systemd cgroup ownership across launchers.
+  Breaking: starts now require a systemd 250+ user manager/cgroup v2 and return
+  after managed launch acceptance; use the explicit stop command. Legacy imports
+  remain unmanaged until deliberately migrated. Real manager validation is pending.
+
 - Add a read-only machine-wide Symphony web monitor with local endpoint registration,
   isolated polling, freshness/coverage reporting and synthetic browser validation.
   Linux/WSL only; project execution and readiness remain unchanged.
