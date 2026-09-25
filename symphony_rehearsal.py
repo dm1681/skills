@@ -172,6 +172,20 @@ def validate_commit(config, project, cwd, env, deadline, base, head, marker, exp
         validate(config, project, clean, clean_env, deadline)
         if git("rev-parse", "HEAD") != head:
             raise Error("Validation changed the recorded commit")
+        if git("status", "--porcelain", "--untracked-files=no"):
+            raise Error("Validation changed tracked files in the recorded commit")
+
+
+def push_validated(config, cwd, env, deadline, head, branch):
+    """Publish from fresh controller-owned Git metadata, never the worker's origin."""
+    with tempfile.TemporaryDirectory(dir=cwd.parent, prefix="publication-") as raw:
+        clean = Path(raw).resolve()
+        run(["git", "-c", "core.hooksPath=/dev/null", "clone", "--no-hardlinks", "--no-checkout",
+             "--", symphony_identity.clone_url(config), str(clean)], cwd.parent, env, deadline)
+        def git(*args):
+            return run(["git", "-c", "core.hooksPath=/dev/null", *args], clean, env, deadline)
+        git("fetch", "--no-tags", str(cwd), head)
+        git("push", "origin", head + ":refs/heads/" + branch)
 
 
 @bounded
@@ -202,15 +216,11 @@ def validate_fresh_clone(project: Path, *, timeout=300):
 def model_turn(config, project, cwd, env, prompt, deadline):
     """One native app-server turn using production skill selection and Git policy."""
     import symphony_project as s
-    env = symphony_worker.worker_environment(env)
-    # Publication credentials belong only to controller-owned Git/gh processes.
-    for key in list(env):
-        if key.startswith("GIT_CONFIG_") or key in {
-            "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN",
-            "GIT_CONFIG", "GIT_ASKPASS", "SSH_ASKPASS", "SSH_AUTH_SOCK",
-            "GIT_SSH", "GIT_SSH_COMMAND", "SYMPHONY_GITHUB_ACCOUNT",
-        }:
-            env.pop(key)
+    allowed = {"HOME", "PATH", "LANG", "TERM", "USER", "LOGNAME", "CODEX_HOME", "CODEX_SQLITE_HOME",
+               "XDG_RUNTIME_DIR", "XDG_CACHE_HOME", "UV_CACHE_DIR", "PIP_CACHE_DIR", "UV_OFFLINE",
+               "UV_PYTHON_DOWNLOADS", "UV_PROJECT_ENVIRONMENT", "SYMPHONY_PYTHON"}
+    env = {key: value for key, value in symphony_worker.worker_environment(env).items()
+           if key in allowed or key.startswith("LC_")}
     overrides = s.worker_overrides(config, cwd, env=env)
     env["SKILLS_SESSION_KIND"] = "symphony"
     proc = subprocess.Popen([config["codex"], *overrides, "app-server"], cwd=cwd, env=env,
@@ -328,15 +338,18 @@ def rehearse(project: Path, *, accept=False, timeout=300):
                 raise Error("Worker synthetic artifact did not match the requested content")
             if git("rev-list", "--count", base + "..HEAD") != "1":
                 raise Error("Worker must produce exactly one synthetic commit")
+            head = git("rev-parse", "HEAD")
+            if git("rev-list", "--parents", "-n", "1", "HEAD") != head + " " + base:
+                raise Error("Worker synthetic commit must have the recorded base as its sole parent")
             if git("remote", "get-url", "origin") != symphony_identity.clone_url(config):
                 raise Error("Worker changed origin; refusing publication")
-            return git("rev-parse", "HEAD")
+            return head
         record["head_sha"] = stage(path, record, "synthetic_commit", verify)
         stage(path, record, "validation", lambda: validate_commit(
             config, project, cwd, env, deadline, base, record["head_sha"], marker, expected))
         if verify() != record["head_sha"]:
             raise Error("Validation changed the synthetic commit")
-        stage(path, record, "push", lambda: git("push", "origin", record["head_sha"] + ":refs/heads/" + branch))
+        stage(path, record, "push", lambda: push_validated(config, cwd, env, deadline, record["head_sha"], branch))
         def publish():
             body = path.parent / "pr-body.md"
             body.write_text("Synthetic Symphony readiness rehearsal. One worker-created marker commit and declared validation passed.\n\nHuman Review required. Close this PR after inspection; do not merge. No service was changed.\n")

@@ -112,6 +112,7 @@ class RehearsalTests(unittest.TestCase):
         (self.source/'README.md').write_text('fixture')
         self.git('add','.',cwd=self.source)
         self.git('commit','-qm','seed',cwd=self.source)
+        self.git('commit','--allow-empty','-qm','base tip',cwd=self.source)
         self.config = project.setup(self.source, repo_url=str(self.source), validation_command='true')
 
     def git(self, *args, cwd):
@@ -180,9 +181,11 @@ class RehearsalTests(unittest.TestCase):
         # Local Git clone and commit are real; remote API/write boundaries are fixtures.
         config={**self.config,'github_repo':'owner/repo'}
         real_run=rehearsal.run
-        for extra in (False,True,"config", "hidden-tracked", "hidden-untracked", "marker-blob", "base-moved"):
+        for extra in (False,True,"config", "hidden-tracked", "hidden-untracked", "marker-blob", "base-moved", "wrong-parent", "validation-tracked"):
             with self.subTest(extra=extra):
                 def model(config,proj,cwd,env,prompt,deadline):
+                    if extra == 'wrong-parent':
+                        self.git('reset','--hard','HEAD~',cwd=cwd)
                     (cwd/'symphony-rehearsal.txt').write_text('wrong committed content\n' if extra == 'marker-blob' else cwd.name+'\n')
                     if extra is True: (cwd/'unexpected').write_text('must not publish')
                     if extra == 'config': self.git('config','core.sshCommand','untrusted',cwd=cwd)
@@ -202,12 +205,17 @@ class RehearsalTests(unittest.TestCase):
                     self.assertEqual('fixture', (cwd/'README.md').read_text())
                     self.assertFalse((cwd/'hidden-helper').exists())
                     self.assertEqual('symphony-rehearsal.txt', self.git('diff', '--name-only', 'HEAD~', 'HEAD', cwd=cwd))
+                    if extra == 'validation-tracked':
+                        (cwd/'README.md').write_text('validation rewrote tracked source')
                 calls=[]
                 def run(command,cwd,env,deadline,**kwargs):
                     calls.append(command)
                     if command[:1]==['gh'] or (command[:1]==['git'] and 'push' in command):
                         self.assertEqual('controller-fixture-token', env.get('GH_TOKEN'))
-                    if command[:1]==['git'] and 'push' in command: return ''
+                    if command[:1]==['git'] and 'push' in command:
+                        self.assertTrue(cwd.name.startswith('publication-'))
+                        self.assertNotIn('.symphony-worker.json', [p.name for p in cwd.iterdir()])
+                        return ''
                     if command[:3]==['gh','pr','create']: return 'https://github.com/owner/repo/pull/1'
                     if command[:3]==['gh','pr','view']:
                         return json.dumps({'url':'https://github.com/owner/repo/pull/1','state':'OPEN','isDraft':True,
@@ -218,7 +226,7 @@ class RehearsalTests(unittest.TestCase):
                      mock.patch.object(symphony_identity,'environment',return_value={**os.environ, 'GH_TOKEN':'controller-fixture-token'}), mock.patch.object(symphony_identity,'clone_url',return_value=str(self.source)), \
                      mock.patch.object(rehearsal,'model_turn',side_effect=model), mock.patch.object(rehearsal,'validate',side_effect=validate), \
                      mock.patch.object(rehearsal,'run',side_effect=run):
-                    if extra is True or extra in ('config', 'marker-blob', 'base-moved'):
+                    if extra is True or extra in ('config', 'marker-blob', 'base-moved', 'wrong-parent', 'validation-tracked'):
                         with self.assertRaisesRegex(project.Error,'retained workspace'):
                             rehearsal.rehearse(self.source,accept=True)
                         if extra != 'base-moved':
@@ -242,7 +250,7 @@ class RehearsalTests(unittest.TestCase):
         (cwd/'.symphony-worker.json').write_text(json.dumps({'kind':'symphony','project_dir':str(self.source)}))
         executable=self.root/'fake-codex'
         executable.write_text('#!'+sys.executable+'\n'+'''import json, os, pathlib, sys
-assert not any(key in os.environ for key in ('GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN', 'GIT_CONFIG_VALUE_0', 'SSH_AUTH_SOCK', 'GIT_ASKPASS'))
+assert not any(key in os.environ for key in ('GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN', 'GIT_CONFIG_VALUE_0', 'SSH_AUTH_SOCK', 'GIT_ASKPASS', 'AWS_SECRET_ACCESS_KEY'))
 for line in sys.stdin:
     request=json.loads(line)
     method=request.get('method')
@@ -260,7 +268,8 @@ for line in sys.stdin:
         config={**self.config,'codex':str(executable),'workspace_root':str(cwd.parent)}
         env = {**os.environ, 'GH_TOKEN':'fixture-secret', 'GITHUB_TOKEN':'fixture-secret',
                'GH_ENTERPRISE_TOKEN':'fixture-secret', 'GITHUB_ENTERPRISE_TOKEN':'fixture-secret',
-               'GIT_CONFIG_VALUE_0':'fixture-secret', 'SSH_AUTH_SOCK':'fixture-agent', 'GIT_ASKPASS':'fixture-helper'}
+               'GIT_CONFIG_VALUE_0':'fixture-secret', 'SSH_AUTH_SOCK':'fixture-agent', 'GIT_ASKPASS':'fixture-helper',
+               'AWS_SECRET_ACCESS_KEY':'fixture-secret'}
         def discovery(config, cwd, *, env):
             self.assertFalse('GH_TOKEN' in env)
             return []
