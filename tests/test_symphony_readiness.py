@@ -141,6 +141,14 @@ class RehearsalTests(unittest.TestCase):
         self.assertEqual('complete',record['local_cleanup'])
         self.assertEqual('main',self.git('branch','--show-current',cwd=self.source))
 
+    @unittest.skipUnless(os.environ.get('SYMPHONY_TEST_CODEX'), 'Set SYMPHONY_TEST_CODEX for native validation proof')
+    def test_native_validation_preserves_clone_cache_environment(self):
+        config=project.setup(self.source, repo_url=str(self.source),
+                             codex=os.environ['SYMPHONY_TEST_CODEX'],
+                             validation_command='test "$(uv cache dir)" = "$PWD/.symphony-cache/uv"')
+        path=rehearsal.validate_fresh_clone(self.source)
+        self.assertEqual('pass',json.loads(path.read_text())['status'])
+
     def test_bootstrap_failure_has_durable_evidence_and_cleanup(self):
         project.setup(self.source, bootstrap={'required_tools':['missing-symphony-test-tool']})
         with self.assertRaisesRegex(project.Error,'evidence:'):

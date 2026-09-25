@@ -141,7 +141,9 @@ def provision(project, config, cwd, env, deadline):
     run([sys.executable, str(Path(s.__file__).resolve()), "prepare-workspace", "--project-dir", str(project)],
         cwd, env, deadline)
     symphony_worker.writable_roots(project, Path(config["workspace_root"]).resolve(), cwd)
-    return symphony_bootstrap.environment(config.get("bootstrap", {}), cwd, base_env=env)
+    # Even projects without declared bootstrap need a writable cache in the clone.
+    return symphony_bootstrap.environment(config.get("bootstrap") or {"cache_dir": ".symphony-cache"},
+                                          cwd, base_env=env)
 
 
 def validate(config, project, cwd, env, deadline):
