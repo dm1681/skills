@@ -5,6 +5,11 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+- Add a read-only machine-wide Symphony web monitor with local endpoint registration,
+  isolated polling, freshness/coverage reporting and synthetic browser validation.
+  Linux/WSL only; project execution and readiness remain unchanged.
+
+
 ### Symphony integration and curated skills (pending major release)
 
 - Add optional fresh-worker bootstrap declarations for preinstalled Python,
