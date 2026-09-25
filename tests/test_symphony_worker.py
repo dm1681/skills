@@ -131,12 +131,25 @@ class WorkerTests(unittest.TestCase):
 
     @unittest.skipIf(os.name == "nt", "Linux/WSL stdio relay")
     def test_real_child_does_not_inherit_git_routing_or_tracker_secret(self):
-        with mock.patch.dict(os.environ, {"GIT_DIR": "/wrong/git", "GIT_WORK_TREE": "/wrong/tree",
-                                         "GIT_INDEX_FILE": "/wrong/index", "LINEAR_API_KEY": "synthetic"}):
-            process = self.relay('import os; print(any(k.startswith("GIT_") or k == "LINEAR_API_KEY" for k in os.environ))')
+        routing = {key: "/wrong/path" for key in (
+            "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
+            "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+            "GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+            "GIT_NAMESPACE", "GIT_SHALLOW_FILE",
+        )}
+        authentication = {"GIT_SSH_COMMAND": "ssh -i /synthetic/key",
+                          "GIT_ASKPASS": "/synthetic/askpass", "GIT_CONFIG_COUNT": "1",
+                          "GIT_CONFIG_KEY_0": "http.extraHeader",
+                          "GIT_CONFIG_VALUE_0": "Authorization: synthetic"}
+        with mock.patch.dict(os.environ, {**routing, **authentication, "LINEAR_API_KEY": "synthetic"}):
+            process = self.relay('import os, json; print(json.dumps(dict(os.environ)))')
         output, errors = process.communicate(timeout=5)
         self.assertEqual(0, process.returncode, errors)
-        self.assertEqual(b"False", output.strip())
+        inherited = json.loads(output)
+        for key in (*routing, "LINEAR_API_KEY"):
+            self.assertNotIn(key, inherited)
+        for key, value in authentication.items():
+            self.assertEqual(value, inherited[key])
 
     def test_worker_entrypoint_uses_adapter_and_keeps_native_codex_config(self):
         config = {"project_dir": str(self.project), "workspace_root": str(self.root), "codex": "/native/codex"}

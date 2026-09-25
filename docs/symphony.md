@@ -144,8 +144,10 @@ The configured Codex executable stays native for login, help and discovery;
 projects do not need to replace it with their own Git adapter. The launcher
 relays JSON lines and cleans up its child process group on shutdown.
 SIGINT, SIGTERM and SIGHUP all use that cleanup. Both the real worker and readiness
-probe clear inherited `GIT_*` variables so a parent shell cannot redirect Git away
-from the validated clone; repository Git configuration remains available.
+probe clear inherited Git metadata-routing variables (such as `GIT_DIR`,
+`GIT_WORK_TREE`, and `GIT_INDEX_FILE`). Transport authentication settings such as
+`GIT_SSH_COMMAND`, `GIT_ASKPASS`, and `GIT_CONFIG_*` remain available so private
+repository fetches and pushes use the same credentials as provisioning.
 
 Readiness now creates a disposable repository under the configured workspace root
 and uses the same validated roots to run a real native sandbox commit. It also

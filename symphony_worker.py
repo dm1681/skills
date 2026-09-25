@@ -11,8 +11,14 @@ from pathlib import Path
 
 
 def worker_environment(env: dict) -> dict:
-    """Use repository Git configuration, not inherited shell routing overrides."""
-    return {key: value for key, value in env.items() if not key.startswith("GIT_") and key != "LINEAR_API_KEY"}
+    """Clear repository routing overrides while preserving transport authentication."""
+    blocked = {
+        "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+        "GIT_NAMESPACE", "GIT_SHALLOW_FILE", "LINEAR_API_KEY",
+    }
+    return {key: value for key, value in env.items() if key not in blocked}
 
 
 def writable_roots(project: Path, root: Path, cwd: Path) -> list[str]:
