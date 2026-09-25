@@ -26,7 +26,7 @@ class SymphonyTests(unittest.TestCase):
         self.addCleanup(self.auth.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.registry_env = mock.patch.dict(os.environ, {"SKILLS_SYMPHONY_REGISTRY": str(Path(self.temp.name) / "registry.json")})
+        self.registry_env = mock.patch.dict(os.environ, {"SKILLS_SYMPHONY_REGISTRY": str(Path(self.temp.name) / "registry.json"), "INVOCATION_ID": ""})
         self.registry_env.start()
         self.addCleanup(self.registry_env.stop)
         self.project = Path(self.temp.name) / 'project with spaces'
@@ -110,30 +110,23 @@ class SymphonyTests(unittest.TestCase):
                 symphony.linear_gate(self.config)
         self.assertNotIn('test-secret', symphony.config_path(self.project).read_text())
 
-    def test_start_does_not_exec_if_gate_or_readiness_fails(self):
-        with mock.patch.object(symphony, 'check', return_value=['Setup issue must be Done']), mock.patch.object(os, 'execv') as launch:
-            with self.assertRaises(install.InstallError):
-                symphony.start(self.project, accept_preview=True)
-        launch.assert_not_called()
-
-    @mock.patch("symphony_registry.register_config")
-    def test_start_requires_preview_acknowledgement_and_passes_managed_workflow(self, register):
-        with mock.patch.object(symphony, 'check', return_value=[]), mock.patch.object(os, 'execv') as launch:
+    def test_start_requires_ack_and_uses_shared_lifecycle(self):
+        import symphony_lifecycle
+        with mock.patch.object(symphony_lifecycle, 'start', return_value='a'*64) as launch, mock.patch('symphony_registry.register_config') as register:
             with self.assertRaisesRegex(install.InstallError, 'accept-preview'):
                 symphony.start(self.project)
             launch.assert_not_called()
             register.assert_not_called()
             symphony.start(self.project, accept_preview=True)
-            register.assert_called_once_with(self.config)
-        self.assertEqual(str(self.project.resolve() / '.symphony/WORKFLOW.md'), launch.call_args.args[1][-1])
-        self.assertIn(symphony.PREVIEW_FLAG, launch.call_args.args[1])
+            launch.assert_called_once_with(self.config, accept_preview=True)
+            register.assert_called_once_with(self.config, managed=True)
 
-    def test_monitoring_metadata_failure_does_not_add_a_startup_gate(self):
-        with mock.patch.object(symphony, "check", return_value=[]), mock.patch("symphony_registry.register_config", side_effect=OSError("private diagnostic")), mock.patch.object(os, "execv") as launch, contextlib.redirect_stderr(io.StringIO()) as output:
-            symphony.start(self.project, accept_preview=True)
-        launch.assert_called_once()
-        self.assertIn("monitoring registration unavailable", output.getvalue())
-        self.assertNotIn("private diagnostic", output.getvalue())
+    def test_registry_failure_blocks_start(self):
+        import symphony_lifecycle
+        with mock.patch('symphony_registry.register_config', side_effect=OSError('private diagnostic')), mock.patch.object(symphony_lifecycle, 'start') as launch:
+            with self.assertRaises(OSError):
+                symphony.start(self.project, accept_preview=True)
+            launch.assert_not_called()
 
     def test_setup_rejects_workspace_root_that_could_remove_interactive_project(self):
         for path in [self.project, self.project.parent]:

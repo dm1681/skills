@@ -102,7 +102,7 @@ class MonitorTests(unittest.TestCase):
         updated = registry.register('/different/label', old['endpoint'], path=self.path)
         self.assertEqual(old['id'], updated['id'])
         self.assertEqual(len(registry.read(self.path)), 12)
-        self.assertEqual(set(updated), {'id', 'name', 'project_path', 'endpoint'})
+        self.assertEqual(set(updated), {'id', 'name', 'project_path', 'endpoint', 'mode'})
 
     def test_disabled_config_import_is_metadata_only(self):
         config = {'project_dir': self.temp.name, 'dashboard_port': None, 'secret': 'DO_NOT_COPY'}

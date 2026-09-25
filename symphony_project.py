@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import selectors
 import shlex
 import shutil
@@ -83,6 +84,9 @@ def validate_config(config: dict) -> None:
     if config["revision"] != REVISION:
         raise Error("Runtime revision differs from the supported pin")
     symphony_identity.validate(config)
+    host = config.get('repository_host', '')
+    if not isinstance(host, str) or (host and not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9.-]*', host)):
+        raise Error('repository_host must be a canonical source hostname')
 
 
 def write_managed(path: Path, text: str, old_hash: str = "") -> str:
@@ -527,30 +531,31 @@ def run_worker(project: Path) -> None:
 def start(project: Path, *, accept_preview=False) -> None:
     if not accept_preview:
         raise Error("Explicit start requires --accept-preview to acknowledge upstream's engineering preview")
-    problems = check(project)
-    if problems:
-        raise Error("Not ready:\n- " + "\n- ".join(problems))
     config = load(project)
-    binary = runtime_binary(config)
+    import symphony_lifecycle
     import symphony_registry
-    try:
-        symphony_registry.register_config(config)
-    except (OSError, ValueError):
-        print("Warning: monitoring registration unavailable; import this endpoint later with skills symphony register.", file=sys.stderr)
-    # Exec preserves upstream signal/cancellation handling; no second scheduler.
-    os.execv(str(binary), [str(binary), PREVIEW_FLAG, str(project.resolve() / ".symphony" / "WORKFLOW.md")])
+    # Registration/ownership is now a required safety boundary, not best effort.
+    symphony_lifecycle.check_service_wrapper()
+    symphony_lifecycle.reconcile_imports(config)
+    symphony_registry.register_config(config, managed=True)
+    key = symphony_lifecycle.start(config, accept_preview=accept_preview)
+    print(f"Start requested for {key[:12]}; readiness and process state are visible in skills symphony dashboard.")
 
 
 def add_parser(subcommands):
-    parser = subcommands.add_parser("symphony", help="Symphony setup, explicit start and read-only machine-wide monitoring")
+    parser = subcommands.add_parser("symphony", help="Symphony setup, explicit start/stop and machine-wide dashboard")
     actions = parser.add_subparsers(dest="symphony_action", required=True)
-    for action in ("setup", "check", "check-git", "check-pr", "install-runtime", "build-runtime", "start"):
-        child = actions.add_parser(action)
+    for action in ("setup", "check", "check-git", "check-pr", "install-runtime", "build-runtime", "start", "stop"):
+        descriptions = {
+            'start': 'Explicitly activate one repository; may dispatch eligible issues. Requires systemd 250+ user manager. Returns after launch acceptance; readiness runs before runtime execution.',
+            'stop': 'Stop only this verified repository instance and its owned workers using SIGTERM. In-flight work may be interrupted; ownership remains until shutdown completes.',
+        }
+        child = actions.add_parser(action, description=descriptions.get(action), help=descriptions.get(action))
         child.add_argument("--project-dir", type=Path, default=Path.cwd())
         child.set_defaults(handler=dispatch)
         if action == "setup":
-            for flag in ("project-id", "project-slug", "setup-issue", "repo-url", "runtime-source", "workspace-root", "codex", "base-branch", "validation-command"):
-                child.add_argument("--" + flag)
+            for flag in ("project-id", "project-slug", "setup-issue", "repo-url", "runtime-source", "workspace-root", "codex", "base-branch", "validation-command", "repository-host"):
+                child.add_argument("--" + flag, help="canonical source hostname for equivalent SSH aliases" if flag == "repository-host" else None)
             for field in symphony_identity.FIELDS:
                 child.add_argument("--" + field.replace("_", "-"))
             child.add_argument("--port", type=int, dest="dashboard_port")
@@ -559,7 +564,7 @@ def add_parser(subcommands):
         if action == "check":
             child.add_argument("--offline", action="store_true")
         if action == "start":
-            child.add_argument("--accept-preview", action="store_true")
+            child.add_argument("--accept-preview", action="store_true", help="acknowledge the upstream engineering preview and authorize eligible issue dispatch")
     import symphony_dashboard
     symphony_dashboard.add_parsers(actions)
     return parser
@@ -569,7 +574,7 @@ def dispatch(args) -> int:
     project = args.project_dir.resolve()
     action = args.symphony_action
     if action == "setup":
-        options = {key: getattr(args, key, None) for key in ("project_id", "project_slug", "setup_issue", "repo_url", "runtime_source", "workspace_root", "codex", "base_branch", "validation_command", "dashboard_port")}
+        options = {key: getattr(args, key, None) for key in ("project_id", "project_slug", "setup_issue", "repo_url", "runtime_source", "workspace_root", "codex", "base_branch", "validation_command", "dashboard_port", "repository_host")}
         options.update({key: getattr(args, key, None) for key in symphony_identity.FIELDS})
         if getattr(args, "no_dashboard", False):
             options["dashboard_enabled"] = False
@@ -595,6 +600,12 @@ def dispatch(args) -> int:
         return 3 if problems else 0
     elif action == "start":
         start(project, accept_preview=args.accept_preview)
+    elif action == "stop":
+        import symphony_lifecycle as lifecycle
+        config = load(project)
+        key = lifecycle.repository_identity(config)
+        lifecycle.stop(config, invocation=lifecycle.read(key).get('invocation'))
+        print('Stop requested for this repository and its workers; ownership remains until the cgroup is empty.')
     return 0
 
 

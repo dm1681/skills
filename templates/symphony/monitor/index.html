@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Symphony · Machine overview</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
-<body><header><div class="eyebrow">SYMPHONY / LOCAL MONITOR</div><h1>Every project. One view.</h1><p>Read-only observations from registered instances in this Linux / WSL environment.</p></header>
-<main><div id="notice" role="status">Loading local observations…</div><section id="summary" aria-label="Observed totals"></section>
+<body><header><div class="eyebrow">SYMPHONY / LOCAL MONITOR</div><h1>Every project. One view.</h1><p>Machine-wide observations from registered instances in this Linux / WSL environment.</p></header>
+<main>
+<p id="action-result" role="status" aria-live="polite">Start authorizes eligible issue dispatch. Stop interrupts this repository’s owned workers. Opening this page performs neither action.</p><div id="notice" role="status">Loading local observations…</div><section id="summary" aria-label="Observed totals"></section>
 <div class="toolbar"><h2>Instances & workers</h2><label>Project <select id="project"><option value="">All projects</option></select></label><label>Status <select id="status"><option value="">All statuses</option><option>active</option><option>retrying</option><option>idle</option><option>configured</option><option>disabled</option><option>unreachable</option><option>incompatible</option><option>stale</option></select></label></div>
 <div id="instances"></div><footer>Counts cover fresh observations only. Usage is reported by each instance since its current runtime started; it can reset on restart. No lifetime history or financial cost. Issue titles and private message text are not supplied by this view.</footer></main></body></html>

@@ -1,4 +1,4 @@
-"""Machine-local monitoring metadata. No process discovery or lifecycle actions."""
+"""Machine-local monitoring metadata; registration never activates a process."""
 from __future__ import annotations
 
 import contextlib
@@ -62,6 +62,10 @@ def read(path: Path | None = None) -> list[dict]:
         result = {}
         for raw in data['instances']:
             item = entry(raw['project_path'], raw['endpoint'], raw['name'])
+            mode = raw.get('mode', 'external')
+            if mode not in ('external', 'configured'):
+                raise ValueError
+            item['mode'] = mode
             result.setdefault(item['id'], item)
         return list(result.values())
     except (KeyError, TypeError, AttributeError, ValueError):
@@ -82,8 +86,11 @@ def locked(path: Path):
         os.close(fd)
 
 
-def register(project: str, address: str | None, name: str | None = None, *, path: Path | None = None) -> dict:
+def register(project: str, address: str | None, name: str | None = None, *, path: Path | None = None, mode='external') -> dict:
     item = entry(project, address, name)
+    if mode not in ('external', 'configured'):
+        raise ValueError('Invalid registration mode')
+    item['mode'] = mode
     path = path or registry_path()
     with locked(path):
         entries = read(path)
@@ -107,6 +114,7 @@ def register(project: str, address: str | None, name: str | None = None, *, path
     return item
 
 
-def register_config(config: dict) -> dict:
+def register_config(config: dict, *, managed=False) -> dict:
     port = config['dashboard_port']
-    return register(config['project_dir'], f'http://127.0.0.1:{port}' if port is not None else None)
+    return register(config['project_dir'], f'http://127.0.0.1:{port}' if port is not None else None,
+                    mode='configured' if managed else 'external')

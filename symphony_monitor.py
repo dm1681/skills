@@ -133,14 +133,15 @@ def fetch(address: str, timeout: float) -> dict:
 
 class Monitor:
     """One bounded poll loop per endpoint; browser requests only read snapshots."""
-    def __init__(self, path=None, *, interval=5., timeout=2., clock=time.time, loader=fetch):
+    def __init__(self, path=None, *, interval=5., timeout=2., clock=time.time, loader=fetch, control=None):
         if not 1 <= interval <= 300 or not .1 <= timeout <= 30:
             raise ValueError('Refresh must be 1–300 seconds; timeout must be 0.1–30 seconds')
+        self.control = control
         self.path, self.interval, self.timeout = path, interval, timeout
         self.clock, self.loader = clock, loader
         self.lock = threading.Lock()
         self.stop_event = threading.Event()
-        self.records, self.workers = {}, {}
+        self.records, self.workers, self.worker_items = {}, {}, {}
         self.registry_error = False
         self.thread = None
 
@@ -158,7 +159,10 @@ class Monitor:
 
     def _poll(self, item, stopped):
         while not self.stop_event.is_set() and not stopped.is_set():
-            self.observe(item)
+            if item['endpoint']:
+                self.observe(item)
+            if self.control:
+                self.control.observe(item)
             if stopped.wait(self.interval):
                 break
 
@@ -172,14 +176,16 @@ class Monitor:
         with self.lock:
             self.registry_error = False
             self.entries = entries
-        ids = {item['id'] for item in entries if item['endpoint']}
+        wanted = {item['id']: item for item in entries if item['endpoint'] or self.control}
         for key in list(self.workers):
-            if key not in ids:
+            if key not in wanted or self.worker_items.get(key) != wanted[key]:
                 self.workers.pop(key)[0].set()
+                self.worker_items.pop(key, None)
         for item in entries:
-            if item['endpoint'] and item['id'] not in self.workers:
+            if (item['endpoint'] or self.control) and item['id'] not in self.workers:
                 stopped = threading.Event()
                 thread = threading.Thread(target=self._poll, args=(item, stopped), daemon=True)
+                self.worker_items[item['id']] = item
                 self.workers[item['id']] = stopped, thread
                 thread.start()
 
@@ -225,6 +231,9 @@ class Monitor:
                               'sessions': state['sessions'] if current else [],
                               'counts': state['counts'] if current else None,
                               'usage': state['usage'] if current else None})
+        if self.control:
+            for item in instances:
+                item['lifecycle'] = self.control.snapshot(item)
         current = [item for item in instances if item['current']]
         usage = {}
         for key in METRICS:

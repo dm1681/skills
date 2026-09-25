@@ -1,6 +1,20 @@
 'use strict';
 const $ = id => document.getElementById(id);
 let snapshot;
+let pending = false;
+async function action(item, kind) {
+ const impact = kind === "start" ? "I acknowledge the engineering preview. Start may dispatch eligible Linear issues." : `Stop this repository and all its owned workers? ${item.counts?.running ?? "Unknown"} active workers may be interrupted; in-flight edits may be incomplete.`;
+ if (!window.confirm(`${item.name}\n${item.project_path}\n\n${impact}`)) return;
+ pending = true; render();
+ const output = $("action-result"); output.textContent = `${kind === "start" ? "Starting" : "Stopping"} ${item.name}…`;
+ try {
+  const response = await fetch("/api/action", {method:"POST", headers:{"Content-Type":"application/json", "X-Symphony-CSRF":snapshot.csrf_token}, body:JSON.stringify({id:item.id, repository_id:item.lifecycle.repository_id, action:kind, acknowledge:true, invocation:item.lifecycle.invocation ?? null})});
+  const result = await response.json();
+  output.textContent = response.ok ? `${item.name}: ${kind} accepted. Process state will update; ownership remains until shutdown completes.` : result.error;
+ } catch (_) {output.textContent = "Action could not be confirmed. Refresh and reconcile process state before retrying.";}
+ finally {pending = false; render();}
+}
+
 function el(tag, text, cls) {const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node;}
 function duration(seconds) {if(seconds==null)return 'Unavailable';const n=Math.max(0,Math.floor(seconds));return n<60?`${n}s`:`${Math.floor(n/60)}m ${n%60}s`;}
 function time(value) {return value==null?'Never':new Date(value*1000).toLocaleTimeString();}
@@ -21,6 +35,14 @@ function render() {
   if(status&&item.health!==status&&!sessions.length)continue;
   const box=el('article',undefined,'instance');const heading=el('h3',item.name);heading.append(el('span',item.health,'badge '+item.health));if(item.endpoint)heading.append(link('Open instance ↗',item.endpoint));box.append(heading);
   box.append(el('div',`${item.project_path} · Instance ${item.id.slice(0,8)}`,'details'),el('div',`Last success: ${time(item.last_success)} · Source snapshot: ${time(item.source_time)} · Last check: ${time(item.checked_at)}`,'details'));
+  if(item.lifecycle) {
+   const state = item.lifecycle;
+   const controls = el('div', undefined, 'controls');
+   controls.append(el('strong', `Process: ${state.state}`), el('span', state.readiness || 'Readiness unknown'));
+   if(state.error) controls.append(el('p', state.error));
+   for(const kind of ['start', 'stop']) {const button=el('button', kind==='start'?'Start':'Stop');button.type='button';button.disabled=pending || !state[`can_${kind}`];button.addEventListener('click',()=>action(item,kind));controls.append(button);}
+   box.append(controls);
+  }
   if(sessions.length) {
    const table=el('table');const head=el('tr');for(const title of ['Issue / session','State','Elapsed','Latest activity','Tokens'])head.append(el('th',title));const thead=el('thead');thead.append(head);table.append(thead);const body=el('tbody');
    for(const session of sessions) {const row=el('tr');const issue=el('td');issue.append(session.issue_url?link(session.issue||'Issue',session.issue_url):el('span',session.issue||'Identifier unavailable'),el('small','Title unavailable · '+(session.session_id||'Session unavailable')));row.append(issue);row.append(el('td',session.status));row.append(el('td',session.started_at==null?'Unavailable':duration(snapshot.observed_at-session.started_at)));const activity=el('td',session.activity||'Activity unavailable');activity.append(el('small',session.status==='retrying'?`Attempt ${session.attempt??'unavailable'} · due ${time(session.due_at)}`:`Last event: ${time(session.last_event_at)}`));row.append(activity,el('td',session.tokens.total_tokens==null?'Unavailable':session.tokens.total_tokens.toLocaleString()));body.append(row);}

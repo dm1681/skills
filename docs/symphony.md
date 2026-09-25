@@ -38,9 +38,10 @@ port or a universal two-environment launcher.
    ```
 
    `--accept-preview` acknowledges upstream's engineering-preview requirement.
-   The launcher rechecks readiness and replaces itself with upstream Symphony;
-   polling, retries, continuation, cancellation and workspace cleanup stay in
-   the upstream engine. Stop with the normal process interrupt (Ctrl-C).
+   The managed launcher rechecks readiness before running upstream Symphony;
+   polling, retries, continuation and workspace cleanup stay in the upstream
+   engine. Use `skills symphony stop --project-dir /path/to/project` to stop its
+   owned process tree. See repository lifecycle controls below for prerequisites.
 
 `LINEAR_API_KEY` must be available to the service environment; interactive app
 connectors do not provision it. Codex and `gh` must be installed and authenticated
@@ -347,7 +348,7 @@ to the setup issue; the project startup gate checks that prerequisite.
 
 ## Machine-wide monitoring (Linux / WSL)
 
-Launch the shared, read-only monitor from **any directory**, after the existing
+Launch the shared dashboard from **any directory**, after the existing
 PATH setup (`./install.sh --setup-path`):
 
 ```sh
@@ -357,15 +358,12 @@ skills symphony dashboard --port 8790
 Without PATH setup, use `python3 /absolute/path/to/skills/skills_cli.py symphony
 dashboard --port 8790`. Open `http://127.0.0.1:8790`. The monitor binds only to
 IPv4 loopback. A port conflict fails without stopping or rebinding any process;
-choose another monitor port. The default instance port remains 8788. The monitor
-never launches, stops, restarts, retries or dispatches workers. Refreshing or
-closing the page only changes observation; Ctrl-C stops the monitor itself.
+choose another monitor port. The default instance port remains 8788. Only explicit Start/Stop actions control a repository. Refreshing or closing
+the page only changes observation; Ctrl-C stops the dashboard itself.
 
 Supported `skills symphony start` launches register their configured endpoint
-**after** the existing readiness gate passes, just before upstream execution.
-Registration is metadata, not evidence of a running service. A registry write
-failure warns without adding a new startup gate. Existing services
-do not need restarting: import their project configuration explicitly:
+and use the shared lifecycle backend. Registration is metadata, not evidence of
+a running service. Existing services can be imported without restarting:
 
 ```sh
 skills symphony register --project-dir /home/me/projects/alpha
@@ -385,13 +383,14 @@ The registry is `~/.dm1681-symphony.json` (private permissions, locked atomic
 updates). `SKILLS_SYMPHONY_REGISTRY` overrides it for integration and tests;
 `--registry /absolute/path/registry.json` overrides it for dashboard/register.
 Duplicate canonical endpoints share one stable instance ID and count once.
-Distinct endpoints retain separate identities even for the same issue identifier
-or project. A project with multiple endpoint registrations is intentional:
+Distinct endpoints retain monitoring identities even for the same issue identifier
+or project; lifecycle ownership separately groups the configured source repository.
+Legacy projects may have multiple observed endpoints:
 when retiring an endpoint, remove its entry from the registry while no registration
 command is running. Changing a configuration does not silently rebind or replace
 an already-running instance. Do not include credentials in display names or paths.
-Only canonical project paths, display names, endpoint origins and instance IDs
-are persisted; repository credentials, workflow and environment are never copied.
+Only canonical project paths, display names, endpoint origins, registration modes
+and instance IDs are persisted in the monitoring registry; repository credentials, workflow and environment are never copied.
 
 Only explicit HTTP loopback origins with ports are accepted: `localhost`
 (normalized to `127.0.0.1`), numeric IPv4 loopback, or `[::1]`. Credentials,
@@ -428,9 +427,8 @@ Troubleshooting:
 
 Coverage is the registered endpoints reachable in this Linux environment / WSL
 distribution. It does not discover every physical-host process, native Windows,
-other WSL distributions, other users or remote machines. There is no multi-user
-authentication or execution control surface. No Linear/GitHub credentials are
-needed for monitoring.
+other WSL distributions, other users or remote machines. There is no multi-user authentication. No Linear/GitHub credentials are needed
+for monitoring; explicit Start requires the existing runtime credentials.
 
 ### Reproducible monitor validation
 
@@ -457,3 +455,159 @@ Playwright is a validation tool, not a runtime dependency of the dashboard.
 
 Checked-in [synthetic browser evidence](evidence/symphony-monitor/README.md)
 records the two-instance walkthrough and failure isolation.
+
+## Repository lifecycle controls (Linux systemd user sessions)
+
+The shared dashboard now offers explicit **Start** and **Stop**. Opening it,
+registration, refresh, closing a tab, and dashboard shutdown never activate or
+stop a repository. Existing worker limits and upstream issue/turn behavior remain
+unchanged. An instance here is the long-lived repository orchestrator, not an
+individual Codex worker.
+
+Controls require a reachable **systemd 250+ user manager and unified cgroup v2**.
+Read-only monitoring still works when that manager is unavailable; controls show
+unknown/unavailable rather than treating an HTTP timeout as process exit.
+`systemctl --user show --property=Version --value` is a read-only diagnostic.
+The launcher does not enable lingering, install persistent services, enable boot
+startup, change service configuration, or weaken a worker sandbox.
+
+Register configured repositories that are known to be fully stopped:
+
+```sh
+skills symphony register --project-dir /path/to/alpha --confirm-stopped
+skills symphony register --project-dir /path/to/beta --confirm-stopped
+skills symphony dashboard --port 8790
+```
+
+`--confirm-stopped` is an explicit operator attestation that any old launcher,
+automatic restart policy, orchestrator and workers have stopped. It refuses a
+live managed unit or occupied configured port. It cannot prove that an arbitrary
+unregistered upstream binary with no HTTP listener has exited; do not use it as
+an automatic repair for unknown process state. Plain `register` imports an
+existing instance as unmanaged, even if its endpoint currently fails. It never
+starts or restarts that instance. To adopt an old launch, stop it using its
+original owner, verify its workers have exited, then explicitly register it as
+stopped. The dashboard never kills an unmanaged instance.
+
+Start is also available through the same backend from a terminal:
+
+```sh
+skills symphony start --project-dir /path/to/alpha --accept-preview
+skills symphony stop --project-dir /path/to/alpha
+```
+
+Start returns after the managed launch is accepted; readiness may still be in
+progress. The dashboard shows readiness and process state separately from HTTP
+health: stopped, starting, running/idle, running/active, running/unknown,
+stopping, failed, or unknown. Running/unknown means the process is observed but
+its worker activity cannot be established from current HTTP data. Readiness is
+not inferred from registration or an earlier successful run. Each managed start
+rechecks the exact accepted setup issue, authentication, runtime integrity,
+generated workflow, discovery and sandbox gates before executing the existing
+pinned runtime. The UI confirmation acknowledges the upstream engineering
+preview and warns that eligible Linear issues may dispatch.
+
+### Singleton identity and ownership
+
+All supported launch paths use one named transient unit:
+`skills-symphony-<SHA256-of-source-identity>.service`. Unit creation is atomic in
+the user manager, independently of browser tabs, dashboard processes, registry
+paths and ports. A private file lock serializes launch/stop bookkeeping; the
+service manager owns the entire running lifetime. `ExitType=cgroup` retains the
+unit while descendants remain alive, even if the main process crashes or workers
+create new process sessions. PID files and HTTP health do not establish ownership.
+Stop verifies the manager's invocation ID and the unit's ownership properties;
+a reused PID, replaced unit or unverified import does not authorize signaling.
+
+Source identity uses the canonical host and repository path in configured
+`repo_url`, ignoring transport, an optional `.git` suffix, checkout path, display
+name and ports. GitHub paths are case-insensitive; other source paths retain
+case. A configured `github_repo` supplies the existing validated GitHub mapping.
+For another SSH alias, explicitly map it to the real host during setup:
+
+```sh
+skills symphony setup --project-dir /path/to/alpha \
+  --repo-url git@work-alias:owner/repository.git --repository-host github.com
+```
+
+The alias mapping is trusted local configuration, validated as a hostname and
+combined with the full repository path. It is never guessed from the repository
+basename, DNS or arbitrary SSH config. Apply the same mapping to all duplicate
+checkouts. HTTPS host overrides must match their URL. Source URLs containing
+credentials, query strings or explicit transport ports are rejected by lifecycle
+identity; use the configured SSH alias for nonstandard transport settings.
+Local-only projects fall back to the canonical Git common directory, grouping
+symlinks/worktrees. Independent local clones with no shared configured source
+cannot be identified as equivalent; configure a common source to group them.
+
+Coverage is the current Linux user and systemd user manager in one runtime/WSL
+distribution. Arbitrary unregistered upstream binaries, other users, native
+Windows and other distributions are outside the singleton guarantee. Known
+external imports conservatively reserve their configured source even while
+unreachable. Registrations with missing configuration remain observable but
+uncontrollable until configured. Source identity changes are configuration
+changes, not an adoption or migration mechanism for a running instance.
+
+The manager is the supported service wrapper; `Restart=no` prevents an explicit
+Stop from being undone. Legacy wrappers invoking the CLI must also use
+`Restart=no`; an inherited service invocation with an unverifiable or automatic
+restart policy is refused. An already-running legacy service remains unmanaged
+until explicitly migrated; the dashboard does not rewrite it.
+
+### Stop, diagnostics and security
+
+Stop sends the normal SIGTERM through the selected, verified service's cgroup.
+This prevents further dispatch and signals its owned process tree, including
+workers; other repositories and unrelated Codex processes are not selected.
+The pinned runtime ordinarily closes its worker ports/tasks during cancellation.
+Interrupting in-flight work can leave unfinished edits or operations. No extra
+Git reset, workspace deletion, tracker transition or PR update is performed by
+the control layer; upstream's existing task/workspace behavior remains upstream.
+
+`TimeoutStopSec=infinity` and `SendSIGKILL=no` intentionally keep a stuck shutdown
+reserved without escalation. After 30 seconds the UI reports the delay while
+continuing to refuse Start. Manager loss is unknown, never stopped. Restoring the
+dashboard reconciles the live unit and its recorded invocation without starting
+anything. A launch whose manager response was lost stays reserved until the
+original owner resolves it. A confirmed startup/readiness failure is recorded
+and can be retried explicitly after correction.
+
+The shared dashboard defaults to loopback port 8790; configured instance ports
+remain independent (default 8788). A port collision fails without rebinding.
+Supported starts additionally reserve their port while the managed helper runs;
+external listeners still have to be respected. Shutdown/restart can reuse a
+recently closed listening port without waiting for TCP TIME_WAIT.
+
+Lifecycle metadata lives in `~/.local/state/dm1681-symphony` with private files:
+identity hashes, invocation IDs, readiness/phase and sanitized diagnostics.
+Credentials are handed to the managed entry point through an anonymous pipe,
+not command arguments, unit Environment properties, registry or logs. Runtime
+output is discarded by this initial managed launcher; diagnostics in the shared
+view are lifecycle/readiness results, not raw worker logs. Project credential
+providers and runtime environment handling remain in the existing integration.
+`SKILLS_SYMPHONY_STATE` is for isolated tests; every launcher in one deployment
+must share the same state root. Changing it cannot change the atomic unit name,
+but loses controllable ownership until reconciliation.
+
+Writes are JSON POSTs requiring the exact loopback Host, matching Origin and a
+per-server CSRF token. Browser requests identify registered entries and the
+observed source/invocation, never shell commands, executables, paths or PIDs.
+Monitoring retains numeric loopback endpoint restrictions, no redirects/proxies,
+private-text filtering and DOM text escaping. Do not expose this unauthenticated
+single-user control server through a proxy or remote bind.
+
+Focused synthetic validation (no real services or model turns):
+
+```sh
+uv run python -m unittest discover -s tests -p test_symphony_lifecycle.py -v
+uv run python -m unittest discover -s tests -p 'test_symphony*.py'
+/path/to/existing/playwright/python scripts/prove_symphony_controls.py \
+  --output .symphony/controls-proof
+```
+
+The browser proof uses isolated real fake HTTP processes and a deterministic
+manager adapter. It validates the UI/API flow, duplicate refusal, scoped Stop,
+readiness failure, recovery and tab closure. It does **not** substitute for a
+real systemd/cgroup test of crashes, descendant cleanup and shutdown timeout.
+See [control evidence](evidence/symphony-controls/README.md) for recorded coverage
+and the current runtime-validation limitation.
