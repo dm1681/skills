@@ -55,15 +55,3 @@ def environment(config: dict, env: dict) -> dict:
     result.pop("ARTIFACT_PUBLISH_TOKEN", None)
     result["ARTIFACT_PUBLISH_TOKEN_FILE"] = str(path)
     return result
-
-
-def probe(codex: str, cwd: Path, env: dict) -> None:
-    """Verify sandbox access without uploading anything or printing the credential."""
-    code = "const fs=require('node:fs'); const t=fs.readFileSync(process.env.ARTIFACT_PUBLISH_TOKEN_FILE,'utf8').trim(); if(!/^[A-Za-z0-9_-]{1,48}\\.[A-Za-z0-9_-]{43}$/.test(t)) process.exit(1); process.stdout.write('artifact-key-readable');"
-    try:
-        result = subprocess.run([codex, "-c", 'sandbox_mode="workspace-write"', "sandbox", "--", "node", "-e", code],
-                                cwd=cwd, env=env, capture_output=True, text=True, timeout=30)
-        if result.returncode or result.stdout != "artifact-key-readable":
-            raise ValueError("sandbox check failed")
-    except (OSError, ValueError, subprocess.TimeoutExpired):
-        raise Error("Artifact publishing key or Node.js is unavailable inside the worker sandbox") from None
