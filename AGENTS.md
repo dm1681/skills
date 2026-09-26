@@ -36,8 +36,11 @@ wrappers) installs them locally, `skills_tui.py` is the interactive dashboard,
   upstream bytes with line endings normalised. Editing the copy here instead of
   upstream is drift, and the hash is what makes it visible offline. Re-sync
   upstream first, then update both the copy and its recorded hash. That hash
-  covers the frontmatter, so a vendored skill carries no `version:` key and is
-  exempt from the convention warnings — its entrypoint is not ours to shorten.
+  covers the frontmatter, so a vendored skill carries no local `version:` key.
+  An upstream version is kept as-is and recorded in
+  `VendoredSkill.upstream_version`; the validator requires the two to match.
+  Vendored skills are exempt from the convention warnings — their entrypoint
+  is not ours to shorten.
 - Every install records the root it touched in the machine-wide roots index
   (`~/.dm1681-skills-roots.json`), which is what `--status --all` enumerates.
   It is a cache, never a source of truth: the receipts stay authoritative, it
