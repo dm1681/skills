@@ -75,6 +75,27 @@ class SymphonyTests(unittest.TestCase):
         server = json.loads(workflow)['server']
         self.assertEqual({'host': '127.0.0.1', 'port': 12345}, server)
 
+    def test_cli_dashboard_host_persists_and_invalid_host_preserves_files(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(0, skills_cli.main(['symphony', 'setup', '--project-dir', str(self.project), '--host', '0.0.0.0']))
+        symphony.setup(self.project, dashboard_port=9191)
+        workflow = self.project / '.symphony/WORKFLOW.md'
+        server = json.loads(workflow.read_text().split('---')[1])['server']
+        self.assertEqual({'host': '0.0.0.0', 'port': 9191}, server)
+        before = workflow.read_bytes(), symphony.config_path(self.project).read_bytes()
+        for host in ('not-an-address', '0.0.0.0\n', 123, ''):
+            with self.subTest(host=host), self.assertRaisesRegex(install.InstallError, 'IPv4'):
+                symphony.setup(self.project, dashboard_host=host)
+            self.assertEqual(before, (workflow.read_bytes(), symphony.config_path(self.project).read_bytes()))
+
+    def test_existing_configuration_without_dashboard_host_keeps_loopback(self):
+        old = dict(self.config)
+        old.pop('dashboard_host', None)
+        symphony.config_path(self.project).write_text(json.dumps(old))
+        loaded = symphony.load(self.project)
+        server = json.loads(symphony.render_workflow(loaded).split('---')[1])['server']
+        self.assertEqual('127.0.0.1', server['host'])
+
     def test_gate_accepts_exact_done_issue_in_exact_project(self):
         issue = symphony.linear_gate(self.config, lambda *_: self.response())
         self.assertEqual('issue-uuid', issue['id'])

@@ -5,6 +5,10 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+- Make the Symphony dashboard bind address configurable (`--host`, setup form);
+  it persists across setup runs and defaults to loopback.
+- Tighten the worker human-comment protocol: answer questions received during
+  execution, detail blockers, and never treat a blocked handoff as merge approval.
 - Bundle the pinned ASD-STE100 skill, reference, examples and linter; enable
   STE-flavored writing for Symphony replies, workpads and PR descriptions.
 - Default new Symphony workers to full Codex access and dynamic model/effort
