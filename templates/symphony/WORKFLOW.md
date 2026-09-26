@@ -172,7 +172,8 @@ Otherwise include the verified issue state in the completion report.
 
 On every pickup or resumption in an active state, read all Linear issue comments,
 including replies, alongside the workpad. Identify human questions and requests
-without a substantive worker answer.
+without a substantive worker answer. Workers may share the human's Linear
+identity; do not infer authorship from the account name alone.
 
 - Answer unanswered human questions directly in their comment threads using
   `parentId`. If threaded replies are unavailable, post a comment quoting the
@@ -180,16 +181,20 @@ without a substantive worker answer.
 - Record change requests and evidence in the workpad; reply with the result or
   specific blocker. Reuse adequate existing answers to avoid duplicates on retries.
 - Before every Human Review transition, reread issue comments and answer all
-  outstanding human questions. If an answer is unknown, explain why.
+  outstanding human questions, including ones received during execution. If an
+  answer is unknown, explain what is unknown and why.
 - Keep a `### Handoff` section near the top of the workpad. Set it to `In progress`
   on resumption. Before Human Review, use **Ready for acceptance** only when the
   completion bar is met, or **Blocked — needs intervention** only under the
-  documented blocked-access exception. Leave unmet boxes unchecked.
-- Verify replies and the workpad by reading them back before changing state.
-  If posting fails, do not claim the question was answered.
+  documented blocked-access exception. For blockers, name incomplete criteria,
+  evidence, required intervention and how to resume; leave unmet boxes unchecked.
+  A blocked handoff does not authorize merging.
+- Include the outcome in direct replies made at handoff. Verify replies and the
+  workpad by reading them back before changing state. If posting fails, record
+  the communication failure; do not claim the question was answered.
 
-Direct answers are exceptions to restrictions on comments outside the workpad.
-Progress and completion summaries stay in the workpad.
+Direct answers required here are exceptions to restrictions on comments outside
+the workpad. Progress and completion summaries stay in the workpad.
 
 ## PR feedback sweep protocol (required)
 

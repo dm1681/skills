@@ -170,6 +170,10 @@ ADRs, glossary and repository validation continue to apply.
 
 The web dashboard defaults to `127.0.0.1:8788`. Set `--port PORT` during setup
 or disable it with `--no-dashboard`; rerunning setup with `--port` enables it.
+For explicitly requested LAN access, set `--host 0.0.0.0` and restart the runtime.
+The selected IPv4 bind address persists across setup runs and can also be set in
+the dashboard setup form. WSL NAT additionally requires Windows port forwarding
+and an inbound firewall rule for the selected dashboard port.
 The first pilot uses one concurrent worker and upstream's 20-turn invocation
 limit; that limit is not a task-wide cost or lifetime bound.
 

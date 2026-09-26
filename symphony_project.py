@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import ipaddress
 import json
 import os
 import platform
@@ -75,6 +76,13 @@ def validate_config(config: dict) -> None:
         raise Error("Dashboard port must be between 1 and 65535")
     if "dashboard_port" not in config:
         raise Error("Missing dashboard_port in Symphony configuration")
+    host = config.get("dashboard_host", "127.0.0.1")
+    try:
+        if not isinstance(host, str):
+            raise ValueError("expected a string")
+        ipaddress.IPv4Address(host)
+    except ValueError as exc:
+        raise Error("Dashboard host must be an IPv4 address") from exc
     generated = config.get("generated")
     if not isinstance(generated, dict) or any(not isinstance(value, str) for value in generated.values()):
         raise Error("Invalid generated-file hashes in Symphony configuration")
@@ -123,6 +131,7 @@ def setup(project: Path, **options) -> dict:
         "schema": 1, "project_dir": str(project), "project_id": "", "project_slug": "",
         "setup_issue": "", "runtime_source": str(project / ".symphony" / "runtime"),
         "codex": shutil.which("codex") or "codex", "dashboard_port": 8788,
+        "dashboard_host": "127.0.0.1",
         "workspace_root": str(project / ".symphony" / "workspaces"),
         "revision": REVISION, "repo_url": "", "base_branch": "main",
         "validation_command": "", "model_routing": "auto", "generated": {},
@@ -166,7 +175,7 @@ def render_workflow(config: dict) -> str:
         "agent": {"max_concurrent_agents": 1, "max_turns": 20},
         "codex": {"command": command_string(config, "worker"), "approval_policy": "never", "read_timeout_ms": 30000,
                   "thread_sandbox": "danger-full-access", "turn_sandbox_policy": {"type": "dangerFullAccess"}},
-        "server": {"host": "127.0.0.1", "port": config["dashboard_port"]},
+        "server": {"host": config.get("dashboard_host", "127.0.0.1"), "port": config["dashboard_port"]},
     }
     if config.get("bootstrap", {}).get("dependencies") == "uv":
         document["hooks"]["timeout_ms"] = (config["bootstrap"].get("timeout_seconds", 300) + 60) * 1000
@@ -550,6 +559,7 @@ def add_parser(subcommands):
                 child.add_argument("--" + field.replace("_", "-"))
             child.add_argument("--artifact-publish-token-file", help="external owner-only upload key file; never the key value")
             child.add_argument("--model-routing", choices=("auto", "off"))
+            child.add_argument("--host", dest="dashboard_host", help="dashboard IPv4 bind address (default: 127.0.0.1)")
             child.add_argument("--port", type=int, dest="dashboard_port")
             child.add_argument("--no-dashboard", action="store_true")
             child.add_argument("--bootstrap-file", type=Path, help="JSON worker prerequisites; {} disables bootstrap")
@@ -566,7 +576,7 @@ def dispatch(args) -> int:
     project = args.project_dir.resolve()
     action = args.symphony_action
     if action == "setup":
-        options = {key: getattr(args, key, None) for key in ("project_id", "project_slug", "setup_issue", "repo_url", "runtime_source", "workspace_root", "codex", "base_branch", "validation_command", "dashboard_port", "artifact_publish_token_file", "model_routing")}
+        options = {key: getattr(args, key, None) for key in ("project_id", "project_slug", "setup_issue", "repo_url", "runtime_source", "workspace_root", "codex", "base_branch", "validation_command", "dashboard_port", "dashboard_host", "artifact_publish_token_file", "model_routing")}
         options.update({key: getattr(args, key, None) for key in symphony_identity.FIELDS})
         if getattr(args, "no_dashboard", False):
             options["dashboard_enabled"] = False
