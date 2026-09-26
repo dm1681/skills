@@ -749,7 +749,8 @@ class SymphonySetup(ModalScreen):
         ("validation_command", "Repository validation command"),
         ("runtime_source", "Pinned Symphony source directory"),
         ("repo_url", "Repository clone URL"), ("base_branch", "Base branch"),
-        ("dashboard_port", "Local dashboard port (blank disables dashboard)"),
+        ("dashboard_host", "Dashboard IPv4 bind address (default 127.0.0.1)"),
+        ("dashboard_port", "Dashboard port (blank disables dashboard)"),
     )
 
     def __init__(self, project_dir):
