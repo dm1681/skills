@@ -10,6 +10,7 @@ self-contained under [`skills/`](skills/).
 | --- | --- |
 | `cloudflare-artifacts` | Upload completed artifacts to the Cloudflare library and return verified public URLs and GitHub-ready Markdown links. |
 | `olympus-report-progress` | Report a repository checkout and append a session update to a running Olympus server, from any repository. |
+| `asd-ste100` | Write clear, explicit technical updates using Simplified Technical English principles. |
 | `ponytail` | Minimize unnecessary code by reusing existing code, the standard library, and native platform features. |
 | `semantic-pr-review` | Explain a pull request as a source-verified semantic hierarchy and interactive flowchart. |
 | `viz-driven-dev` | Build the plot, overlay, or video that would show a feature's effect before implementing it, then regenerate it from real output. |
@@ -619,3 +620,6 @@ uv run python -m unittest discover -s tests -v
 ```
 
 See [`RELEASING.md`](RELEASING.md) for the version and release process.
+
+Install Simplified Technical English with `./install.sh --skill asd-ste100`.
+See [ASD-STE100 provenance and usage](docs/asd-ste100.md).

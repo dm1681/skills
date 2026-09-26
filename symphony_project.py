@@ -27,7 +27,7 @@ import symphony_models
 REVISION = "be10a1b79df723d6d7612b5651c8522704dafb2e"
 UPSTREAM = "https://github.com/openai/symphony.git"
 RESOURCES = Path(__file__).resolve().parent / "templates" / "symphony"
-WORKER_SKILLS = ("codebase-design", "diagnosing-bugs", "tdd", "research", "writing-for-agents", "claude-handoff", "ponytail", "cloudflare-artifacts")
+WORKER_SKILLS = ("codebase-design", "diagnosing-bugs", "tdd", "research", "writing-for-agents", "claude-handoff", "ponytail", "cloudflare-artifacts", "asd-ste100")
 DELIVERY_SKILLS = ("linear", "commit", "pull", "push", "land")
 RUNTIME_ASSETS = {
     "x86_64": ("linux_x86_64", "08d7aac26747fdc14022ade870cf7e530a6343ab92a040f39a4294b27a0cd5af"),

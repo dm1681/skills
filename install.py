@@ -172,6 +172,7 @@ class VendoredSkill(NamedTuple):
     upstream: str
     commit: str
     sha256: str
+    upstream_version: str = ""
 
 
 VENDORED_SKILLS = (
@@ -188,6 +189,14 @@ VENDORED_SKILLS = (
         upstream="DietrichGebert/ponytail skills/ponytail/SKILL.md",
         commit="356918eba965ee1eac64bd3a7f0dd02108350de5",
         sha256="1316a2f3f95741d2300b116fe0c2d81ce4a9568656ed0a62643f54aaf09957f2",
+    ),
+    VendoredSkill(
+        skill="asd-ste100",
+        entrypoint="SKILL.md",
+        upstream="danyuchn/asd-ste100-skill SKILL.md",
+        commit="7d4a135a199a5d7447c4886bcd7ffe742a627bc9",
+        sha256="406626aa8b9a534d15b59eb8c8f4d151a7e339984b604c1df697f3a310fa3ddd",
+        upstream_version="0.4.0",
     ),
 )
 

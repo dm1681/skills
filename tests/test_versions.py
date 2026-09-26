@@ -247,20 +247,30 @@ class ValidatorVersionChecksTests(unittest.TestCase):
         self.assertEqual([], [error for error in errors if "demo-skill" in error])
 
     def test_a_version_key_on_the_vendored_skill_is_an_error(self) -> None:
-        vendored_name = next(iter(VALIDATOR.VENDORED_SKILL_NAMES))
+        vendored_name = next(entry.skill for entry in install.VENDORED_SKILLS if not entry.upstream_version)
         _scaffold_repo(self.directory, {vendored_name: "version: 1.0.0\n"})
         errors = VALIDATOR.validate()
         self.assertTrue(
             any(
-                f"{vendored_name}/SKILL.md is vendored and must not carry a "
-                "version key" in error.replace("\\", "/")
+                f"{vendored_name}/SKILL.md is vendored; its version must "
+                "match pinned upstream metadata" in error.replace("\\", "/")
                 for error in errors
             ),
             errors,
         )
 
+    def test_upstream_version_is_required_and_cannot_be_changed_locally(self) -> None:
+        _scaffold_repo(self.directory, {"asd-ste100": "version: 0.4.0\n"})
+        entrypoint = self.directory / "skills/asd-ste100/SKILL.md"
+        original = entrypoint.read_text(encoding="utf-8")
+        for version, valid in (("0.4.0", True), ("0.4.1", False), ("", False)):
+            with self.subTest(version=version):
+                entrypoint.write_text(original.replace("version: 0.4.0\n", f"version: {version}\n" if version else ""), encoding="utf-8")
+                errors = [e for e in VALIDATOR.validate() if "asd-ste100" in e]
+                self.assertEqual(valid, not errors, errors)
+
     def test_the_vendored_skill_with_no_version_key_raises_no_version_error(self) -> None:
-        vendored_name = next(iter(VALIDATOR.VENDORED_SKILL_NAMES))
+        vendored_name = next(entry.skill for entry in install.VENDORED_SKILLS if not entry.upstream_version)
         _scaffold_repo(self.directory, {vendored_name: ""})
         errors = VALIDATOR.validate()
         self.assertEqual(
