@@ -46,6 +46,14 @@ Work only in the provided repository copy. Do not touch any other path.
 
 The agent should be able to talk to Linear, either via a configured Linear MCP server or injected `linear_graphql` tool. If neither is present, treat that as blocked access: record it in the workpad and move the issue according to the workflow instead of asking a user to configure Linear.
 
+## Human-facing writing
+
+Before posting a Linear reply, workpad update, PR description or final report,
+read `.agents/skills/asd-ste100/SKILL.md` and apply its STE-flavored mode.
+Answer first. Keep actions, results and blockers explicit. Preserve evidence,
+uncertainty, identifiers and required checklist structure. Return the finished
+text without an editing report. This writing pass does not replace task validation.
+
 ## Default posture
 
 - Start by determining the ticket's current status, then follow the matching flow for that status.

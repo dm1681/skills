@@ -5,6 +5,8 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+- Bundle the pinned ASD-STE100 skill, reference, examples and linter; enable
+  STE-flavored writing for Symphony replies, workpads and PR descriptions.
 - Default new Symphony workers to full Codex access and dynamic model/effort
   routing. The standard start/check commands use a separate Linear app identity;
   no per-service Linear launcher override or Git sandbox adapter is required.

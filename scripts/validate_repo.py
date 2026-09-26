@@ -264,12 +264,11 @@ def validate() -> list[str]:
         if not metadata.get("description"):
             errors.append(f"{entrypoint.relative_to(ROOT)} requires a description")
         if skill.name in VENDORED_SKILL_NAMES:
-            if "version" in metadata:
+            pinned = next(entry.upstream_version for entry in install.VENDORED_SKILLS if entry.skill == skill.name)
+            if metadata.get("version", "") != pinned:
                 errors.append(
-                    f"{entrypoint.relative_to(ROOT)} is vendored and must not "
-                    "carry a version key -- vendored_status hashes the "
-                    "frontmatter against a pinned upstream SHA256, so a local "
-                    "version key would register as drift the skill never had"
+                    f"{entrypoint.relative_to(ROOT)} is vendored; its version must "
+                    "match pinned upstream metadata, never a local version"
                 )
         else:
             # Deliberately not named `version`: that name already holds the
