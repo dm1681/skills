@@ -30,6 +30,17 @@ VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 # run (or a human) can tell a generated pointer from hand-written guidance.
 MANAGED_MARKER = "<!-- dm1681/skills: managed file -->"
 
+# Skills tied to the owner's personal systems: they publish to personal
+# infrastructure, report to a home server, or are hobby tooling. A machine
+# marked with the work profile (`--set-profile work`) never receives them, and
+# never receives the global instructions, which name personal accounts. This is
+# the one list; the guards below and the sync script's refusal all key off it
+# or off the profile marker.
+PERSONAL_SKILLS = frozenset({"cloudflare-artifacts", "olympus-report-progress", "wow-addon-dev"})
+PROFILE_FILE = ".dm1681-skills-profile"
+PROFILE_ENV = "DM1681_SKILLS_PROFILE"
+PROFILES = ("work",)
+
 SHARED_AGENTS = {"universal", "agents", "codex", "cursor", "copilot"}
 KNOWN_AGENTS = SHARED_AGENTS | {"claude", "all"}
 # Install into every known skill root unless the caller narrows it. A shared-only
@@ -469,6 +480,50 @@ def first_clause(description: str, limit: int = 96) -> str:
     if len(clause) <= limit:
         return clause
     return clause[:limit].rsplit(" ", 1)[0].rstrip(",;:") + "…"
+
+
+def active_profile(home: Optional[Path] = None) -> Optional[str]:
+    """The machine's install profile: "work", or None for an unrestricted machine.
+
+    Either the marker file in the home or the environment can switch the work
+    profile on; neither can switch it off. The marker is cleared only by deleting
+    it by hand, so no flag typed out of habit weakens a work machine.
+    """
+    if os.environ.get(PROFILE_ENV, "").strip().lower() == "work":
+        return "work"
+    marker = (home or Path.home()).expanduser() / PROFILE_FILE
+    try:
+        if marker.read_text(encoding="utf-8").strip().lower() == "work":
+            return "work"
+    except OSError:
+        pass
+    return None
+
+
+def refuse_personal(names: Iterable[str], home: Optional[Path] = None) -> None:
+    """Raise when a work-profile machine is asked for a personal skill."""
+    if active_profile(home) != "work":
+        return
+    personal = sorted(set(names) & PERSONAL_SKILLS)
+    if personal:
+        raise InstallError(
+            f"{', '.join(personal)} {'is a personal skill' if len(personal) == 1 else 'are personal skills'} "
+            f"and this machine uses the work profile ({(home or Path.home()).expanduser() / PROFILE_FILE}); "
+            "nothing was installed. Delete that file by hand if this is not a work machine."
+        )
+
+
+def set_profile(home: Path, profile: str, dry_run: bool) -> str:
+    """Write the profile marker. There is deliberately no way to clear it here."""
+    marker = home.expanduser() / PROFILE_FILE
+    if dry_run:
+        return f"would mark {marker} as {profile}"
+    marker.write_text(profile + "\n", encoding="utf-8")
+    return (
+        f"marked this machine as {profile}: {marker}\n"
+        f"personal skills ({', '.join(sorted(PERSONAL_SKILLS))}), --global-instructions "
+        "and the cloud sync script are now refused. Delete the file by hand to undo."
+    )
 
 
 def skill_global_default(name: str) -> bool:
@@ -1853,6 +1908,7 @@ def install_one(
     force: bool,
     dry_run: bool,
 ) -> str:
+    refuse_personal([source.name])
     destination = root / source.name
     takes_ownership = source.resolve() == (SOURCE_ROOT / source.name).resolve() and ownership(root, source.name).by_external is not None
     exists = destination.exists() or destination.is_symlink()
@@ -3636,6 +3692,11 @@ def _write_managed_file(path: Path, text: str, dry_run: bool) -> str:
 
 
 def install_global_instructions(home: Path, mode: str, dry_run: bool) -> list[str]:
+    if active_profile(home) == "work":
+        raise InstallError(
+            "global instructions name personal accounts and machines, and this "
+            f"machine uses the work profile ({home.expanduser() / PROFILE_FILE}); nothing was written"
+        )
     return [
         _write_managed_file(path, text, dry_run)
         for path, text in global_instruction_files(home, mode)
@@ -4062,6 +4123,11 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--dry-run", action="store_true")
     result.add_argument("--list", action="store_true", help="list bundled skills and exit")
     result.add_argument(
+        "--set-profile",
+        choices=PROFILES,
+        help="mark this machine (e.g. a work laptop) so personal skills and global instructions are refused",
+    )
+    result.add_argument(
         "--status",
         action="store_true",
         help="report which managed skills need updating, then exit",
@@ -4401,8 +4467,17 @@ def main(argv: Optional[list[str]] = None) -> int:
                 raise InstallError(
                     "--all widens what --status reports; add --status to see it"
                 )
+        if args.set_profile:
+            print(set_profile(args.home, args.set_profile, args.dry_run))
+            return 0
+        profile = active_profile(args.home)
+        if profile == "work" and (args.global_instructions is not None or args.cloud_bootstrap):
+            raise InstallError(
+                f"{'--global-instructions' if args.global_instructions is not None else '--cloud-bootstrap'} "
+                f"is refused on a work-profile machine ({args.home.expanduser() / PROFILE_FILE})"
+            )
         if args.list:
-            print("\n".join(bundled))
+            print("\n".join(name for name in bundled if profile != "work" or name not in PERSONAL_SKILLS))
             return 0
         if args.status:
             # Read-only, and reachable with no terminal: a hook or a CI job is
@@ -4467,6 +4542,16 @@ def main(argv: Optional[list[str]] = None) -> int:
         unknown = sorted(set(selected) - set(bundled))
         if unknown:
             raise InstallError(f"unknown skill: {', '.join(unknown)}")
+        if profile == "work":
+            if args.skill:
+                refuse_personal(args.skill, args.home)
+            else:
+                # "Install the defaults" on a work machine means the work-safe
+                # defaults; say what was left out rather than doing it silently.
+                skipped = sorted(set(selected) & PERSONAL_SKILLS)
+                selected = [name for name in selected if name not in PERSONAL_SKILLS]
+                if skipped:
+                    print(f"work profile: skipping personal skills {', '.join(skipped)}")
         if len(selected) != len(set(selected)):
             raise InstallError("a skill was selected more than once")
         if args.matt_ref is not None and not args.matt_skills:
