@@ -1229,11 +1229,32 @@ class SkillsApp(App):
     def section_header(self, title: str, detail: str) -> Static:
         return Static("[b %s]%s[/]\n[%s]%s[/]\n" % (MUTE, title, MUTE, detail))
 
-    def mount_section(self, title: str, detail: str, names: list, external: bool) -> None:
+    def mount_section(
+        self, title: str, detail: str, names: list, external: bool, grouped: bool = False
+    ) -> None:
+        """Mount one section's rows.
+
+        `grouped` (the dashboard) puts what is already on disk first, under a
+        muted "installed" label, and the rest under "not installed", keeping
+        each group in collection order. The guided wizard keeps plain order:
+        there the question is what to pick, not what is already there.
+        """
         states = self.states()
         roots = self.roots()
         self._main.mount(self.section_header(title, detail))
+        labels = {}
+        if grouped:
+            present = [n for n in names if states[n] != AVAILABLE]
+            absent = [n for n in names if states[n] == AVAILABLE]
+            names = present + absent
+            if present and absent:
+                labels = {
+                    present[0]: "installed · %d" % len(present),
+                    absent[0]: "not installed · %d" % len(absent),
+                }
         for name in names:
+            if name in labels:
+                self._main.mount(Static("  [%s]%s[/]" % (MUTE, labels[name]), classes="group-label"))
             if name == GLOBAL:
                 self._main.mount(
                     SkillRow(
@@ -1283,7 +1304,7 @@ class SkillsApp(App):
             self._main.mount(Static("[%s]Nothing matches this view.[/]" % MUTE))
             return
         for title, detail, names, external in groups:
-            self.mount_section(title, detail, names, external)
+            self.mount_section(title, detail, names, external, grouped=True)
         self.mount_work_note()
 
     def mount_work_note(self) -> None:
