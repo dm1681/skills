@@ -455,6 +455,28 @@ class DashboardTests(DashboardCase):
                 [row.skill for row in app.rows()], BUNDLED + EXTERNAL + [GLOBAL]
             )
 
+    async def test_dashboard_groups_installed_skills_first(self) -> None:
+        last = BUNDLED[-1]
+        install.install_one(install.SOURCE_ROOT / last, self.claude_root(), "copy", False, False)
+        app = self.app()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            owned = [row.skill for row in app.rows() if row.skill in BUNDLED]
+            self.assertEqual(owned, [last] + [n for n in BUNDLED if n != last])
+            labels = [str(w.render()) for w in app.query(".group-label")]
+            self.assertTrue(any("installed · 1" in label for label in labels), labels)
+            self.assertTrue(any(f"not installed · {len(BUNDLED) - 1}" in label for label in labels), labels)
+
+    async def test_guided_wizard_keeps_collection_order(self) -> None:
+        install.install_one(install.SOURCE_ROOT / BUNDLED[-1], self.claude_root(), "copy", False, False)
+        app = self.app(guided=True)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+            self.assertEqual([r.skill for r in app.rows() if r.skill in BUNDLED], BUNDLED)
+            self.assertFalse(list(app.query(".group-label")))
+
     async def test_ponytail_is_selectable_as_a_bundled_skill(self) -> None:
         app = self.app()
         async with app.run_test() as pilot:
@@ -1248,8 +1270,10 @@ class RegressionTests(DashboardCase):
         app = self.app()
         async with app.run_test() as pilot:
             await pilot.pause()
+            # Every row still renders; the installed one is grouped first.
             self.assertEqual(
-                [row.skill for row in app.rows()], BUNDLED + EXTERNAL + [GLOBAL]
+                [row.skill for row in app.rows()],
+                [NON_VENDORED] + [n for n in BUNDLED if n != NON_VENDORED] + EXTERNAL + [GLOBAL],
             )
             row = next(r for r in app.rows() if r.skill == NON_VENDORED)
             self.assertIn(skills_tui.UNKNOWN_VERSION, str(row.content))
