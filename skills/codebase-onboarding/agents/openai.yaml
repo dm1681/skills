@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codebase Onboarding"
+  short_description: "Interactive Catppuccin flow maps of a repo"
+  default_prompt: "Use $codebase-onboarding to onboard me to this repository: build an architecture map and the key end-to-end flows as an interactive page, grouped by file, with real source excerpts on hover."
