@@ -5,6 +5,9 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+- Add a work profile (`--set-profile work`): a marked machine skips or refuses
+  personal skills, refuses global instructions and cloud bootstrap, and the
+  cloud sync script refuses to run. Cleared only by deleting the marker.
 - Add the `codebase-onboarding` skill: an architecture map and/or end-to-end
   flows rendered as a self-contained, interactive Catppuccin Mocha page, with
   one container per source file, a live legend of shape, colour and arrow

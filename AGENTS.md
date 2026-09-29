@@ -111,6 +111,12 @@ wrappers) installs them locally, `skills_tui.py` is the interactive dashboard,
   undeclared one is reported, since the manifest is a floor for what every
   machine has and not a warrant to delete what someone installed on one of
   them deliberately. See [`docs/plugin-sync.md`](docs/plugin-sync.md).
+- **The work profile is a one-way switch.** `install.PERSONAL_SKILLS` is the
+  only list of personal skills; `refuse_personal` guards `main` and
+  `install_one` (so the dashboard and `skills` are covered), and the global
+  instructions and `--cloud-bootstrap` are refused outright. The sync script
+  refuses rather than copying the list, so it cannot drift. Never add a flag
+  that clears the marker: deleting it by hand is the deliberate escape.
 - The TUI's colour contract (documented at the top of `skills_tui.py`) is
   load-bearing: one hue means one thing, and red is reserved for failure, so a
   healthy run contains none.

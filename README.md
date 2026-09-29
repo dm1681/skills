@@ -565,6 +565,28 @@ git checkout v8.1.0
 ./install.sh --agent all
 ```
 
+## Work machines
+
+Mark a work machine once, before its first install:
+
+```sh
+./install.sh --set-profile work
+./install.sh --non-interactive --agent codex
+```
+
+The marker (`~/.dm1681-skills-profile`) makes every later install on that
+machine work-safe, with no flag to remember:
+
+- personal skills (`install.PERSONAL_SKILLS`: `cloudflare-artifacts`,
+  `olympus-report-progress`, `wow-addon-dev`) are skipped by a default install
+  and refused when named, from the installer, the dashboard and `skills`;
+- `--global-instructions` and `--cloud-bootstrap` are refused, because the
+  global file names personal accounts and machines;
+- `scripts/sync-agent-skills.sh` refuses to run.
+
+`DM1681_SKILLS_PROFILE=work` switches the profile on for one shell; nothing
+switches it off except deleting the marker file by hand.
+
 ## Cloud sessions (agent-agnostic)
 
 Cloud/web sessions run in a fresh, ephemeral container that does not carry your

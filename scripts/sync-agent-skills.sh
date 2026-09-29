@@ -33,6 +33,18 @@
 #   AGENT_GLOBAL_CLAUDE_FILE   default ~/.claude/CLAUDE.md
 set -euo pipefail
 
+# A work-profile machine (see `install.py --set-profile work`) must not receive
+# personal skills or the global instructions. This script copies every skill
+# and can write the global files, so it refuses outright rather than keeping a
+# second copy of the personal-skill list that could drift from install.py.
+PROFILE_MARKER="${HOME}/.dm1681-skills-profile"
+if [ "$(printf '%s' "${DM1681_SKILLS_PROFILE:-}" | tr '[:upper:]' '[:lower:]')" = "work" ] \
+  || { [ -f "$PROFILE_MARKER" ] && [ "$(tr -d '[:space:]' < "$PROFILE_MARKER" | tr '[:upper:]' '[:lower:]')" = "work" ]; }; then
+  printf 'sync-agent-skills: this machine uses the work profile (%s); nothing was installed.\n' "$PROFILE_MARKER" >&2
+  printf 'Install work-safe skills with ./install.sh --skill NAME instead.\n' >&2
+  exit 1
+fi
+
 REPO="${AGENT_SKILLS_REPO:-dm1681/skills}"
 REF="${AGENT_SKILLS_REF:-main}"
 SUBDIR="${AGENT_SKILLS_SUBDIR:-skills}"
