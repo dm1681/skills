@@ -5,6 +5,10 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+- Add the `codebase-onboarding` skill: an architecture map and/or end-to-end
+  flows rendered as a self-contained, interactive Catppuccin Mocha page, with
+  one container per source file, a live legend of shape, colour and arrow
+  meanings, and real syntax-highlighted excerpts on hover.
 - Make the Symphony dashboard bind address configurable (`--host`, setup form);
   it persists across setup runs and defaults to loopback.
 - Tighten the worker human-comment protocol: answer questions received during
