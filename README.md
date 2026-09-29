@@ -580,6 +580,8 @@ machine work-safe, with no flag to remember:
 - personal skills (`install.PERSONAL_SKILLS`: `cloudflare-artifacts`,
   `olympus-report-progress`, `wow-addon-dev`) are skipped by a default install
   and refused when named, from the installer, the dashboard and `skills`;
+  the dashboard and guided wizard hide them (and the global instructions) and
+  say why;
 - `--global-instructions` and `--cloud-bootstrap` are refused, because the
   global file names personal accounts and machines;
 - `scripts/sync-agent-skills.sh` refuses to run.

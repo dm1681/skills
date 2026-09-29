@@ -1543,6 +1543,56 @@ class NameColumnWidthTests(unittest.TestCase):
         )
 
 
+class WorkProfileDashboardTests(DashboardCase):
+    """A work-profile home never shows what the installer would refuse."""
+
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.project = Path(self.directory.name) / "project"
+        self.project.mkdir()
+        self.home = Path(self.directory.name) / "home"
+        self.home.mkdir()
+        (self.home / install.PROFILE_FILE).write_text("work\n", encoding="utf-8")
+
+    def tearDown(self) -> None:
+        self.directory.cleanup()
+
+    def app(self, guided=False) -> skills_tui.SkillsApp:
+        return skills_tui.SkillsApp(
+            self.project, "project", ["claude"], "copy", guided, home=self.home
+        )
+
+    def expected_rows(self) -> list:
+        return [n for n in BUNDLED if n not in install.PERSONAL_SKILLS] + EXTERNAL
+
+    async def test_dashboard_hides_personal_skills_and_global_instructions(self) -> None:
+        app = self.app()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            self.assertEqual([row.skill for row in app.rows()], self.expected_rows())
+            notes = [str(w.render()) for w in app.query(Static)]
+            self.assertTrue(any("work profile" in note for note in notes))
+
+    async def test_guided_skill_step_hides_them_too(self) -> None:
+        app = self.app(guided=True)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+            self.assertEqual(app.step, 2)
+            self.assertEqual([row.skill for row in app.rows()], self.expected_rows())
+
+    async def test_select_all_cannot_reach_a_personal_skill(self) -> None:
+        app = self.app()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            for row in app.rows():
+                if not row.selected:
+                    row.focus()
+                    await pilot.press("space")
+            self.assertFalse(app.selected & (install.PERSONAL_SKILLS | {GLOBAL}))
+
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -853,6 +853,13 @@ class SkillsApp(App):
         # global-instructions row reads and installs against this path.
         self.home = (home or Path.home()).expanduser()
         self.bundled = install.available_skills()
+        # A work-profile machine never offers what it would refuse: personal
+        # skills and the global instructions are not rows at all, so nothing
+        # can be ticked, fail mid-run, or land in a receipt it never reached.
+        self.work = install.active_profile(self.home) == "work"
+        if self.work:
+            self.bundled = [n for n in self.bundled if n not in install.PERSONAL_SKILLS]
+        self.global_rows = [] if self.work else [GLOBAL]
         self.external = list(install.EXTERNAL_NAMES)
         self.selected = set()
         # Marked for removal. Disjoint from `selected` by construction — the
@@ -928,7 +935,7 @@ class SkillsApp(App):
 
     def visible(self) -> list:
         states = self.states()
-        listed = self.bundled + self.external + [GLOBAL]
+        listed = self.bundled + self.external + self.global_rows
         if self.view == "all":
             return list(listed)
         wanted = VIEW_STATES[self.view]
@@ -958,7 +965,7 @@ class SkillsApp(App):
             (
                 "GLOBAL INSTRUCTIONS",
                 "user-level AGENTS.md files; diffed and backed up like a skill",
-                [name for name in (GLOBAL,) if name in visible],
+                [name for name in self.global_rows if name in visible],
                 False,
             ),
         ]
@@ -1277,6 +1284,18 @@ class SkillsApp(App):
             return
         for title, detail, names, external in groups:
             self.mount_section(title, detail, names, external)
+        self.mount_work_note()
+
+    def mount_work_note(self) -> None:
+        """Say why rows are missing, so a hidden skill is never a mystery."""
+        if self.work:
+            self._main.mount(
+                Static(
+                    "\n[%s]▲ work profile (%s): personal skills and global "
+                    "instructions are hidden.[/]"
+                    % (ADVISE, self.home / install.PROFILE_FILE)
+                )
+            )
 
     def main_where(self) -> None:
         self._main.mount(
@@ -1327,12 +1346,14 @@ class SkillsApp(App):
             list(self.external),
             True,
         )
-        self.mount_section(
-            "GLOBAL INSTRUCTIONS",
-            "user-level AGENTS.md files; diffed and backed up like a skill",
-            [GLOBAL],
-            False,
-        )
+        if self.global_rows:
+            self.mount_section(
+                "GLOBAL INSTRUCTIONS",
+                "user-level AGENTS.md files; diffed and backed up like a skill",
+                list(self.global_rows),
+                False,
+            )
+        self.mount_work_note()
         narrow = [n for n in self.bundled if not install.skill_global_default(n)]
         if narrow and self.scope == "user":
             self._main.mount(
