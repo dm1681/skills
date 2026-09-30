@@ -12,6 +12,7 @@ self-contained under [`skills/`](skills/).
 | `olympus-report-progress` | Report a repository checkout and append a session update to a running Olympus server, from any repository. |
 | `asd-ste100` | Write clear, explicit technical updates using Simplified Technical English principles. |
 | `ponytail` | Minimize unnecessary code by reusing existing code, the standard library, and native platform features. |
+| `space-domain-awareness` | Reduce observations, fit and propagate orbits, associate tracks, and triage maneuvers and anomalies with explicit uncertainty. |
 | `semantic-pr-review` | Explain a pull request as a source-verified semantic hierarchy and interactive flowchart. |
 | `viz-driven-dev` | Build the plot, overlay, or video that would show a feature's effect before implementing it, then regenerate it from real output. |
 | `wow-addon-dev` | Build, debug, package, and publish retail World of Warcraft addons under the taint and secret-value fences. |

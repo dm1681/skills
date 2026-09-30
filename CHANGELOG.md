@@ -5,6 +5,10 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+- Add the `space-domain-awareness` skill, imported from the claude.ai-synced
+  copy: SDA/SSA observation reduction, orbit determination and propagation,
+  track association, maneuver and anomaly triage, conjunctions and pipeline
+  design. Sections 3–15 moved into `references/` to fit the entrypoint budget.
 - Add a work profile (`--set-profile work`): a marked machine skips or refuses
   personal skills, refuses global instructions and cloud bootstrap, and the
   cloud sync script refuses to run. Cleared only by deleting the marker.
