@@ -20,7 +20,7 @@ See [tests.md](tests.md) for examples and [mocking.md](mocking.md) for mocking g
 
 A **seam** is the public boundary you test at: the interface where you observe behavior without reaching inside. Tests live at seams, never against internals.
 
-**Choose the test seams before writing tests.** In an interactive session, write down the public interfaces under test and confirm them with the user. In a worker explicitly launched with `SKILLS_SESSION_KIND=symphony`, choose appropriate seams autonomously and record the rationale in the issue workpad. A workflow file alone does not identify a worker.
+**Choose the test seams before writing tests.** Write down the public interfaces under test and confirm them with the user.
 
 When the shape of that interface is itself in question — how deep the module is, where the seam belongs, what the interface should expose — use the `/codebase-design` skill for the vocabulary. It is the shared source of the module, interface, depth, seam, adapter, leverage and locality terms, and it is a reference to consult, not a session to run.
 
@@ -34,4 +34,4 @@ When the shape of that interface is itself in question — how deep the module i
 
 - **Red before green.** Write the failing test first, then only enough code to pass it. Don't anticipate future tests or add speculative features.
 - **One slice at a time.** One seam, one test, one minimal implementation per cycle.
-- **Refactoring is not part of the loop.** It belongs to the review stage, not the red → green implementation cycle. Interactive sessions can use `code-review`; Symphony workers validate and return to Human Review for the human-run review.
+- **Refactoring is not part of the loop.** It belongs to the review stage, not the red → green implementation cycle. Use `code-review` for it.

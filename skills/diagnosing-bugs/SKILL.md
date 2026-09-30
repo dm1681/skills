@@ -14,7 +14,7 @@ When exploring the codebase, read `CONTEXT.md` (if it exists) to get a clear men
 
 This skill has you show commands, outputs and captured artifacts. **Redact every secret first** — write `<REDACTED>` in its place. Build loops against env vars, so the credential stays in the environment rather than in what you show. Captured artifacts carry auth headers: quote only the lines that carry the signal.
 
-If the redacted output is insufficient, ask the user in interactive sessions. In an explicitly launched Symphony worker (`SKILLS_SESSION_KIND=symphony`), record the missing evidence and blocker in the workpad and follow the workflow blocker route.
+If the redacted output is insufficient, ask the user.
 
 ## Phase 1 — Build a feedback loop
 
@@ -53,7 +53,7 @@ The goal is not a clean repro but a **higher reproduction rate**. Loop the trigg
 
 ### When you genuinely cannot build a loop
 
-Stop and list what you tried. Symphony workers record the required access or evidence in the workpad and follow its blocker route; interactive sessions ask the user for: (a) access to whatever environment reproduces it, (b) a redacted captured artifact (HAR file, log dump, core dump, screen recording with timestamps), or (c) permission to add temporary production instrumentation. Do **not** proceed to hypothesise without a loop.
+Stop and list what you tried. Ask the user for: (a) access to whatever environment reproduces it, (b) a redacted captured artifact (HAR file, log dump, core dump, screen recording with timestamps), or (c) permission to add temporary production instrumentation. Do **not** proceed to hypothesise without a loop.
 
 ### Completion criterion — a tight loop that goes red
 

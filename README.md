@@ -392,22 +392,12 @@ differing installations are never overwritten silently. With `--force`, the
 old directory is moved into an adjacent `.skills-backups/` directory (outside
 the scanned skills root) before the new version is installed.
 
-### Curated Matt-derived skills and Symphony
+### Curated Matt-derived skills
 
 The supported Matt-derived subset is owned and versioned in this repository.
 Choose its skills under YOUR SKILLS or use `./install.sh --curated-skills`.
 `--matt-skills` remains a compatibility alias; `--matt-ref` is retired. Existing
 unrelated installs are preserved. See [curation and migration](docs/matt-pocock-skills.md).
-
-Symphony setup is project-only and initially targets Linux/WSL. Run
-`skills symphony setup --project-dir ...`, install its pinned runtime with
-`skills symphony install-runtime`, and check readiness with `skills symphony check`.
-New workers default to full Codex access and dynamic model/effort selection;
-configure the separate [Symphony Linear app](docs/symphony-linear-app.md) once on
-the service host before online checks or startup.
-The dashboard exposes setup with **Y**. Setup never starts workers; explicit
-`skills symphony start --accept-preview` verifies the exact project's completed
-setup issue first. See [setup, lifecycle and validation](docs/symphony.md).
 
 ### Optional pstack skills
 

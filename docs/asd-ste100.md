@@ -15,10 +15,6 @@ is not bundled; this skill does not guarantee formal STE compliance.
 Install with `./install.sh --skill asd-ste100`, or select it in the skills dashboard.
 It also supports the installer's normal `--target` and `--scope` options.
 
-Symphony provisions it for fresh and resumed workers. The workflow requires
-STE-flavored mode for replies, workpads, PR descriptions and final reports.
-Required evidence, uncertainty and checklist structure take precedence over
-shortening. Existing active sessions receive new instructions on their next pickup.
 
 Run the optional linter with:
 

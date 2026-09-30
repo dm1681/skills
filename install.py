@@ -4428,9 +4428,6 @@ def manage_model_invocation(args: argparse.Namespace) -> int:
 
 def main(argv: Optional[list[str]] = None) -> int:
     raw_args = list(sys.argv[1:] if argv is None else argv)
-    if raw_args and raw_args[0] == "--symphony":
-        import skills_cli
-        return skills_cli.main(["symphony", *raw_args[1:]])
     args = parser().parse_args(raw_args)
     try:
         bundled = available_skills()

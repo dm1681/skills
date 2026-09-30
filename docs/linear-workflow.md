@@ -1,15 +1,5 @@
 # Linear workflow setup
 
-## Symphony projects
-
-For a new Symphony project use [project onboarding](symphony.md): create from the
-Agent-Ready Software Project template, supervise the included harness setup
-issue, configure/check Symphony without dispatch, review evidence and mark the
-setup issue Done, then start explicitly. Record the exact setup issue in project
-configuration. Use the upstream lifecycle and persistent workpad; the legacy
-label/claim/Current-overview/handoff protocol below does not apply to workers.
-Use native project membership, blocker relations, related links and attached PRs.
-
 ## Status updates are part of execution
 
 Follow [required status synchronization](../global/AGENTS.md#required-status-synchronization)
@@ -20,14 +10,13 @@ transition. Record failures honestly if the update cannot be verified.
 A supervised setup issue starts in Backlog, moves to In Progress when authorized
 implementation starts, and moves to Human Review when its deliverable satisfies
 the review bar. Done requires human acceptance. "Keep incomplete" never means
-leave active work in Backlog. Workers retain upstream routing: they do not start
-Backlog work or reset Human Review/Merging merely because a session resumes.
+leave active work in Backlog.
 
 These are instructions agents must load and follow, not a runtime guarantee.
 Fresh-session loading and commit/sync verification remain necessary; do not claim
 an uncommitted instruction edit is active on other devices or remote clones.
 
-## Legacy interactive tracking (projects not using Symphony)
+## Interactive tracking
 
 The shared workflow lives in [`global/AGENTS.md`](../global/AGENTS.md#linear-work-tracking-and-handoffs).
 Load that source through the existing global-instruction installation; keep

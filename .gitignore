@@ -19,5 +19,3 @@ dist/
 /graphify-out/
 /.claude/CLAUDE.md
 
-# Project-local Symphony configuration, runtime and issue workspaces.
-/.symphony/

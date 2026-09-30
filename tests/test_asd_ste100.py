@@ -5,7 +5,6 @@ import tempfile
 import unittest
 
 import install
-import symphony_project
 
 
 class AsdSte100Tests(unittest.TestCase):
@@ -26,8 +25,3 @@ class AsdSte100Tests(unittest.TestCase):
             self.assertTrue((root/'asd-ste100/references/writing-rules.md').is_file())
             self.assertTrue((root/'asd-ste100/scripts/ste-lint.py').is_file())
 
-    def test_worker_allows_skill_and_prompt_requires_flavored_mode(self):
-        self.assertIn('asd-ste100',symphony_project.WORKER_SKILLS)
-        prompt=(symphony_project.RESOURCES/'WORKFLOW.md').read_text(encoding='utf-8')
-        self.assertIn('.agents/skills/asd-ste100/SKILL.md',prompt)
-        self.assertIn('STE-flavored mode',prompt)

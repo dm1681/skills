@@ -32,14 +32,12 @@ publishing authorization. Use only actions authorized for the current task.
 ### Required status synchronization
 
 This applies to every authorized session working a mapped issue, including
-supervised setup work. Comments, workpads and checklists do not change the issue's
-status field.
+supervised setup work. Comments and checklists do not change the issue's status
+field.
 
 - Before substantive implementation, read the issue's current state and ownership.
   When authorized work begins from Backlog/Todo, set the mapped active state
-  (In Progress here) and fetch the issue again to verify it. Symphony workers
-  must follow their existing routing: never self-dispatch Backlog or reopen a
-  Human Review/terminal issue; preserve the Merging and Rework flows.
+  (In Progress here) and fetch the issue again to verify it.
 - At meaningful checkpoints and before ending a substantive work turn, reconcile
   actual progress with the issue state. Keep In Progress while implementation or
   required validation remains. Move to the mapped review state only when its
@@ -49,19 +47,13 @@ status field.
   state field. A successful comment edit or mutation request alone is not proof.
   Respect a concurrent human change; do not blindly overwrite it.
 - "Keep incomplete until reviewed" means do not mark Done; it does not mean keep
-  Backlog. For supervised Symphony setup, use In Progress once work starts,
-  Human Review when the setup deliverable is ready, and Done only after human
-  acceptance. Worker Done still requires the upstream merge completion bar.
+  Backlog.
 - If access or authorization prevents a transition, report the failed transition
   and last verified state in the existing progress record and final response.
   Continue only independently authorized work; never claim the state was updated.
   Otherwise include the verified issue state when reporting substantive completion.
 
-### Legacy interactive tracking
-
-These claim/label conventions apply to projects not using Symphony. Interactive
-setup in a Symphony project uses the status rules above and the project setup
-issue, without importing the worker dispatch protocol.
+### Interactive tracking
 
 1. **Resume:** verify Linear access on this device/session. Read the mapped
    project's Current overview, the matching issue, its dependencies and latest
@@ -102,22 +94,6 @@ or sync as successful. When access returns, reconcile current Linear state
 before publishing an authorized pending handoff. These instructions neither
 install nor authenticate the connector: verify access separately on each device
 and keep credentials out of synced files.
-
-## Symphony worker sessions
-
-A worker is explicitly identified by its launcher (`SKILLS_SESSION_KIND=symphony`)
-and launch instructions. A workflow file or an absent human does not identify it.
-For these workers, Symphony owns dispatch, retries, workspaces and the lifecycle:
-Backlog -> Todo -> In Progress -> Human Review -> Merging -> Done. Use the single
-persistent issue workpad for plans, acceptance, validation, progress and blockers.
-The legacy Linear claim/readiness-label/Current-overview/separate-handoff protocol
-above does not apply to Symphony workers. Interactive sessions retain their normal
-skills; workers use the launcher's selected skills and project coding standards.
-
-Humans run code-review during Human Review. Todo resumes incremental feedback on
-an attached PR; Rework is a deliberate full reset. Approval moves work to Merging,
-where the upstream land workflow runs; Done follows the merge. Visualization is
-optional in interactive work; viz-driven-dev is disabled for Symphony workers.
 
 ## graphify
 - **graphify** (`~/.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`

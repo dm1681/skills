@@ -4,7 +4,7 @@ description: Investigate a question against high-trust primary sources and captu
 version: 1.0.0
 ---
 
-Delegate the investigation to an agent within the current session when supported; otherwise investigate directly. In an explicitly identified Symphony worker, Symphony retains issue ownership and the result is linked from its workpad. Do not create a separate orchestration owner.
+Delegate the investigation to an agent within the current session when supported; otherwise investigate directly.
 
 Its job:
 
