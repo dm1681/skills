@@ -11,7 +11,7 @@ Two-axis review of the diff between `HEAD` and a fixed point the user supplies:
 
 Both axes run as **parallel sub-agents** so they don't pollute each other's context, then this skill aggregates their findings.
 
-Use the existing tracker mapping in `AGENTS.md` or `docs/agents/issue-tracker.md` and the linked issue/spec. Ask for the missing spec source when it cannot be resolved; do not invoke a collection setup workflow. For Symphony work, a human invokes this skill during Human Review and posts actionable findings on the PR.
+Use the existing tracker mapping in `AGENTS.md` or `docs/agents/issue-tracker.md` and the linked issue/spec. Ask for the missing spec source when it cannot be resolved; do not invoke a collection setup workflow.
 
 Announce the review start before reading the diff, naming the reviewer and exact revision (full head SHA for a PR); findings follow separately. Follow the project's review-start comment convention when an external comment is authorized, otherwise announce in the session.
 

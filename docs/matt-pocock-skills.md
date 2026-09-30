@@ -30,24 +30,24 @@ the owned forks themselves are listed under YOUR SKILLS.
 
 ## Supported subset
 
-| Skill | Interactive session | Symphony worker |
-| --- | --- | --- |
-| codebase-design | Shared design vocabulary | Same vocabulary |
-| domain-modeling | Interview, glossary and ADR creation | Consume prepared glossary/ADRs; skill excluded |
-| diagnosing-bugs | Reproduction and diagnosis; ask for missing evidence | Record blockers in workpad; record architectural follow-up |
-| tdd | Confirm test seams with user | Choose and document seams autonomously |
-| research | Delegate within session when available; otherwise investigate | Same, retaining Symphony ownership |
-| writing-for-agents | Instruction authoring | Same |
-| grilling | Preserve interview/wait behavior | Excluded |
-| code-review | Parallel Standards and Spec reviews; manual Human Review | Excluded |
-| handoff | Explicit interactive handoff | Workpad replaces this skill |
-| claude-handoff | Explicit invocation, existing workflow unchanged | Explicit invocation remains available; no ownership transfer |
-| implement | Interactive pacing choice; display name Implement (interactive) | Excluded |
+| Skill | Behaviour |
+| --- | --- |
+| codebase-design | Shared design vocabulary |
+| domain-modeling | Interview, glossary and ADR creation |
+| diagnosing-bugs | Reproduction and diagnosis; ask for missing evidence |
+| tdd | Confirm test seams with user |
+| research | Delegate within session when available; otherwise investigate |
+| writing-for-agents | Instruction authoring |
+| grilling | Preserve interview/wait behavior |
+| code-review | Parallel Standards and Spec reviews |
+| handoff | Explicit interactive handoff |
+| claude-handoff | Explicit invocation, existing workflow unchanged |
+| implement | Interactive pacing choice; display name Implement (interactive) |
 
 The supported set omits triage, to-tickets, loop-me, ask-matt and the broad setup
 router. Retained skills' local references and support files are included. The
 mandatory global visualization-first rule is removed; viz-driven-dev remains
-available interactively and is explicitly disabled for workers.
+available on request.
 
 ## Forking implement
 

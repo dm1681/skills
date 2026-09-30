@@ -80,7 +80,3 @@ For the optional pstack plugin — which shares that fetch pipeline, and shares
 two skill names with it — see [`pstack.md`](pstack.md). Neither optional
 collection carries agent-specific content: every selected root receives the
 same files, so nothing in the matrix above changes when one is installed.
-
-Symphony workers use explicit launch context and verified Codex skill discovery;
-see [project setup](symphony.md#worker-skill-selection). Interactive skills remain
-available in ordinary sessions.

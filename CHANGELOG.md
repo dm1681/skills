@@ -12,57 +12,23 @@ All notable changes to this repository are documented here. Versions follow
   flows rendered as a self-contained, interactive Catppuccin Mocha page, with
   one container per source file, a live legend of shape, colour and arrow
   meanings, and real syntax-highlighted excerpts on hover.
-- Make the Symphony dashboard bind address configurable (`--host`, setup form);
-  it persists across setup runs and defaults to loopback.
-- Tighten the worker human-comment protocol: answer questions received during
-  execution, detail blockers, and never treat a blocked handoff as merge approval.
-- Bundle the pinned ASD-STE100 skill, reference, examples and linter; enable
-  STE-flavored writing for Symphony replies, workpads and PR descriptions.
-- Default new Symphony workers to full Codex access and dynamic model/effort
-  routing. The standard start/check commands use a separate Linear app identity;
-  no per-service Linear launcher override or Git sandbox adapter is required.
-- Add a read-only machine-wide Symphony web monitor with local endpoint registration,
-  isolated polling, freshness/coverage reporting and synthetic browser validation.
-  Linux/WSL only; project execution and readiness remain unchanged.
+- Bundle the pinned ASD-STE100 skill, reference, examples and linter.
+- Remove the unreleased Symphony orchestrator: the `skills symphony` command,
+  the dashboard's Symphony setup form, its worker templates, monitor, docs and
+  the Symphony-worker branches in `code-review`, `diagnosing-bugs`, `research`
+  and `tdd`. The last commit containing it is tagged `archive/symphony`.
 
+### Curated skills (pending major release)
 
-### Symphony integration and curated skills (pending major release)
-
-- Enable Ponytail and Cloudflare Artifacts for workers, provision missing skills
-  in resumed clones, and support protected external publishing-key files with
-  Node.js and sandbox readability checks.
-
-- Add optional fresh-worker bootstrap declarations for preinstalled Python,
-  locked uv dependencies, explicit download policy, writable workspace caches and
-  required tools; source-only projects keep their existing setup behavior.
-- Add project worker Git authors, SSH alias/config/executable selection and
-  explicit GitHub repository/account identity with runtime credential providers.
-  Separate read-only Git and PR access checks suppress credential diagnostics;
-  global accounts remain unchanged and Windows keys can be reused from WSL.
-- Use 30-second polling and Codex response deadlines for generated workflows to
-  reduce shared Linear quota pressure and tolerate thread startup latency.
-
-- Add project-only Linux/WSL Symphony setup, runtime installation, readiness and
-  explicit start, plus a dashboard setup form. Start verifies the exact project's
-  Done setup issue, required lifecycle states and local worker discovery/sandbox.
-- Revalidate editable runtime configuration, create isolated issue branches from
-  the configured base, and keep PR/review instructions independent of an optional
-  repository template or review bot. Curated migration preflights legacy ownership
-  and copy/link mode across all roots before writes.
-- Write generated workflow bytes consistently across hosts so Windows newline
-  translation cannot make repeat setup falsely report a user-edited file.
-- Use the current host-native Codex sandbox probe command and document the
-  verified Linux 0.156.1 repair for the WSLg socket-alias rejection.
 - Replace the broad Matt offering with ten repository-owned forks plus the
   existing interactive implement fork, with attribution, source hashes and
   shadow protection. `--matt-skills` is a curated alias; `--matt-ref` is retired.
   Preserve unrelated installed skills and their receipts during migration.
+  Curated migration preflights legacy ownership and copy/link mode across all
+  roots before writes.
 - Require status updates at pickup/checkpoints/completion and verify transitions
-  by rereading the issue, including supervised setup moving out of Backlog.
-- Adopt Symphony workpads and lifecycle for explicitly identified workers; keep
-  interactive interviews/manual review separate and remove mandatory global
-  visualization-first guidance. Templates are reconciled at integration closeout.
-
+  by rereading the issue.
+- Remove mandatory global visualization-first guidance.
 
 ### Added
 

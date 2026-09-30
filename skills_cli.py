@@ -661,9 +661,6 @@ def parser() -> argparse.ArgumentParser:
     )
     setup.add_argument("--dry-run", action="store_true")
     setup.set_defaults(handler=command_setup_path)
-
-    import symphony_project
-    symphony_project.add_parser(subcommands)
     return result
 
 
