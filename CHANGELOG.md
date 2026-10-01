@@ -8,10 +8,13 @@ All notable changes to this repository are documented here. Versions follow
 - `space-domain-awareness` 1.1.0: add §16 operational recipes in a new
   `references/operations.md` (maneuver detection on sparse optical arcs,
   fit acceptance and publish gates, timing calibration and sensor-bias
-  policy, tracking and catalog correlation); four operating rules and new
-  quick numbers; sensor sensitivity scaling, detection and measurement
-  numbers, frame calibration, photometric systematics, magnitude
-  corrections, earthshine and scheduled signature changes (§3–5); orbit
+  policy, tracking and catalog correlation, detection and image-processing
+  methods, tracklet linking and estimation methods, fusion, behaviour,
+  characterization and conjunction methods); four operating rules and new
+  quick numbers; sensor sensitivity scaling, RF and radar processing,
+  detection and measurement numbers, frame calibration, photometric
+  systematics, magnitude corrections, earthshine and scheduled signature
+  changes (§3–5); integrators and semi-analytical propagation (§7); orbit
   classes, GEO regime bands and photometric pattern of life (§9); conjunction
   screening validity, context and RPO geometry (§10); format gotchas and a
   receiving-side checklist (§11–12); playbook pointers and a photometric
