@@ -1,14 +1,14 @@
 ---
 name: space-domain-awareness
 description: Expert space domain awareness (SDA/SSA) engineering and analysis. Use when working with any satellite-tracking data - astrometry and photometry reduction, sensor calibration, orbit determination and propagation, TLE/OMM/CCSDS/UDL data, observation association, maneuver and anomaly detection, pattern of life, object fingerprinting, conjunction assessment, SDA data lake or ingestion pipeline design, and threat or intent assessments - even when SDA is not named.
-version: 1.0.1
+version: 1.1.0
 ---
 
 # Space Domain Awareness Engineering and Analysis
 
 Guidance for SDA/SSA work at practitioner-to-expert level: reducing and calibrating observations, fitting and propagating orbits, associating tracks, detecting maneuvers and anomalies, fingerprinting objects, modeling pattern of life (PoL), designing the data pipelines underneath, and writing defensible assessments. Textbook orbital mechanics is assumed. This file holds the judgment, numbers and failure modes that are easy to get wrong.
 
-**Sections** (1–2 below, 3–15 in `references/`): 1 Operating rules · 2 Quick numbers · 3 Sensors and observability · 4 Astrometry · 5 Photometry and characterization · 6 Orbit determination · 7 Propagation, frames, time · 8 Association and identity · 9 Pattern of life and anomalies · 10 Conjunctions · 11 Data standards and sources · 12 Pipeline and data lake design · 13 Decision playbook · 14 Lookup guide · 15 Landscape snapshot
+**Sections** (1–2 below, 3–16 in `references/`): 1 Operating rules · 2 Quick numbers · 3 Sensors and observability · 4 Astrometry · 5 Photometry and characterization · 6 Orbit determination · 7 Propagation, frames, time · 8 Association and identity · 9 Pattern of life and anomalies · 10 Conjunctions · 11 Data standards and sources · 12 Pipeline and data lake design · 13 Decision playbook · 14 Lookup guide · 15 Landscape snapshot · 16 Operational recipes
 
 ## 1. Operating rules
 
@@ -23,6 +23,10 @@ The expertise that matters most in SDA is uncertainty discipline. Most "maneuver
 7. **Ask about the user's own system; never guess it.** Their schemas, sensor specifications, conventions, thresholds and data licenses are not in this file. Ask only the questions whose answers would change the result; otherwise state the assumption and proceed.
 8. **Stay public and unclassified.** Work only from public sources. Do not speculate about classified capabilities. Do not put the user's proprietary or controlled data (sensor sites, raw observations, internal assessments, customer details) into web searches or external tools. If a task needs non-public information, stop and say so.
 9. **Look things up when this file runs out** (§14) instead of filling gaps from memory.
+10. **Check identity before inferring behaviour.** A maneuver, anomaly or conjunction computed on mis-tagged observations is wrong in a way no later step repairs: confirm the tag (orbit continuity, fingerprint, neighbours) before the call, and recompute everything derived from an observation set when its links change (§8, §16.4).
+11. **Evidence must scale with the claim.** A large ΔV from few observations is a wrong orbit, not a maneuver; a published close approach needs a small σ; a short arc cannot flip an object's drift state. Budget the evidence per claim (§16.1) and hold the call until it is met.
+12. **An orbit is valid only between maneuvers.** Never fit across a known burn, never screen a conjunction across one, and require observations after the closest approach before asserting a past encounter between active objects (§10, §16.1).
+13. **Alert on contradiction, not on state.** Drifting, parked or tumbling is a state; severity rises when behaviour contradicts the object's design or declared status — a dead object holding attitude or maneuvering, an active one tumbling, a station-kept object with a periodic light curve (§9, §13.3).
 
 **Answer shape.** Lead with the answer or decision, then the evidence, then only the caveats that could change it. Match length to the question: a quick question gets the verdict, the check or two that discriminate, and what would settle it. For a design request, lead with the decisions that drive the design. The rules above bind code, schemas and decisions in full; in a chat answer apply them silently and show frames, labels, provenance and caveats only where they change what the user does. Answer several independent questions one at a time in this shape.
 
@@ -55,6 +59,19 @@ The expertise that matters most in SDA is uncertainty discipline. Most "maneuver
 | Along-track offset after an along-track burn ΔV | ΔV·[(4/n)·sin nt − 3t], n = mean motion. At GEO for 0.1 m/s, seen from the ground: +3.6″ at 3 h, zero near 5 h, −5.5″ at 6 h, −140″ at 24 h | physics |
 | GEO slot geometry | a ±0.05° box is ≈74 km wide; co-located satellites keep kilometers apart, tens of arcsec or more on the sky | physics; [H] |
 | GEO ΔV ↔ inclination | 53.7 m/s per degree | physics |
+| Period change ↔ drift, SMA, ΔV (GEO) | +1 s of orbital period ≈ 0.0042°/day westward ≈ 0.33 km of SMA ≈ 1.2 cm/s along-track; 1°/day ≈ 239 s ≈ 78 km ≈ 2.84 m/s | physics |
+| Osculating period at exact GEO | reads ≈ −0.027°/day of drift because J2 lifts the osculating SMA ≈ 1.6 km; treat \|drift\| < 0.03°/day as station-keeping noise | physics; [H] |
+| Natural change of a GEO drift rate | ≤ ≈0.002°/day² from the tesseral field (≈0.014°/day per week); a larger week-to-week change is estimation noise or thrust | physics |
+| Camera latency at GEO | 0.3–0.45 s is common for commercial camera stacks ≈ 5–7″ along-track ≈ 1–1.3 km, larger than any publish gate: calibrate per sensor (§16.3) | [H] |
+| Solar radiation pressure at GEO | a ≈ 4.6e-6·C_R·A/m m/s²; C_R·A/m = 0.02 forces e ≈ 2.2e-4, a ±19 km daily longitude libration; ≥3 days of angles separate it from state error | physics; [H] |
+| Along-track error growth of a fresh optical GEO fit | ≈×1.5 at 1 h, ×7 at 5 h, ×20 at 10 h, ×30 at 24 h, then ≈×30 per day; 1 km of SMA error ≈ 9.5 km/day | [H]; physics |
+| Burn epoch and fake ΔV | epoch precision ≈ σ_pos/ΔV (100 m at 0.1 m/s ≈ 17 min; at 1 m/s ≈ 100 s); differencing two orbits across a short gap manufactures ΔV ≈ δr/Δt (1 km over 10 min ≈ 1.7 m/s; over 60 min ≈ 0.3 m/s) | physics |
+| GEO brightness vs geometry and size | diffuse-sphere phase function 0.88 at 30°, 0.61 at 60°, 0.32 at 90°, 0.11 at 120°; real GEO comsats fade ≈4 mag from 0° to 120°; diameter ≈ 12.8 m·2^−(V−9)/1.5 at zero phase (diffuse, albedo ≈0.25; good to ~2×) | physics; [H] |
+| Evidence per maneuver claim | ≥ ≈20 post-event observations per m/s of claimed ΔV before publishing (§16.1) | [H] |
+| Post-burn state σ tiers (optical GEO) | ≲100 m solid; 200–300 m "high" — hold as a candidate; ≳1 km wait for more observations (§16.1) | [H] |
+| Disposal and kick-motor drift | graveyard ≈ −6.8°/day westward (≈530 km above GEO); GEO apogee kick motors ≈ −3.3 to −3.9°/day (≈260–300 km above) for years | physics; [H] |
+| Earth seen from the object | from GEO: angular radius 8.7°, 0.072 sr; visible earthshine ≤ ≈0.5% of sunlight (≈ −5.8 mag) and zero at the object's local midnight; from 550 km: ≈25% (≈ −1.5 mag); Earth-albedo and infrared radiation pressure ≈0.5% and 0.4% of SRP at GEO | physics |
+| Optical limiting magnitude vs geometry | ≈13 at 30° solar elongation rising to ≈19 at 60°; ≈13–15 with the Sun at −10° to ≈18 at −20°; keep >20° from the Moon, which costs 1–2 mag near full | [H] |
 | GEO station-keeping budgets | north-south 41–51 m/s/yr; east-west up to ≈2 m/s/yr by longitude | [CV] |
 | East-west burn; momentum dump | 0.05–0.2 m/s; 0.001–0.005 m/s | Decoto and Loerch 2015 |
 | GEO deadband | ±0.05° typical, ±0.1° also common | [CV] |
@@ -88,3 +105,4 @@ Read the reference file for a section before relying on it; `§` cross-reference
 | 13 | Decision playbook | [`references/decision-playbook.md`](references/decision-playbook.md) |
 | 14 | Lookup guide | [`references/lookup-and-landscape.md`](references/lookup-and-landscape.md) |
 | 15 | Landscape snapshot | [`references/lookup-and-landscape.md`](references/lookup-and-landscape.md) |
+| 16 | Operational recipes | [`references/operations.md`](references/operations.md) |
