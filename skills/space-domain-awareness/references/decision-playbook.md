@@ -53,7 +53,7 @@ Until it is resolved, flag the suspect observations and keep them out of the orb
 
 ### 13.6 Tasking [H]
 - Priority: protect high-value assets and confirm suspected maneuvers, then recover lost custody, then maintain the catalog, then survey.
-- Choose by expected information gain: covariance reduction, time since last observation against error growth, geometric diversity (a different site beats more from the same site), and modality.
+- Choose by expected information gain: covariance reduction, time since last observation against error growth, geometric diversity (a different site beats more from the same site), and modality. The objective, its terms and the scheduler are in §16.10.
 - Revisit often enough that propagated uncertainty stays inside both the association gate and the sensor field of view; maneuvering and high-interest objects need more.
 - Lost custody: propagate the last good state with inflated covariance, search along-track first, then the set reachable with a plausible ΔV (at GEO, 1 m/s ≈ 0.35°/day of drift), then the operator's other slots.
 

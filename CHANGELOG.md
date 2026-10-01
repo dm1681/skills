@@ -11,7 +11,8 @@ All notable changes to this repository are documented here. Versions follow
   policy, tracking and catalog correlation, detection and image-processing
   methods, tracklet linking and estimation methods, fusion, behaviour,
   characterization and conjunction methods, RF and radar recipes,
-  fingerprinting and re-identification); four operating rules and new
+  fingerprinting and re-identification, a sensor-tasking objective and
+  scheduler); four operating rules and new
   quick numbers; sensor sensitivity scaling, RF and radar processing,
   thermal-infrared and resolved-imaging modality rows, colour and
   polarization,
