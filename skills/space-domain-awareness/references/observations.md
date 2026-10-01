@@ -22,6 +22,12 @@ Part of the `space-domain-awareness` skill. Section numbers (§) match the map i
 - **An independent modality is worth more than more of the same.** RF and photometric signatures are identity evidence that does not depend on the orbit.
 - Treat vendor performance claims without published validation as [C].
 
+**Sensor sensitivity and sampling [H unless marked]**
+- Scaling [CV]: a background-limited system's limiting magnitude moves by 2.5·log10[√(A·QE·t)·EOD/IFOV] — +0.75 mag per doubling of aperture diameter, +0.38 per doubling of exposure, +0.75 per halving of the pixel angular size while the PSF stays sampled; a read-noise-limited system scales as A·QE·t·EOD (+1.5 mag per doubling of diameter). Dark-site rule of thumb for a few-second exposure: limiting mag ≈ 2.7 + 5·log10(D_mm) [H].
+- Energy on detector: EOD = erf²(1/(2√2·σ_px)) is the fraction of a point source's flux in its peak pixel — 0.50 at σ = 0.48 px, 0.47 at 0.5 px, 0.15 at 1 px — so a peak-pixel detector loses ≈1.3 mag between 0.5 and 1 px of blur. In sensor trades cap EOD near 0.6 and the IFOV at ≈30 µrad: coarser sampling buys EOD but spoils centroids and photometry (§5).
+- Trailing: a peak-pixel gate loses ∝ 1/L for a streak of L pixels, a streak-matched filter ∝ 1/√L, and once trailed a longer exposure buys nothing for a sky-limited matched filter. In GEO-stare mode choose the exposure so stars trail ≥15 px, or they cannot be told from objects; in sidereal mode keep target streaks short enough to centroid.
+- Three SNRs describe one source: SNR₁ = total counts ÷ per-pixel noise (the nominal figure most pipelines quote), SNR₂ = EOD·SNR₁ at the peak pixel, and the matched-filter (Cramér–Rao) flux SNR₄ = I/σ_I with σ_I ≈ σ_pix·√(4π(σ_b² + 1/12)) — SNR₁/2.05 at 0.5 px blur, SNR₁/3.7 at 1 px. Name which one a threshold uses: "6σ" is three different depths.
+
 ## 4. Astrometry
 
 **Reduction chain [CV]**
@@ -39,6 +45,14 @@ Part of the `space-domain-awareness` skill. Section numbers (§) match the map i
 - *Noise model per pixel:* σ² = read² + I/gain + (m·I)², where the multiplicative term (~1–2% flat and PSF error) keeps bright stars from failing residual tests and sets the photometric floor; include the Poisson term for sky and target (a model without one is overconfident at the faint end); measure gain from a photon-transfer curve *after* removing read noise and fixed pattern, or it comes out low and every SNR high.
 - *Fixed-pattern noise:* two-point non-uniformity correction for CMOS and infrared arrays; row and column structure by 1-D median filtering; after subtraction verify that the residual background has zero median and the σ the photon-transfer curve predicts, and that star residual RMS and zero-point scatter are flat across the field.
 - *Threshold calibration:* run the detector on noise-only frames, because background subtraction correlates the noise: a matched filter reaches 50% completeness ≈0.4 SNR below its nominal threshold and a peak-pixel gate needs ≈1.2×threshold/EOD; set the gate from the false-alarm budget (6σ ≈ 0.02 false detections per 16 Mpx frame; 5σ ≈ 5 per 4k² frame) [H].
+
+**Detection and measurement [CV unless marked]**
+- *FITS keyword precedence:* time — a BEG/END pair's midpoint > start + EXPTIME/2 > AVG > DATE-OBS treated as mid-exposure, recording which; plate scale — CD/CDELT > a SCALE keyword > pixel pitch over focal length; site — geodetic coordinates, or a J2000 state for space-based sensors; parity and flips from the WCS, never assumed. Pixel origin: state whether (0,0) is the array edge (first pixel centre at 0.5) or the first pixel centre (FITS CRPIX is 1-based) — a mixed convention is a half-pixel astrometric bias.
+- *Two-stage detection:* a cheap peak-pixel gate (~6σ) followed by a sub-pixel-phased matched filter (~12σ₁ ≈ 6σ₄, §3) that picks the PSF phase by max A²/B (the generalized likelihood ratio) with flux I = A/B; phasing recovers 20–50% of the SNR of undersampled sources. Gate on A/(σ√B) rather than on I for a uniform false-alarm rate. Hysteresis region growth (6σ seed, 3σ ring, merge touching regions) classifies STAR / STREAK / SATURATED; the model PSF must never be sharper than the real one or the spike test rejects real sources [H].
+- *Streaks:* fit as a PSF swept uniformly between two endpoints plus an intensity; the midpoint belongs to mid-exposure and direction needs a second frame; initialize the length from the second moments (L ≈ √(12·(Σ_var − 2σ_b²))); the fit's (AᵀA)⁻¹σ² is the Cramér–Rao bound for the endpoints and carries the RA–Dec correlation of step 6.
+- *Unresolved pairs:* a blended pair leaves an *even* residual (a halo or donut) after a single-PSF fit; detectability scales as SNR·(d/σ_b)², and a blur error masquerades as a pair — fit the blur before declaring a pair (§8).
+- *Limiting magnitudes:* record four per frame — noise-limited at nominal blur, noise-limited at measured blur, matched-filter gate, peak gate; the binding limit is the brighter of the two gates, which cross at σ_b ≈ 0.48 px. They are negative evidence (§5, §12).
+- *Star catalog hygiene:* drop variables, galaxies and flagged entries; require ≥3 bands; weight by σ(m) ≈ 0.02 + 0.02·(m − 10); propagate proper motion to the epoch (step 5).
 
 **What star-relative astrometry does and does not remove**
 - Star-relative positions are *astrometric* places: comparable with catalog star positions. Refraction cancels against the stars to first order.
