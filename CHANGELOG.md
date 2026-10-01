@@ -5,6 +5,9 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+- `space-domain-awareness` 1.0.1: adopt the updated claude.ai description, which
+  widens triggering to any satellite-tracking data work (even when SDA is not
+  named) and adds data-lake/ingestion design and threat or intent assessments.
 - Add the `space-domain-awareness` skill, imported from the claude.ai-synced
   copy: SDA/SSA observation reduction, orbit determination and propagation,
   track association, maneuver and anomaly triage, conjunctions and pipeline
