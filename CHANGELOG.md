@@ -9,8 +9,9 @@ All notable changes to this repository are documented here. Versions follow
   `references/operations.md` (maneuver detection on sparse optical arcs,
   fit acceptance and publish gates, timing calibration and sensor-bias
   policy, tracking and catalog correlation); four operating rules and new
-  quick numbers; frame calibration, photometric systematics, magnitude
-  corrections, earthshine and scheduled signature changes (§4–5); orbit
+  quick numbers; sensor sensitivity scaling, detection and measurement
+  numbers, frame calibration, photometric systematics, magnitude
+  corrections, earthshine and scheduled signature changes (§3–5); orbit
   classes, GEO regime bands and photometric pattern of life (§9); conjunction
   screening validity, context and RPO geometry (§10); format gotchas and a
   receiving-side checklist (§11–12); playbook pointers and a photometric
