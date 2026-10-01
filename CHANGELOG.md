@@ -10,8 +10,11 @@ All notable changes to this repository are documented here. Versions follow
   fit acceptance and publish gates, timing calibration and sensor-bias
   policy, tracking and catalog correlation, detection and image-processing
   methods, tracklet linking and estimation methods, fusion, behaviour,
-  characterization and conjunction methods, RF and radar recipes); four operating rules and new
+  characterization and conjunction methods, RF and radar recipes,
+  fingerprinting and re-identification); four operating rules and new
   quick numbers; sensor sensitivity scaling, RF and radar processing,
+  thermal-infrared and resolved-imaging modality rows, colour and
+  polarization,
   detection and measurement numbers, frame calibration, photometric
   systematics, magnitude corrections, earthshine and scheduled signature
   changes (§3–5); integrators and semi-analytical propagation (§7); orbit
