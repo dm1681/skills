@@ -1,7 +1,7 @@
 ---
 name: space-domain-awareness
-description: Space domain awareness (SDA/SSA) engineering and analysis. Use when doing satellite observation reduction (astrometry, photometry, sensor calibration), orbit determination and propagation, TLE/OMM/CCSDS/UDL data, track association, maneuver and anomaly detection, pattern of life, object fingerprinting, conjunction assessment, or SDA data pipeline design.
-version: 1.0.0
+description: Expert space domain awareness (SDA/SSA) engineering and analysis. Use when working with any satellite-tracking data - astrometry and photometry reduction, sensor calibration, orbit determination and propagation, TLE/OMM/CCSDS/UDL data, observation association, maneuver and anomaly detection, pattern of life, object fingerprinting, conjunction assessment, SDA data lake or ingestion pipeline design, and threat or intent assessments - even when SDA is not named.
+version: 1.0.1
 ---
 
 # Space Domain Awareness Engineering and Analysis
