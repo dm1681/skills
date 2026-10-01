@@ -72,6 +72,8 @@ The expertise that matters most in SDA is uncertainty discipline. Most "maneuver
 | Disposal and kick-motor drift | graveyard ≈ −6.8°/day westward (≈530 km above GEO); GEO apogee kick motors ≈ −3.3 to −3.9°/day (≈260–300 km above) for years | physics; [H] |
 | Earth seen from the object | from GEO: angular radius 8.7°, 0.072 sr; visible earthshine ≤ ≈0.5% of sunlight (≈ −5.8 mag) and zero at the object's local midnight; from 550 km: ≈25% (≈ −1.5 mag); Earth-albedo and infrared radiation pressure ≈0.5% and 0.4% of SRP at GEO | physics |
 | Optical limiting magnitude vs geometry | ≈13 at 30° solar elongation rising to ≈19 at 60°; ≈13–15 with the Sun at −10° to ≈18 at −20°; keep >20° from the Moon, which costs 1–2 mag near full | [H] |
+| LEO → GEO transfer ΔV | impulsive 3.94 km/s coplanar from 185 km (2.46 + 1.48); apogee burn with the plane change folded in: 1.84 km/s from 28.5°, 1.50 km/s from 6°; electric (Edelbaum) 4.7 km/s coplanar, ≈6.0 km/s with 28.5°, 1.5–2.5 km/s from GTO over 3–8 months (§16.11) | physics; [CV] |
+| GEO relocation and disposal cost | 2.84 m/s per °/day at each end (30° in 15 days ≈ 11.4 m/s); +300 km disposal raise ≈ 11 m/s in two burns — a single burn leaves e ≈ 0.0036, above IADC's 0.003 | physics |
 | GEO station-keeping budgets | north-south 41–51 m/s/yr; east-west up to ≈2 m/s/yr by longitude | [CV] |
 | East-west burn; momentum dump | 0.05–0.2 m/s; 0.001–0.005 m/s | Decoto and Loerch 2015 |
 | GEO deadband | ±0.05° typical, ±0.1° also common | [CV] |
