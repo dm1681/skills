@@ -107,3 +107,37 @@ An orbit is published — used for prediction, screening and tasking — only wh
 - **Glint prediction.** A specular glint occurs when the bisector of the Sun and observer directions aligns with a surface normal. A Sun-tracking array reflects back along the Sun line, so Earth sees its glint only when Earth lies on that line — near the object's local midnight at the equinoxes, just outside the eclipse window; an off-season glint at non-zero phase measures the panel offset (§5). Predict the glint windows from geometry before calling a glint anomalous.
 - **Light-curve inversion [C].** Attitude and shape from light curves — convex inversion, multiple-model attitude estimation, or BRDF fitting (Phong, Cook–Torrance, Ashikhmin–Shirley) against a facet model — is research-grade and degenerate without multi-geometry data; it is useful for stable-versus-tumbling and panel-offset estimates. Compare curves by dynamic time warping on phase-folded data, score anomalies against a Gaussian-process baseline, and treat contrastive embeddings as screening (§5). Colour indices and spectral unmixing give a material class, not an identity [C].
 - **Closest-approach search.** Prefilter pairs (apogee/perigee overlap, orbit-path geometry, time windows), then find minima with cubic fits of the relative-distance derivative (ANCAS style) or the sampling-guarantee walk of §10, and verify every prefilter against brute force. For slow or long encounters compute Pc by Monte Carlo over the 6-D covariances with maneuver uncertainty, or a 3D Pc, rather than a 2D encounter-plane method (§10).
+
+### 16.8 RF and radar recipes [CV unless marked]
+
+**TDOA/FDOA geolocation**
+1. Capture the signal simultaneously on at least two channels — for interference into a GEO transponder, the victim and an adjacent satellite; otherwise two or more stations or a moving collector — with GPS-disciplined sampling clocks and recorded local-oscillator offsets.
+2. Measure the time and frequency differences with the cross-ambiguity function (correlate over delay × Doppler shift; the peak is (τ, ν)); bandwidth sets the delay resolution (≈1/β) and integration time the frequency resolution (≈1/T). Check that the peak is unique: multipath and co-channel signals make rival peaks.
+3. Remove systematics before solving: satellite ephemeris error (metres to kilometres become µs of delay and Hz of frequency bias), transponder group delay and translation-frequency drift. Calibrate all three with reference emitters of known position captured in the same window; without references expect tens of kilometres.
+4. Solve: each TDOA fixes a hyperboloid and each FDOA an iso-Doppler surface; intersect them with the Earth's surface (or a known altitude) and solve weighted least squares over all measurements, iterating the geometry. Report an error ellipse from the Jacobian and the measurement σ (precision ∝ 1/(β√SNR) in delay, 1/(T√SNR) in frequency) — it is elongated where the surfaces run nearly parallel.
+5. Failure modes: a wrong adjacent-satellite identity or ephemeris; emitter frequency drift inside the integration (smears FDOA); narrowband signals (delay useless — rely on frequency and long T); beam footprints that do not both cover the emitter.
+
+**Doppler-only orbit determination**
+1. Track a downlink carrier through a pass by phase lock or FFT peak tracking; record frequency against time at ≥1 Hz with GPS time stamps.
+2. Model f_rx = f_tx·(1 − ρ̇/c) + receiver offset, with the unknown transmitter frequency and its drift as solve-for parameters beside the state. One pass from one station observes range rate (the slope at closest approach gives range and the plane geometry) but leaves an along-track and plane ambiguity: use two passes or two stations, or a two-way transponded link for range.
+3. Residual checks: oscillator drift is a slowly varying bias; ionospheric delay rate is small at L/S band but non-zero at low elevation — cut below ≈10°.
+
+**RF fingerprinting for identity**
+1. Record per pass, with time stamps, the features that are stable per transmitter: carrier frequency offset and its drift with temperature and age, transponder plan (frequencies, bandwidths, polarizations), modulation and framing (symbol rate, pilots, beacon patterns), spurious emissions, duty cycle.
+2. Score a candidate match as a likelihood ratio of feature distances against the object's own history (intra-object scatter) and the population (inter-object spread): frequency-plan matches are strong, modulation moderate, duty cycle weak.
+3. Decide identity only together with the orbit: the RF-derived range rate or geolocation must agree with the optical track's state inside the §8 gates; an emitter that moves with the optical track settles a cross-tag. Silence is not evidence of absence — the beam may not point at you, or emission is scheduled.
+
+**Radar bias calibration** (the policy of §16.3)
+1. Calibrate range, range rate and angles per sensor and per waveform against laser-ranged spheres and GNSS: range bias from the median residual, range-rate bias from Doppler residuals, angle biases from monopulse residuals.
+2. Judge on several calibration targets per night, apply hysteresis before changing a bias, and refit without a suspect sensor so it can be exonerated.
+3. Watch the tropospheric delay model (≈2.4 m at zenith, growing ≈1/sin(elevation)), waveform changes, and a range-rate against range inconsistency, which is a timing offset.
+
+**RCS fingerprinting and size**
+1. Per pass: a calibrated cross-section time series (dBsm) with aspect angle; the median, the 10–90% spread and the fluctuation period from a periodogram — the period is a tumble indicator (check it against the photometric period and its ½ and ×2 aliases, §5).
+2. Size: map the median through the NASA Size Estimation Model to a characteristic size [PS], with a scatter of about a factor of 2 for fragments; for intact spacecraft the cross-section is aspect-dominated, so use the distribution, not the mean, and multi-frequency data to break Mie ambiguity.
+3. Identity: compare the per-pass distribution with the object's history at matched aspect; a persistent shift in median or fluctuation period is a fingerprint change (deployment, attitude change) — cross-check with photometry.
+
+**ISAR workflow**
+1. Track with a wideband waveform (range resolution c/(2B): 1 GHz → 15 cm) over an aspect change Δθ.
+2. Motion compensation — range alignment by correlating range profiles, phase adjustment by a dominant scatterer or entropy minimization — then the Doppler transform gives the range–Doppler image with cross-range resolution δ ≈ λ/(2Δθ).
+3. Interpretation: the cross-range scale needs the rotation rate (known from orbit geometry for a stable attitude, unknown for a tumbler, hence a scale ambiguity); extract the number and arrangement of scatterers, the extent in range and the bus/array configuration into an attitude and shape class. Absolute size needs an independent rate or the range-dimension cross-check; rotating parts smear, so use short apertures for tumblers.
