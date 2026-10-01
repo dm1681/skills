@@ -19,7 +19,7 @@ Part of the `space-domain-awareness` skill. Section numbers (§) match the map i
 **Baselines**
 - *GEO, controlled:* the east-west cycle is a longitude parabola inside the deadband with burns near the edge, from weekly to every couple of months for chemical propulsion and near-daily for electric. North-south burns hold the inclination vector. Momentum dumps are tiny.
 - *GEO, inclined or fuel-saving:* no north-south control; inclination grows at the natural rate.
-- *GEO relocation:* drift orbit above (westward) or below (eastward) GEO, then a stop burn. ΔV follows §2.
+- *GEO relocation:* drift orbit above (westward) or below (eastward) GEO, then a stop burn. ΔV follows §2; transfer arithmetic and the signatures of launches, electric orbit raising, constellation phasing and proximity motion are in §16.11.
 - *GEO end of life:* raise to the disposal altitude, drift west at 3°/day or more, then tumble after passivation. Dead in place: libration about a stable longitude, inclination growth, tumbling light curve.
 - *LEO:* orbit raising (staircase or continuous), phasing, drag make-up that scales with solar activity, collision avoidance, controlled deorbit or natural decay. Judge each constellation member against its plane or shell peers; the anomaly is the outlier (failed to raise, decaying, out of slot).
 - *MEO:* navigation satellites maneuver rarely; a maneuver is itself notable.
