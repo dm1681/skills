@@ -5,6 +5,16 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+- `space-domain-awareness` 1.1.0: add §16 operational recipes in a new
+  `references/operations.md` (maneuver detection on sparse optical arcs,
+  fit acceptance and publish gates, timing calibration and sensor-bias
+  policy, tracking and catalog correlation); four operating rules and new
+  quick numbers; frame calibration, photometric systematics, magnitude
+  corrections, earthshine and scheduled signature changes (§4–5); orbit
+  classes, GEO regime bands and photometric pattern of life (§9); conjunction
+  screening validity, context and RPO geometry (§10); format gotchas and a
+  receiving-side checklist (§11–12); playbook pointers and a photometric
+  confirmation rule (§13).
 - `space-domain-awareness` 1.0.1: adopt the updated claude.ai description, which
   widens triggering to any satellite-tracking data work (even when SDA is not
   named) and adds data-lake/ingestion design and threat or intent assessments.

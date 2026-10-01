@@ -10,8 +10,9 @@ Part of the `space-domain-awareness` skill. Section numbers (§) match the map i
 | Accept or reject an observation | normalized residual, SNR, flags | edit above 3σ [CV]; flag, never delete | real maneuver evidence is thrown away |
 | Object or artifact | persistence across frames, motion, PSF shape | at least 3 detections on consistent motion [H] | cosmic rays and hot pixels become tracks |
 | Photometry usable | saturation, blending, sky transparency, zero-point scatter | zero-point scatter ≲0.05 mag for fingerprinting [H] | weather is read as a change in the object |
-| Re-estimate sensor bias | bias trend on calibration satellites | drift beyond 1σ of the estimate, or any hardware or software change [H] | phantom maneuvers across every object that sensor sees |
+| Re-estimate sensor bias | bias trend on calibration satellites | drift beyond 1σ of the estimate, or any hardware or software change [H] (recipe in §16.3) | phantom maneuvers across every object that sensor sees |
 | De-weight or exclude a sensor | its residual RMS against its claimed noise | weighted RMS persistently above ~2: inflate its noise first, exclude last [H] | coverage lost for nothing, or bad data trusted |
+| Blacklist a sensor | its median residual per target against a clean majority of sensors | hysteresis ≈1.5″ on, ≈0.5″ off; global ban only on a supermajority of targets; always refit once without the list [H] (§16.3) | a bad orbit permanently convicts a good sensor, or a biased one keeps bending orbits |
 
 ### 13.2 Is it a maneuver?
 Carry every hypothesis the evidence has not excluded; do not stop at the first that fits. Status moves from *unexplained deviation* to *candidate maneuver* to *confirmed maneuver*.
@@ -23,7 +24,7 @@ Carry every hypothesis the evidence has not excluded; do not stop at the first t
 4. **Space weather?** In LEO during a storm, compare with residual growth across objects at similar altitude and ballistic coefficient. Common-mode growth is drag error.
 5. **Force model?** Slow, smooth growth at GEO/HEO suggests a change in solar radiation pressure or attitude, or a high area-to-mass object.
 6. **Breakup or deployment?** New uncorrelated tracks nearby, or a photometric change.
-7. **Otherwise a candidate maneuver.** Fit pre- and post-event orbits separately, estimate epoch and ΔV, and test plausibility against the object's history and class (size, direction, timing relative to its cycle).
+7. **Otherwise a candidate maneuver.** Fit pre- and post-event orbits separately, estimate epoch and ΔV, and test plausibility against the object's history and class (size, direction, timing relative to its cycle). Detector, guards and false-alarm list in §16.1; hold the call as *potential* while the post-burn σ is 200–300 m or worse or either side has under 2 h of data (§2), and close every potential out explicitly.
 8. **Confirm** with an independent sensor or modality, an operator ephemeris, or a post-event fit that converges with realistic covariance at more than one site. Require two independent sources before "confirmed" [H].
 
 Until it is resolved, flag the suspect observations and keep them out of the orbit fit and the maneuver history. Never delete them.
@@ -38,11 +39,12 @@ Until it is resolved, flag the suspect observations and keep them out of the orb
 - *Active:* station-keeping seen within about twice the object's median maneuver interval, or stable-attitude photometry.
 - *Dead:* control stops, inclination grows at the natural rate, longitude drifts toward a stable point, light curve becomes periodic.
 - Declare a status change only when it persists across at least two geometry-matched collections.
+- A photometric change is *confirmed* only when two sensors see it, or the same sensor sees it at the same time of night on two nights; a single-sensor, single-night change is "not confirmed", stays an open thread, and is closed explicitly — back to baseline, confirmed, or re-baselined as persistent variability [H]. Changes at the edges of the observing window, or recurring at the same clock time on unrelated objects, are geometry or a sensor hand-off until phase-matched (§5, §9).
 - Identity attribution needs two independent lines of evidence (orbit continuity plus photometric or RF fingerprint) whenever the object has been through a custody gap or a cluster.
 
 ### 13.5 Threat, intent and tradecraft
 - **Indicators to report as observations:** approach within tens of km of another operator's GEO asset; persistent co-location or drift matching; repeated passes with the Sun behind the approaching object; maneuvers timed to coverage gaps; synchronized maneuvers by paired objects; release of sub-objects; a change in RF or photometric state coincident with proximity.
-- **Describe relative motion precisely:** range, range-rate, duration, geometry (circumnavigation, fly-by, hold), lighting.
+- **Describe relative motion precisely:** range, range-rate, duration, geometry (circumnavigation, fly-by, hold), lighting. The full reporting form for a close approach is in §10.
 - **Reason as capability × opportunity × intent.** Intent is almost never observable. Keep it as an assessment with alternatives stated (inspection, servicing, debris removal, testing, relocation, collision avoidance). Commercial servicing and inspection look the same in the data as counterspace rehearsal [C].
 - **ICD 203 estimative terms [PS]:** almost no chance 1–5%; very unlikely 5–20%; unlikely 20–45%; roughly even chance 45–55%; likely 55–80%; very likely 80–95%; almost certain 95–99%. Confidence (high, moderate, low) rests on source quality and corroboration and must not share a sentence with a likelihood term.
 - **When to use them.** Estimative terms are for assessments of what an object did or will do, and only when the supporting evidence can be named. Routine data-quality triage needs a verdict and the discriminating check, not a probability.
