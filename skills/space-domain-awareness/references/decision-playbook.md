@@ -40,7 +40,7 @@ Until it is resolved, flag the suspect observations and keep them out of the orb
 - *Dead:* control stops, inclination grows at the natural rate, longitude drifts toward a stable point, light curve becomes periodic.
 - Declare a status change only when it persists across at least two geometry-matched collections.
 - A photometric change is *confirmed* only when two sensors see it, or the same sensor sees it at the same time of night on two nights; a single-sensor, single-night change is "not confirmed", stays an open thread, and is closed explicitly — back to baseline, confirmed, or re-baselined as persistent variability [H]. Changes at the edges of the observing window, or recurring at the same clock time on unrelated objects, are geometry or a sensor hand-off until phase-matched (§5, §9).
-- Identity attribution needs two independent lines of evidence (orbit continuity plus photometric or RF fingerprint) whenever the object has been through a custody gap or a cluster.
+- Identity attribution needs two independent lines of evidence (orbit continuity plus photometric or RF fingerprint) whenever the object has been through a custody gap or a cluster. Fingerprint definition, scoring and the re-identification recipe are in §16.9.
 
 ### 13.5 Threat, intent and tradecraft
 - **Indicators to report as observations:** approach within tens of km of another operator's GEO asset; persistent co-location or drift matching; repeated passes with the Sun behind the approaching object; maneuvers timed to coverage gaps; synchronized maneuvers by paired objects; release of sub-objects; a change in RF or photometric state coincident with proximity.
