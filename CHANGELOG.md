@@ -12,7 +12,8 @@ All notable changes to this repository are documented here. Versions follow
   methods, tracklet linking and estimation methods, fusion, behaviour,
   characterization and conjunction methods, RF and radar recipes,
   fingerprinting and re-identification, a sensor-tasking objective and
-  scheduler, orbit transfers as the watcher sees them); four operating rules and new
+  scheduler, orbit transfers as the watcher sees them, a ranked casebook of
+  symptoms, causes and fixes); four operating rules and new
   quick numbers; sensor sensitivity scaling, RF and radar processing,
   thermal-infrared and resolved-imaging modality rows, colour and
   polarization,
