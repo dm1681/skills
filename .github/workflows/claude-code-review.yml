@@ -1,0 +1,129 @@
+name: Claude Code Review
+
+# Review every PR that is not a draft: when it is opened or reopened ready,
+# marked ready (the Dispatcher opens each Run's PR as a draft), on later pushes
+# and on a manual dispatch. Fork PRs, bot-authored PRs and runs a bot triggers
+# (Dependabot, Renovate, ...) are skipped: GitHub withholds repository secrets
+# from forks and Dependabot, claude-code-action refuses bot actors unless
+# listed in allowed_bots, bot code must not run while the token is available,
+# and running untrusted code with the token (pull_request_target) is not worth
+# the risk. A newer run on the same PR cancels the one still in
+# progress, so a stale review is never posted. Claude posts as the Claude
+# GitHub App; the implementer triages each comment with a Disposition
+# (CONTEXT.md).
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number to review
+        required: true
+
+concurrency:
+  group: claude-review-${{ github.event.inputs.pr || github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  claude-review:
+    if: >-
+      github.event_name == 'workflow_dispatch' || (
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.type != 'Bot' &&
+      !endsWith(github.actor, '[bot]'))
+    env:
+      PR: ${{ github.event.inputs.pr || github.event.pull_request.number }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
+      actions: read
+    steps:
+      - name: Require CLAUDE_CODE_OAUTH_TOKEN
+        env:
+          TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::CLAUDE_CODE_OAUTH_TOKEN is not set; without it claude-code-action skips its run steps and reports green having done nothing. Generate it with 'claude setup-token' and store it with: gh secret set CLAUDE_CODE_OAUTH_TOKEN -R ${{ github.repository }}"
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Check out the pull request head (manual runs start on the default branch)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # The same trust rule as automatic runs: never check out fork or bot code
+        # while the token is available.
+        run: |
+          # a number only: gh also accepts a URL, which could name another repository's PR
+          case "$PR" in
+            ''|*[!0-9]*) echo "::error::pr must be a pull request number of this repository, got '$PR'"; exit 1 ;;
+          esac
+          trust=$(gh pr view "$PR" --json isCrossRepository,author --jq '"\(.isCrossRepository) \(.author.is_bot)"')
+          if [ "$trust" != "false false" ]; then
+            echo "::error::PR #$PR comes from a fork or a bot ($trust); manual reviews run only on this repository's own branches."
+            exit 1
+          fi
+          gh pr checkout "$PR"
+
+      - name: Run Claude Code Review
+        id: claude-review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          additional_permissions: |
+            actions: read
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ env.PR }}
+
+            Review this pull request as an independent reviewer. The PR body carries
+            the Linear issue's acceptance criteria (copied in at claim; this runner has
+            no Linear access, so do not try to open Linear); the repository's AGENTS.md,
+            CONTEXT.md (glossary) and docs/adr/ define its conventions and settled
+            decisions. Judge the diff against those, not against general taste.
+
+            Do:
+            - Run the check the repository documents (AGENTS.md, CLAUDE.md or README)
+              and report the result. If your tools cannot run it (only
+              `python3 -m unittest` is allowed here), say so instead of guessing.
+            - Check every acceptance criterion in the linked issue; name any that is
+              not met or not tested.
+            - Look for real defects: wrong behaviour, races, unhandled failure paths,
+              tests that cannot fail, breaches of the repository's documented conventions.
+            - If an earlier review of yours on this PR requested changes and every point
+              in it is now addressed, submit this review as APPROVE so the request is
+              cleared; otherwise post ONE review that carries its inline comments, anchored
+              to the lines they concern. Use the Write tool to create /tmp/review.json as
+              {"commit_id": "<head sha>", "event": "COMMENT" | "REQUEST_CHANGES" | "APPROVE",
+              "body": "...", "comments": [{"path": ..., "line": N, "side": "RIGHT",
+              "body": "..."}]} and post it with
+              `gh api repos/${{ github.repository }}/pulls/${{ env.PR }}/reviews --input /tmp/review.json`.
+              If that call fails, use the Write tool to write the same text, with the
+              inline comments folded in, to /tmp/review.md and post it with
+              `gh pr review ${{ env.PR }} --approve|--request-changes|--comment --body-file /tmp/review.md`,
+              choosing the flag that matches your verdict (file:line references
+              in the text). Never downgrade an approval or a change request to a plain
+              comment: the PR's review decision is what the Dispatcher reads. A review
+              MUST be posted on every run; a run that ends without one has failed its job.
+              Tool permissions here match command prefixes, so every `gh api` call
+              must start with the endpoint path (`gh api repos/... [flags]`), never
+              with flags such as `-X`, `--method` or `--paginate` before it.
+              Each comment states the evidence (what you ran or read) and a concrete fix.
+
+            Do not: restate the diff, comment on style, or post a comment for anything
+            you did not verify. An empty review ("no findings") is a valid outcome; say
+            so in one sentence.
+
+          claude_args: |
+            --model opus
+            --effort high
+            --allowed-tools "Write,Read,Glob,Grep,Bash(python3 -m unittest:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh api repos/${{ github.repository }}/pulls/:*),Bash(gh api graphql:*),Bash(git log:*),Bash(git rev-parse:*),Bash(git diff:*),Bash(cat:*),Bash(mktemp:*)"
