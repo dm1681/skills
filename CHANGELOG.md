@@ -5,6 +5,12 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+- Diagram pages: containers are movable. Drag a container by its header (or
+  focus it and press Shift+arrows) to move it with its nodes; arrows re-route
+  from actual positions, so a target moved above its source gets a direct
+  upward curve instead of a loop. Positions are remembered per viewer, per
+  page and view, and ⟲ or `r` restores the automatic layout. Fit frames
+  the moved layout.
 - Diagram colour themes. `assets/diagram-themes.json` (shared) holds the four
   Catppuccin flavours — Mocha, Macchiato, Frappé, Latte — and a page can
   offer any of them with a picker remembered per viewer, or lock to one.

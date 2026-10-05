@@ -347,6 +347,47 @@ class ThemeTests(unittest.TestCase):
             self.assertIn(marker, template)
 
 
+class MovableContainerTests(unittest.TestCase):
+    """Containers drag by their header; arrows re-route from real positions."""
+
+    def setUp(self) -> None:
+        self.template = TEMPLATE.read_text(encoding="utf-8")
+
+    def test_headers_are_handles_and_offsets_are_remembered_and_resettable(self) -> None:
+        for marker in ('"data-grip": lane.id', 'class: "group-grip"', "tabindex: 0", 'const grip = e.target.closest("[data-grip]")',
+                       "`diagram-layout:${MODEL.title}:${view.id}`", 'id="layout-reset"', 'else if (e.key === "r") resetLayout();',
+                       "if (offset) shiftLane(box, offset[0], offset[1]);"):
+            self.assertIn(marker, self.template)
+
+    @unittest.skipUnless(shutil.which("node"), "node is not installed")
+    def test_routing_follows_positions(self) -> None:
+        start = self.template.index("  function edgeGeometry(")
+        end = self.template.index("  const bezier = ")
+        script = (
+            'const KINDS = { nodes: { step: { shape: "rounded" } } };\n'
+            + self.template[start:end]
+            + """
+const box = (x, y) => ({ x, y, w: 200, h: 60, kind: "step" });
+const a = box(100, 300);
+const cases = {
+  below: edgeGeometry(a, box(400, 500), false, 0),
+  level: edgeGeometry(a, box(400, 310), false, 0),
+  aboveApart: edgeGeometry(a, box(400, 100), false, 0),
+  aboveStacked: edgeGeometry(a, box(120, 100), false, 0),
+  cycle: edgeGeometry(a, box(400, 500), true, 0),
+};
+console.log(JSON.stringify(cases));
+""")
+        result = subprocess.run(["node", "-e", script], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        c = json.loads(result.stdout)
+        self.assertEqual(c["below"][:2], [200, 360], "leaves the bottom when the target is below")
+        self.assertEqual(c["level"][:2], [300, 330], "leaves the side facing a level target")
+        self.assertEqual(c["aboveApart"][:2], [200, 300], "leaves the top when the target is above and off to one side")
+        self.assertEqual(c["aboveStacked"][:2], [300, 330], "loops round the right rather than cut through a column")
+        self.assertGreater(c["cycle"][2], 300, "a cycle bulges out to the right")
+
+
 class DiagramContractTests(unittest.TestCase):
     def test_every_kind_is_documented_in_the_visual_language(self) -> None:
         kinds = build.load_kinds()
