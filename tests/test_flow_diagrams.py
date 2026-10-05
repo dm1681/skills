@@ -478,6 +478,35 @@ console.log(JSON.stringify({ out, boxes: Object.fromEntries([...pos].map(([k, v]
                 self.assertFalse(overlap(r, b), f"label at {r} is covered by {name}")
         self.assertFalse(overlap(rects[0], rects[1]), "labels overlap each other")
 
+    @unittest.skipUnless(shutil.which("node"), "node is not installed")
+    def test_crossing_another_arrow_costs_a_detour_but_not_a_huge_one(self) -> None:
+        t = TEMPLATE.read_text(encoding="utf-8")
+        block = t[t.index("  const curve = "):t.index("  function shiftLane(")]
+        script = "\n".join([
+            'const KINDS = { nodes: { step: { shape: "rounded" } } };',
+            "const bezier = () => [0, 0]; const edgeGeometry = () => [0, 0, 0, 0, 0, 0, 0, 0];",
+            block,
+            """
+// Two nodes on one row with a clear straight run between them, and another
+// arrow already running vertically across that run, `wall` cells tall.
+const route = (wall) => {
+  const cols = 80, rows = 80, ox = -240, oy = -480;
+  const grid = { ox, oy, cols, rows, blocked: new Uint8Array(cols * rows), runH: new Uint16Array(cols * rows),
+    runV: new Uint16Array(cols * rows), boxes: new Map([["a", { x: 0, y: 0, w: 120, h: 48 }], ["b", { x: 480, y: 0, w: 120, h: 48 }]]), rects: [] };
+  const row = Math.floor((24 - oy) / GRID), col = Math.floor((300 - ox) / GRID);
+  const marked = new Set();
+  for (let j = row - Math.floor(wall / 2); j <= row + Math.floor(wall / 2); j++) { grid.runV[j * cols + col] = 1; marked.add(`${col},${j}`); }
+  const path = search({ e: { from: "a", to: "b" }, offset: 0 }, grid);
+  return { crossings: path.cells.filter(([i, j]) => marked.has(`${i},${j}`)).length, cells: path.cells.length };
+};
+console.log(JSON.stringify({ short: route(5), long: route(41) }));
+"""])
+        result = subprocess.run(["node", "-e", script], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        r = json.loads(result.stdout)
+        self.assertEqual(r["short"]["crossings"], 0, "a short arrow in the way is routed round")
+        self.assertEqual(r["long"]["crossings"], 1, "a long one is crossed once rather than detoured round")
+
     def test_labels_are_drawn_above_nodes_and_headers(self) -> None:
         template = TEMPLATE.read_text(encoding="utf-8")
         self.assertIn("viewport.append(gLayer, eLayer, hLayer, nLayer, lLayer);", template)

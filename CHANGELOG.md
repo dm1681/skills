@@ -5,6 +5,17 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+- Diagram pages: fewer arrow crossings. Other arrows are soft obstacles to
+  the router: crossing one costs as much as a 40-cell detour and running on
+  top of one costs 12 per cell, so an arrow goes round when the detour is
+  short and crosses once when it is not. Every arrow is then re-routed against
+  all the others (rip-up and re-route), so early arrows are not stuck with
+  choices made before the rest existed. On the two demo diagrams crossings
+  fell from 3 to 1 and 4 to 0, at 10–23% more arrow length. (Reordering
+  container columns was tried as well and dropped: it did not help.) The
+  search reuses its buffers and heap instead of allocating per arrow, and a
+  drag routes in one quick pass per frame (4–10 ms on the demos) with the
+  full passes once on drop.
 - Diagram pages: nothing overlaps. Containers are solid: a dragged or
   nudged container keeps at least 12px from every other, sliding along an
   obstacle or stopping short of it, and saved positions are re-checked on
