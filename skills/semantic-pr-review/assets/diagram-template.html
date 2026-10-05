@@ -601,12 +601,12 @@
 
   // One edge or node, drawn from its current data. Positions come from the
   // view's layout, so a live update can redraw a single element in place.
-  function drawEdge(e, c) {
-    const d = `M${c[0]},${c[1]} C${c[2]},${c[3]} ${c[4]},${c[5]} ${c[6]},${c[7]}`;
+  function drawEdge(e, geom) {
+    const d = geom.d;
     const g = sv("g", { class: "edge", "data-kind": e.kind, tabindex: -1 });
     g.append(sv("path", { class: "line", d, ...edgeStyle(e.kind) }), sv("path", { class: "hit", d }));
     if (e.label) {
-      const [mx, my] = bezier(c, 0.5);
+      const [mx, my] = geom.mid;
       const w = e.label.length * 6 + 12;
       g.append(sv("g", { class: "edge-label" }, sv("rect", { x: mx - w / 2, y: my - 9, width: w, height: 18, rx: 9 }),
         sv("text", { x: mx, y: my + 4, "text-anchor": "middle" }, e.label)));
@@ -646,7 +646,187 @@
   // A container moves with its nodes; arrows touching them are re-routed.
   // Offsets from the automatic layout are remembered per viewer, per page and
   // view, and the reset button returns to the automatic layout.
-  const curve = (r) => edgeGeometry(state.layout.pos.get(r.e.from), state.layout.pos.get(r.e.to), r.back, r.offset);
+  const curve = (r) => r.geom || curveGeom(r);
+
+  // ---------- arrow routing ----------
+  // Every arrow is drawn at right angles, with rounded corners, around every
+  // node and container header. A* searches a coarse grid whose blocked cells
+  // are those obstacles plus a margin; each bend costs extra so routes stay
+  // simple, and each cell an earlier arrow already uses costs a little, so
+  // parallel arrows spread out instead of stacking. A curve is the fallback
+  // for a node arrowing to itself, or when no route exists.
+  const GRID = 12, CLEAR = 12, BEND = 6, SHARED = 3, RADIUS = 9;
+  const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]]; // E S W N
+  function curveGeom(r) {
+    const c = edgeGeometry(state.layout.pos.get(r.e.from), state.layout.pos.get(r.e.to), r.back, r.offset);
+    return { d: `M${c[0]},${c[1]} C${c[2]},${c[3]} ${c[4]},${c[5]} ${c[6]},${c[7]}`, mid: bezier(c, 0.5), c };
+  }
+  function nodeBox(n) {
+    const p = state.layout.pos.get(n.id), diamond = KINDS.nodes[n.kind]?.shape === "diamond";
+    return diamond ? { x: p.x - 6, y: p.y - 8, w: p.w + 12, h: p.h + 16 } : { x: p.x, y: p.y, w: p.w, h: p.h };
+  }
+  function routeAll() {
+    const L = state.layout, view = state.view;
+    const boxes = new Map(view.nodes.map((n) => [n.id, nodeBox(n)]));
+    const rects = [...boxes.values()].map((b) => ({ x: b.x - CLEAR, y: b.y - CLEAR, w: b.w + 2 * CLEAR, h: b.h + 2 * CLEAR }));
+    for (const b of L.boxes) if (KINDS.groups[b.lane.kind]?.border !== "dotted") rects.push({ x: b.x, y: b.y, w: b.w, h: HEAD_H });
+    const B = bounds();
+    const ox = B.x - 6 * GRID, oy = B.y - 6 * GRID;
+    const cols = Math.ceil((B.w + 12 * GRID) / GRID), rows = Math.ceil((B.h + 12 * GRID) / GRID);
+    const blocked = new Uint8Array(cols * rows), used = new Uint16Array(cols * rows);
+    for (const r of rects) {
+      for (let j = Math.max(0, Math.floor((r.y - oy) / GRID)); j < Math.min(rows, Math.ceil((r.y + r.h - oy) / GRID)); j++)
+        for (let i = Math.max(0, Math.floor((r.x - ox) / GRID)); i < Math.min(cols, Math.ceil((r.x + r.w - ox) / GRID)); i++) blocked[j * cols + i] = 1;
+    }
+    const grid = { ox, oy, cols, rows, blocked, used, boxes, rects };
+    // Short, unobstructed arrows first, so long detours route around them.
+    const order = [...els.edges].sort((a, b) => span(a) - span(b));
+    for (const record of order) record.geom = routeOne(record, grid);
+    placeLabels(grid);
+  }
+  // A label slides along its arrow to the first spot clear of nodes and of
+  // labels already placed, starting from the middle.
+  function placeLabels(grid) {
+    const taken = [...grid.boxes.values()].map((b) => ({ x: b.x - 4, y: b.y - 4, w: b.w + 8, h: b.h + 8 }));
+    const overlaps = (r) => taken.some((t) => r.x < t.x + t.w && r.x + r.w > t.x && r.y < t.y + t.h && r.y + r.h > t.y);
+    for (const record of els.edges) {
+      const geom = record.geom;
+      if (!record.e.label || !geom.points) continue;
+      const w = record.e.label.length * 6 + 12, h = 18;
+      for (const t of [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.15, 0.85]) {
+        const [x, y] = pointAt(geom.points, t), r = { x: x - w / 2 - 2, y: y - h / 2 - 2, w: w + 4, h: h + 4 };
+        if (!overlaps(r)) { geom.mid = [x, y]; break; }
+      }
+      const [x, y] = geom.mid;
+      taken.push({ x: x - w / 2 - 2, y: y - h / 2 - 2, w: w + 4, h: h + 4 });
+    }
+  }
+  function span(r) {
+    const a = state.layout.pos.get(r.e.from), b = state.layout.pos.get(r.e.to);
+    return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+  }
+  function routeOne(record, grid) {
+    if (record.e.from === record.e.to) return curveGeom(record);
+    const path = search(record, grid);
+    if (!path) return curveGeom(record);
+    for (const [i, j] of path.cells) grid.used[j * grid.cols + i] += 1;
+    return { d: rounded(path.points), points: path.points, mid: pointAt(path.points, 0.5) };
+  }
+  // A port is a face of a node: the point on the face, the first free cell
+  // outside the margin, and the direction leaving the node.
+  function ports(box, grid, offset) {
+    const { ox, oy } = grid;
+    const snapX = (x) => Math.floor((x - ox) / GRID), snapY = (y) => Math.floor((y - oy) / GRID);
+    const cx = snapX(box.x + box.w / 2 + offset), cy = snapY(box.y + box.h / 2 + offset);
+    const px = ox + (cx + 0.5) * GRID, py = oy + (cy + 0.5) * GRID;
+    return [
+      { dir: 0, point: [box.x + box.w, py], cell: [snapX(box.x + box.w + CLEAR) + 1, cy] },
+      { dir: 1, point: [px, box.y + box.h], cell: [cx, snapY(box.y + box.h + CLEAR) + 1] },
+      { dir: 2, point: [box.x, py], cell: [snapX(box.x - CLEAR) - 1, cy] },
+      { dir: 3, point: [px, box.y], cell: [cx, snapY(box.y - CLEAR) - 1] },
+    ];
+  }
+  function search(record, grid) {
+    const { cols, rows, blocked, used } = grid;
+    const a = grid.boxes.get(record.e.from), b = grid.boxes.get(record.e.to);
+    const out = ports(a, grid, record.offset), into = ports(b, grid, record.offset);
+    const ac = [a.x + a.w / 2, a.y + a.h / 2], bc = [b.x + b.w / 2, b.y + b.h / 2];
+    // Faces turned away from the other node cost extra, so arrows leave and
+    // arrive the way a reader expects unless that way is blocked.
+    const facing = (dir, from, to) => (DIRS[dir][0] * (to[0] - from[0]) + DIRS[dir][1] * (to[1] - from[1]) > 0 ? 0 : 8);
+    const goals = new Map(into.map((p) => [p.cell[1] * cols + p.cell[0], p]));
+    const N = cols * rows * 4, cost = new Float64Array(N).fill(Infinity), prev = new Int32Array(N).fill(-1);
+    const heap = [];
+    const push = (state, f) => {
+      heap.push([f, state]);
+      for (let i = heap.length - 1; i > 0;) { const pi = (i - 1) >> 1; if (heap[pi][0] <= heap[i][0]) break; [heap[pi], heap[i]] = [heap[i], heap[pi]]; i = pi; }
+    };
+    const pop = () => {
+      const top = heap[0], last = heap.pop();
+      if (heap.length) {
+        heap[0] = last;
+        for (let i = 0; ;) {
+          const l = 2 * i + 1, r = l + 1; let m = i;
+          if (l < heap.length && heap[l][0] < heap[m][0]) m = l;
+          if (r < heap.length && heap[r][0] < heap[m][0]) m = r;
+          if (m === i) break;
+          [heap[m], heap[i]] = [heap[i], heap[m]]; i = m;
+        }
+      }
+      return top;
+    };
+    const h = (i, j) => Math.min(...into.map((p) => Math.abs(p.cell[0] - i) + Math.abs(p.cell[1] - j)));
+    for (const p of out) {
+      const [i, j] = p.cell;
+      if (i < 0 || j < 0 || i >= cols || j >= rows) continue;
+      const state = (j * cols + i) * 4 + p.dir, g = facing(p.dir, ac, bc);
+      if (g < cost[state]) { cost[state] = g; push(state, g + h(i, j)); }
+    }
+    let done = -1, port = null;
+    while (heap.length) {
+      const [f, state] = pop();
+      const cell = state >> 2, dir = state & 3, g = cost[state];
+      if (f - h(cell % cols, (cell / cols) | 0) > g + 1e-9) continue;
+      const target = goals.get(cell);
+      if (target && dir === (target.dir + 2) % 4) { done = state; port = target; break; }
+      const i = cell % cols, j = (cell / cols) | 0;
+      for (let nd = 0; nd < 4; nd++) {
+        if (nd === (dir + 2) % 4) continue;
+        const ni = i + DIRS[nd][0], nj = j + DIRS[nd][1];
+        if (ni < 0 || nj < 0 || ni >= cols || nj >= rows) continue;
+        const ncell = nj * cols + ni;
+        const end = goals.get(ncell);
+        if (blocked[ncell] && !end) continue;
+        let ng = g + 1 + (nd !== dir ? BEND : 0) + used[ncell] * SHARED;
+        if (end && nd === (end.dir + 2) % 4) ng += facing(end.dir, bc, ac);
+        const ns = ncell * 4 + nd;
+        if (ng < cost[ns]) { cost[ns] = ng; prev[ns] = state; push(ns, ng + h(ni, nj)); }
+      }
+    }
+    if (done < 0) return null;
+    const cells = [];
+    for (let st = done; st >= 0; st = prev[st]) { const c = st >> 2; cells.push([c % cols, (c / cols) | 0]); }
+    cells.reverse();
+    const center = ([i, j]) => [grid.ox + (i + 0.5) * GRID, grid.oy + (j + 0.5) * GRID];
+    const first = out.find((p) => p.cell[0] === cells[0][0] && p.cell[1] === cells[0][1]) || out[0];
+    // The arrowhead needs a few pixels of air in front of the target face.
+    const endPoint = [port.point[0] - DIRS[port.dir][0] * -4, port.point[1] - DIRS[port.dir][1] * -4];
+    const points = [first.point, ...cells.map(center), endPoint];
+    return { cells, points: simplify(points) };
+  }
+  function simplify(points) {
+    const out = [points[0]];
+    for (let k = 1; k < points.length - 1; k++) {
+      const [a, b, c] = [out[out.length - 1], points[k], points[k + 1]];
+      if ((a[0] === b[0] && b[0] === c[0]) || (a[1] === b[1] && b[1] === c[1])) continue;
+      out.push(b);
+    }
+    out.push(points[points.length - 1]);
+    return out;
+  }
+  function rounded(points) {
+    let d = `M${points[0][0]},${points[0][1]}`;
+    for (let k = 1; k < points.length - 1; k++) {
+      const [p, q, r] = [points[k - 1], points[k], points[k + 1]];
+      const len1 = Math.hypot(q[0] - p[0], q[1] - p[1]), len2 = Math.hypot(r[0] - q[0], r[1] - q[1]);
+      const rad = Math.min(RADIUS, len1 / 2, len2 / 2);
+      const a = [q[0] - ((q[0] - p[0]) / len1) * rad, q[1] - ((q[1] - p[1]) / len1) * rad];
+      const b = [q[0] + ((r[0] - q[0]) / len2) * rad, q[1] + ((r[1] - q[1]) / len2) * rad];
+      d += ` L${a[0]},${a[1]} Q${q[0]},${q[1]} ${b[0]},${b[1]}`;
+    }
+    const last = points[points.length - 1];
+    return `${d} L${last[0]},${last[1]}`;
+  }
+  // The point a fraction `t` of the way along a polyline.
+  function pointAt(points, t) {
+    const lens = points.slice(1).map((q, k) => Math.hypot(q[0] - points[k][0], q[1] - points[k][1]));
+    let rest = lens.reduce((x, y) => x + y, 0) * t;
+    for (let k = 0; k < lens.length; k++) {
+      if (rest <= lens[k]) { const t = rest / lens[k], p = points[k], q = points[k + 1]; return [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]; }
+      rest -= lens[k];
+    }
+    return points[points.length - 1];
+  }
   function shiftLane(box, dx, dy) {
     box.x += dx; box.y += dy;
     for (const n of box.lane.members) { const p = state.layout.pos.get(n.id); p.x += dx; p.y += dy; }
@@ -666,8 +846,12 @@
       g.classList.toggle("selected", n.id === state.selected);
       g.classList.toggle("match", state.match.has(n.id));
     }
+    // Any arrow may have been routing around the moved nodes, so all re-route;
+    // only those whose path changed are redrawn.
+    const before = new Map(els.edges.map((r) => [r, r.geom?.d]));
+    routeAll();
     for (const record of els.edges) {
-      if (!members.has(record.e.from) && !members.has(record.e.to)) continue;
+      if (!members.has(record.e.from) && !members.has(record.e.to) && before.get(record) === record.geom.d) continue;
       const g = drawEdge(record.e, curve(record));
       record.g.replaceWith(g);
       record.g = g;
@@ -786,10 +970,12 @@
       const n = pairCount.get(key) || 0;
       pairCount.set(key, n + 1);
       const offset = n === 0 ? 0 : (n % 2 ? 1 : -1) * Math.ceil(n / 2) * 14;
-      const record = { e, back: L.back.has(`${e.from}>${e.to}`), offset };
-      record.g = drawEdge(e, curve(record));
+      els.edges.push({ e, back: L.back.has(`${e.from}>${e.to}`), offset });
+    }
+    routeAll();
+    for (const record of els.edges) {
+      record.g = drawEdge(record.e, curve(record));
       eLayer.append(record.g);
-      els.edges.push(record);
     }
 
     for (const n of view.nodes) {
@@ -1047,13 +1233,20 @@
   }, { passive: false });
   let drag = null;
   let laneDrag = null;
+  function flushLaneDrag() {
+    if (!laneDrag) return;
+    cancelAnimationFrame(laneDrag.frame);
+    const { id, dx, dy } = laneDrag;
+    Object.assign(laneDrag, { dx: 0, dy: 0, frame: 0 });
+    moveLane(id, dx, dy);
+  }
   svg.addEventListener("pointerdown", (e) => {
     if (e.target.closest(".node")) return;
     const grip = e.target.closest("[data-grip]");
     if (grip) {
       e.preventDefault();
       hideTip();
-      laneDrag = { id: grip.dataset.grip, x: e.clientX, y: e.clientY };
+      laneDrag = { id: grip.dataset.grip, x: e.clientX, y: e.clientY, dx: 0, dy: 0, frame: 0 };
       svg.setPointerCapture(e.pointerId);
       svg.classList.add("moving");
       return;
@@ -1064,8 +1257,11 @@
   });
   svg.addEventListener("pointermove", (e) => {
     if (laneDrag) {
-      moveLane(laneDrag.id, (e.clientX - laneDrag.x) / state.k, (e.clientY - laneDrag.y) / state.k);
+      // Re-routing every arrow is the expensive part, so moves are gathered
+      // and applied at most once per frame.
+      laneDrag.dx += (e.clientX - laneDrag.x) / state.k; laneDrag.dy += (e.clientY - laneDrag.y) / state.k;
       laneDrag.x = e.clientX; laneDrag.y = e.clientY;
+      if (!laneDrag.frame) laneDrag.frame = requestAnimationFrame(flushLaneDrag);
       return;
     }
     if (!drag) return;
@@ -1075,7 +1271,7 @@
     applyTransform();
   });
   svg.addEventListener("pointerup", (e) => {
-    if (laneDrag) { laneDrag = null; svg.classList.remove("moving"); saveOffsets(); return; }
+    if (laneDrag) { flushLaneDrag(); laneDrag = null; svg.classList.remove("moving"); saveOffsets(); return; }
     if (drag && !drag.moved && !e.target.closest(".node, .edge")) { select(null); }
     drag = null; svg.classList.remove("panning");
   });

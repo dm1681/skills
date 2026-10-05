@@ -388,6 +388,53 @@ console.log(JSON.stringify(cases));
         self.assertGreater(c["cycle"][2], 300, "a cycle bulges out to the right")
 
 
+class ArrowRoutingTests(unittest.TestCase):
+    """Arrows are routed at right angles around every node they do not connect."""
+
+    @unittest.skipUnless(shutil.which("node"), "node is not installed")
+    def test_routes_avoid_nodes_and_keep_right_angles(self) -> None:
+        t = TEMPLATE.read_text(encoding="utf-8")
+        block = lambda start, end: t[t.index(start):t.index(end)]
+        script = "\n".join([
+            'const KINDS = { nodes: { step: { shape: "rounded" }, decision: { shape: "diamond" } }, groups: { unit: { border: "solid" } } };',
+            t[t.index("  const COL_GAP = "):t.index("\n", t.index("  const COL_GAP = "))],
+            block("  // Routing follows where", "  // ---------- state ----------"),
+            block("  const curve = ", "  function shiftLane("),
+            block("  function bounds()", "  function drawGroup("),
+            """
+const node = (id, x, y, kind = "step") => ({ id, kind });
+const nodes = [node("a", 0, 0), node("wall", 0, 0), node("b", 0, 0), node("side", 0, 0, "decision")];
+const at = { a: [100, 100], wall: [100, 260], b: [100, 420], side: [420, 260] };
+const pos = new Map(nodes.map((n) => [n.id, { x: at[n.id][0], y: at[n.id][1], w: 200, h: 60 }]));
+const lane = { kind: "unit", members: nodes };
+const state = { layout: { pos, boxes: [{ lane, x: 60, y: 40, w: 640, h: 500 }], width: 800, height: 600 }, view: { nodes } };
+const els = { edges: [
+  { e: { from: "a", to: "b", label: "skips the wall" }, back: false, offset: 0 },
+  { e: { from: "b", to: "a", label: "back" }, back: true, offset: 0 },
+  { e: { from: "a", to: "side", label: "" }, back: false, offset: 0 },
+] };
+routeAll();
+const out = els.edges.map((r) => ({ points: r.geom.points, mid: r.geom.mid, d: r.geom.d }));
+console.log(JSON.stringify({ out, boxes: Object.fromEntries([...pos].map(([k, v]) => [k, v])) }));
+"""])
+        result = subprocess.run(["node", "-e", script], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        ends = [("a", "b"), ("b", "a"), ("a", "side")]
+        for (src, dst), route in zip(ends, data["out"]):
+            points = route["points"]
+            self.assertIsNotNone(points, f"{src}->{dst} found no route")
+            for p, q in zip(points, points[1:]):
+                self.assertTrue(p[0] == q[0] or p[1] == q[1], f"{src}->{dst} has a diagonal segment {p}->{q}")
+                for name, b in data["boxes"].items():
+                    if name in (src, dst):
+                        continue
+                    x0, x1, y0, y1 = min(p[0], q[0]), max(p[0], q[0]), min(p[1], q[1]), max(p[1], q[1])
+                    crosses = x0 < b["x"] + b["w"] and x1 > b["x"] and y0 < b["y"] + b["h"] and y1 > b["y"]
+                    self.assertFalse(crosses, f"{src}->{dst} segment {p}->{q} crosses node {name}")
+        self.assertNotEqual(data["out"][0]["mid"], data["out"][1]["mid"], "labels on parallel routes do not stack")
+
+
 class DiagramContractTests(unittest.TestCase):
     def test_every_kind_is_documented_in_the_visual_language(self) -> None:
         kinds = build.load_kinds()
