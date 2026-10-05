@@ -5,6 +5,17 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+- Diagram pages: nothing overlaps. Containers are solid: a dragged or
+  nudged container keeps at least 12px from every other, sliding along an
+  obstacle or stopping short of it, and saved positions are re-checked on
+  load so a stale layout cannot overlap either.
+- Diagram pages: arrow labels are never covered. They are drawn in their own
+  layer above nodes and container headers, and placement scores spots along
+  each arrow: overlapping a node, a header or another label is avoided
+  whenever any spot allows, covering another arrow or straddling a container
+  border is discouraged, and
+  the label stays as near the middle as that permits. Labels on shorter
+  arrows choose first. Hover, highlighting and dimming follow the label.
 - Diagram pages: arrows are routed orthogonally around obstacles. A* on a
   coarse grid treats every node and container header (plus a margin) as
   blocked, charges for each bend and for sharing cells with earlier arrows,

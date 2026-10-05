@@ -18,7 +18,6 @@
     --subtext0: #a6adc8; --overlay2: #9399b2; --overlay1: #7f849c; --overlay0: #6c7086;
     --surface2: #585b70; --surface1: #45475a; --surface0: #313244; --base: #1e1e2e;
     --mantle: #181825; --crust: #11111b;
-    color-scheme: dark;
     --mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     color-scheme: dark;
@@ -129,12 +128,13 @@
 
   .edge path.line { fill: none; }
   .edge path.hit { fill: none; stroke: transparent; stroke-width: 14; cursor: help; }
-  .edge .edge-label rect { fill: var(--base); stroke: var(--surface1); }
-  .edge .edge-label text { font: 11px var(--sans); fill: var(--subtext1); }
+  .edge-label { cursor: help; }
+  .edge-label rect { fill: var(--base); stroke: var(--surface1); }
+  .edge-label text { font: 11px var(--sans); fill: var(--subtext1); }
   .edge:hover path.line { stroke-width: 3; }
 
-  .dimming .node:not(.lit), .dimming .edge:not(.lit), .dimming .group:not(.lit) { opacity: .16; }
-  .node, .edge, .group { transition: opacity .12s; }
+  .dimming .node:not(.lit), .dimming .edge:not(.lit), .dimming .group:not(.lit), .dimming .edge-label:not(.lit) { opacity: .16; }
+  .node, .edge, .group, .edge-label { transition: opacity .12s; }
 
   .tip { position: absolute; z-index: 5; max-width: min(600px, 92vw); background: var(--crust);
          border: 1px solid var(--surface1); border-radius: 10px; padding: 10px 12px;
@@ -605,16 +605,31 @@
     const d = geom.d;
     const g = sv("g", { class: "edge", "data-kind": e.kind, tabindex: -1 });
     g.append(sv("path", { class: "line", d, ...edgeStyle(e.kind) }), sv("path", { class: "hit", d }));
-    if (e.label) {
-      const [mx, my] = geom.mid;
-      const w = e.label.length * 6 + 12;
-      g.append(sv("g", { class: "edge-label" }, sv("rect", { x: mx - w / 2, y: my - 9, width: w, height: 18, rx: 9 }),
-        sv("text", { x: mx, y: my + 4, "text-anchor": "middle" }, e.label)));
-    }
     call("decorateEdge", e, g);
     g.addEventListener("pointerenter", (ev) => { hoverEdge(e); showEdgeTip(e, ev); });
     g.addEventListener("pointerleave", () => { hoverEdge(null); hideTipSoon(); });
     return g;
+  }
+  // Labels live in their own layer above nodes and headers, so nothing can
+  // cover one; placement keeps them clear of those in the first place.
+  function drawLabel(e, geom) {
+    const [mx, my] = geom.mid, w = labelWidth(e.label);
+    const g = sv("g", { class: "edge-label", "data-kind": e.kind },
+      sv("rect", { x: mx - w / 2, y: my - 9, width: w, height: 18, rx: 9 }),
+      sv("text", { x: mx, y: my + 4, "text-anchor": "middle" }, e.label));
+    g.addEventListener("pointerenter", (ev) => { hoverEdge(e); showEdgeTip(e, ev); });
+    g.addEventListener("pointerleave", () => { hoverEdge(null); hideTipSoon(); });
+    return g;
+  }
+  // Draw (or redraw in place) one arrow and its label.
+  function paintEdge(record) {
+    const geom = curve(record), g = drawEdge(record.e, geom);
+    if (record.g) record.g.replaceWith(g); else state.layers.edges.append(g);
+    record.g = g;
+    const label = record.e.label ? drawLabel(record.e, geom) : null;
+    if (record.label) record.label.remove();
+    if (label) state.layers.labels.append(label);
+    record.label = label;
   }
   function drawNode(n) {
     const p = state.layout.pos.get(n.id);
@@ -655,6 +670,7 @@
   // simple, and each cell an earlier arrow already uses costs a little, so
   // parallel arrows spread out instead of stacking. A curve is the fallback
   // for a node arrowing to itself, or when no route exists.
+  const labelWidth = (label) => label.length * 6 + 12;
   const GRID = 12, CLEAR = 12, BEND = 6, SHARED = 3, RADIUS = 9;
   const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]]; // E S W N
   function curveGeom(r) {
@@ -684,21 +700,39 @@
     for (const record of order) record.geom = routeOne(record, grid);
     placeLabels(grid);
   }
-  // A label slides along its arrow to the first spot clear of nodes and of
-  // labels already placed, starting from the middle.
+  // A label slides along its arrow to the best spot: never over a node, a
+  // container header or another label if any spot avoids them, preferably
+  // not over another arrow or astride a container's border, and as near the
+  // middle as that allows.
   function placeLabels(grid) {
-    const taken = [...grid.boxes.values()].map((b) => ({ x: b.x - 4, y: b.y - 4, w: b.w + 8, h: b.h + 8 }));
-    const overlaps = (r) => taken.some((t) => r.x < t.x + t.w && r.x + r.w > t.x && r.y < t.y + t.h && r.y + r.h > t.y);
-    for (const record of els.edges) {
-      const geom = record.geom;
-      if (!record.e.label || !geom.points) continue;
-      const w = record.e.label.length * 6 + 12, h = 18;
-      for (const t of [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.15, 0.85]) {
-        const [x, y] = pointAt(geom.points, t), r = { x: x - w / 2 - 2, y: y - h / 2 - 2, w: w + 4, h: h + 4 };
-        if (!overlaps(r)) { geom.mid = [x, y]; break; }
+    const pad = (b, m) => ({ x: b.x - m, y: b.y - m, w: b.w + 2 * m, h: b.h + 2 * m });
+    const solid = [...grid.boxes.values()].map((b) => pad(b, 4));
+    for (const b of state.layout.boxes) solid.push({ x: b.x, y: b.y, w: b.w, h: HEAD_H });
+    const borders = state.layout.boxes.map((b) => ({ x: b.x, y: b.y, w: b.w, h: b.h }));
+    const area = (r, t) => Math.max(0, Math.min(r.x + r.w, t.x + t.w) - Math.max(r.x, t.x)) * Math.max(0, Math.min(r.y + r.h, t.y + t.h) - Math.max(r.y, t.y));
+    const astride = (r, b) => area(r, b) > 0 && area(r, b) < r.w * r.h;
+    const taken = [];
+    // Straight runs of every routed arrow; a label over another arrow hides it.
+    const runs = els.edges.filter((r) => r.geom.points).map((r) => ({ record: r,
+      segs: r.geom.points.slice(1).map((q, k) => [r.geom.points[k], q]) }));
+    const crosses = (rect, record) => runs.reduce((n, run) => n + (run.record === record ? 0 : run.segs.filter(([a, b]) =>
+      Math.min(a[0], b[0]) < rect.x + rect.w && Math.max(a[0], b[0]) > rect.x &&
+      Math.min(a[1], b[1]) < rect.y + rect.h && Math.max(a[1], b[1]) > rect.y).length), 0);
+    // Labels on shorter arrows have fewer good spots, so they choose first.
+    const order = els.edges.filter((r) => r.e.label && r.geom.points).sort((a, b) => span(a) - span(b));
+    for (const record of order) {
+      const geom = record.geom, w = labelWidth(record.e.label), h = 18;
+      let best = null;
+      for (let k = 0; k <= 20; k++) {
+        const t = 0.5 + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.04;
+        if (t < 0.06 || t > 0.94) continue;
+        const [x, y] = pointAt(geom.points, t), r = { x: x - w / 2 - 3, y: y - h / 2 - 3, w: w + 6, h: h + 6 };
+        const covered = [...solid, ...taken].reduce((sum, o) => sum + area(r, o), 0);
+        const score = covered * 100 + crosses(r, record) * 600 + borders.filter((b) => astride(r, b)).length * 400 + Math.abs(t - 0.5) * 300;
+        if (!best || score < best.score) best = { score, x, y, r };
       }
-      const [x, y] = geom.mid;
-      taken.push({ x: x - w / 2 - 2, y: y - h / 2 - 2, w: w + 4, h: h + 4 });
+      geom.mid = [best.x, best.y];
+      taken.push(best.r);
     }
   }
   function span(r) {
@@ -827,13 +861,35 @@
     }
     return points[points.length - 1];
   }
+  // Containers are solid: none may come within LANE_CLEAR of another. The
+  // automatic layout leaves at least 14px between containers, so it always
+  // satisfies this.
+  const LANE_CLEAR = 12;
+  function blocked(box, dx, dy) {
+    const r = { x: box.x + dx - LANE_CLEAR, y: box.y + dy - LANE_CLEAR, w: box.w + 2 * LANE_CLEAR, h: box.h + 2 * LANE_CLEAR };
+    return state.layout.boxes.some((o) => o !== box && r.x < o.x + o.w && r.x + r.w > o.x && r.y < o.y + o.h && r.y + r.h > o.y);
+  }
+  // How much of a wanted move a container can make: all of it if the spot is
+  // free, else the larger move along one axis (sliding along an obstacle),
+  // else as far along the way as fits. A container that already overlaps
+  // (never the automatic layout) may move freely so it can be dragged clear.
+  function allowedMove(box, dx, dy) {
+    if (!blocked(box, dx, dy) || blocked(box, 0, 0)) return [dx, dy];
+    const slides = [[dx, 0], [0, dy]].filter(([x, y]) => (x || y) && !blocked(box, x, y));
+    if (slides.length) return slides.sort((a, b) => Math.hypot(...b) - Math.hypot(...a))[0];
+    let lo = 0, hi = 1;
+    for (let k = 0; k < 10; k++) { const mid = (lo + hi) / 2; if (blocked(box, dx * mid, dy * mid)) hi = mid; else lo = mid; }
+    return [dx * lo, dy * lo];
+  }
   function shiftLane(box, dx, dy) {
     box.x += dx; box.y += dy;
     for (const n of box.lane.members) { const p = state.layout.pos.get(n.id); p.x += dx; p.y += dy; }
   }
-  function moveLane(id, dx, dy) {
+  function moveLane(id, wantX, wantY) {
     const box = els.boxes.get(id);
-    if (!box || (!dx && !dy)) return;
+    if (!box) return;
+    const [dx, dy] = allowedMove(box, wantX, wantY);
+    if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return;
     shiftLane(box, dx, dy);
     const [oldBox, oldHead] = els.groups.get(id), parts = drawGroup(box);
     oldBox.replaceWith(parts[0]); oldHead.replaceWith(parts[1]);
@@ -848,13 +904,11 @@
     }
     // Any arrow may have been routing around the moved nodes, so all re-route;
     // only those whose path changed are redrawn.
-    const before = new Map(els.edges.map((r) => [r, r.geom?.d]));
+    const before = new Map(els.edges.map((r) => [r, `${r.geom?.d}|${r.geom?.mid}`]));
     routeAll();
     for (const record of els.edges) {
-      if (!members.has(record.e.from) && !members.has(record.e.to) && before.get(record) === record.geom.d) continue;
-      const g = drawEdge(record.e, curve(record));
-      record.g.replaceWith(g);
-      record.g = g;
+      if (!members.has(record.e.from) && !members.has(record.e.to) && before.get(record) === `${record.geom.d}|${record.geom.mid}`) continue;
+      paintEdge(record);
     }
     const prior = state.offsets[id] || [0, 0];
     state.offsets[id] = [prior[0] + dx, prior[1] + dy];
@@ -947,12 +1001,18 @@
     const L = layout(view);
     state.layout = L;
     state.offsets = loadOffsets(view);
+    // Saved positions are applied one container at a time and only as far as
+    // each fits, so a stale or hand-edited layout can never overlap.
     for (const box of L.boxes) {
       const offset = state.offsets[box.lane.id];
-      if (offset) shiftLane(box, offset[0], offset[1]);
+      if (!offset) continue;
+      const [dx, dy] = allowedMove(box, offset[0], offset[1]);
+      shiftLane(box, dx, dy);
+      state.offsets[box.lane.id] = [dx, dy];
     }
-    const gLayer = sv("g"), eLayer = sv("g"), hLayer = sv("g"), nLayer = sv("g");
-    viewport.append(gLayer, eLayer, hLayer, nLayer);
+    const gLayer = sv("g"), eLayer = sv("g"), hLayer = sv("g"), nLayer = sv("g"), lLayer = sv("g");
+    viewport.append(gLayer, eLayer, hLayer, nLayer, lLayer);
+    state.layers = { edges: eLayer, labels: lLayer };
 
     for (const box of L.boxes) {
       const parts = drawGroup(box);
@@ -973,10 +1033,7 @@
       els.edges.push({ e, back: L.back.has(`${e.from}>${e.to}`), offset });
     }
     routeAll();
-    for (const record of els.edges) {
-      record.g = drawEdge(record.e, curve(record));
-      eLayer.append(record.g);
-    }
+    for (const record of els.edges) paintEdge(record);
 
     for (const n of view.nodes) {
       const g = drawNode(n);
@@ -999,9 +1056,10 @@
     if (!nodeIds && !edgeFilter) { root.classList.remove("dimming"); document.querySelectorAll(".lit").forEach((x) => x.classList.remove("lit")); return; }
     root.classList.add("dimming");
     const lit = new Set(nodeIds || []);
-    for (const { e, g } of els.edges) {
+    for (const { e, g, label } of els.edges) {
       const on = edgeFilter ? edgeFilter(e) : lit.has(e.from) && lit.has(e.to);
       g.classList.toggle("lit", on);
+      if (label) label.classList.toggle("lit", on);
     }
     for (const [id, g] of els.nodes) g.classList.toggle("lit", lit.has(id));
     const nodeGroup = new Map(state.view.nodes.map((n) => [n.id, n.group && els.groups.has(n.group) ? n.group : "__outside__"]));
@@ -1236,9 +1294,11 @@
   function flushLaneDrag() {
     if (!laneDrag) return;
     cancelAnimationFrame(laneDrag.frame);
-    const { id, dx, dy } = laneDrag;
-    Object.assign(laneDrag, { dx: 0, dy: 0, frame: 0 });
-    moveLane(id, dx, dy);
+    laneDrag.frame = 0;
+    // The container heads for where the pointer says it should be; when that
+    // spot is taken it gets as close as it can and catches up once free.
+    const box = els.boxes.get(laneDrag.id);
+    if (box) moveLane(laneDrag.id, laneDrag.targetX - box.x, laneDrag.targetY - box.y);
   }
   svg.addEventListener("pointerdown", (e) => {
     if (e.target.closest(".node")) return;
@@ -1246,7 +1306,9 @@
     if (grip) {
       e.preventDefault();
       hideTip();
-      laneDrag = { id: grip.dataset.grip, x: e.clientX, y: e.clientY, dx: 0, dy: 0, frame: 0 };
+      const box = els.boxes.get(grip.dataset.grip);
+      laneDrag = { id: grip.dataset.grip, startX: e.clientX, startY: e.clientY, boxX: box.x, boxY: box.y,
+        targetX: box.x, targetY: box.y, frame: 0 };
       svg.setPointerCapture(e.pointerId);
       svg.classList.add("moving");
       return;
@@ -1259,8 +1321,8 @@
     if (laneDrag) {
       // Re-routing every arrow is the expensive part, so moves are gathered
       // and applied at most once per frame.
-      laneDrag.dx += (e.clientX - laneDrag.x) / state.k; laneDrag.dy += (e.clientY - laneDrag.y) / state.k;
-      laneDrag.x = e.clientX; laneDrag.y = e.clientY;
+      laneDrag.targetX = laneDrag.boxX + (e.clientX - laneDrag.startX) / state.k;
+      laneDrag.targetY = laneDrag.boxY + (e.clientY - laneDrag.startY) / state.k;
       if (!laneDrag.frame) laneDrag.frame = requestAnimationFrame(flushLaneDrag);
       return;
     }
@@ -1391,9 +1453,7 @@
     }
     for (const record of els.edges) {
       if (!changed.edges.has(keyOf.edges(record.e))) continue;
-      const g = drawEdge(record.e, curve(record));
-      record.g.replaceWith(g);
-      record.g = g;
+      paintEdge(record);
     }
     renderLegend(view);
     renderDetails(state.selected);
