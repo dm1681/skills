@@ -1,7 +1,7 @@
 ---
 name: codebase-onboarding
 description: Onboard someone to a codebase with an interactive, self-contained HTML flow diagram in Catppuccin colour themes (Mocha by default, light and custom too) - an architecture map, one or more end-to-end flows, or both - where steps are grouped into one container per source file, shapes, colours and arrow styles carry defined meanings shown in a live legend, and every node reveals its real, syntax-highlighted source excerpt on hover. Use when a user is new to a repository, asks to be onboarded, wants a visual map of how a codebase fits together, asks how a request, command or feature flows through the code, or wants an onboarding page or diagram to share with a teammate.
-version: 1.0.1
+version: 1.0.0
 ---
 
 # Codebase onboarding
