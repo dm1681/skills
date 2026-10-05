@@ -5,6 +5,14 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+- Diagram pages: arrows are routed orthogonally around obstacles. A* on a
+  coarse grid treats every node and container header (plus a margin) as
+  blocked, charges for each bend and for sharing cells with earlier arrows,
+  and draws right angles with rounded corners, so no arrow passes over or
+  under a node. Labels slide along their arrow to the first spot clear of
+  nodes and other labels. Moving a container re-routes every arrow, coalesced
+  to one pass per frame (about 9 ms for 14 arrows). A curve remains the
+  fallback for self-loops or when no route exists.
 - Diagram pages: containers are movable. Drag a container by its header (or
   focus it and press Shift+arrows) to move it with its nodes; arrows re-route
   from actual positions, so a target moved above its source gets a direct

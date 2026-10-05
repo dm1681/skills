@@ -101,8 +101,10 @@ kinds distinct and text readable. Format and rules:
   Click pins it in the side panel with "Comes from" / "Leads to" links.
 - The legend lists only the kinds the view uses; hovering an entry
   highlights every shape or arrow of that kind.
+- Arrows run at right angles around every node and container header, and
+  labels slide along them to stay clear of each other.
 - Drag a container by its header (or focus it and press Shift+arrows) to
-  move it with its nodes; arrows re-route. The layout is remembered per
+  move it with its nodes; arrows re-route live. The layout is remembered per
   viewer, and ⟲ (or `r`) restores the automatic one.
 - ▴ (or `h`) minimises the header to the tab row and its controls; the
   choice is remembered per viewer, like the panels.
