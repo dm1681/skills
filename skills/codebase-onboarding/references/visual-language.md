@@ -45,7 +45,8 @@ Line style says *when* (solid waits, dashed does not); the head says *what*
 moves (a triangle is control, a chevron a dim back-reference, a dot data).
 Every arrow is routed at right angles, with rounded corners, around every node
 and container header it does not connect, so a line never hides behind a
-shape; its shape carries no meaning of its own.
+shape; its shape carries no meaning of its own. Arrow labels are drawn above
+everything and placed clear of nodes, headers and each other.
 
 | Kind | Line | Head | Colour | Use for |
 |---|---|---|---|---|

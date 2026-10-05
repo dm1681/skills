@@ -356,8 +356,41 @@ class MovableContainerTests(unittest.TestCase):
     def test_headers_are_handles_and_offsets_are_remembered_and_resettable(self) -> None:
         for marker in ('"data-grip": lane.id', 'class: "group-grip"', "tabindex: 0", 'const grip = e.target.closest("[data-grip]")',
                        "`diagram-layout:${MODEL.title}:${view.id}`", 'id="layout-reset"', 'else if (e.key === "r") resetLayout();',
-                       "if (offset) shiftLane(box, offset[0], offset[1]);"):
+                       "const [dx, dy] = allowedMove(box, offset[0], offset[1]);"):
             self.assertIn(marker, self.template)
+
+    @unittest.skipUnless(shutil.which("node"), "node is not installed")
+    def test_containers_are_solid(self) -> None:
+        start = self.template.index("  const LANE_CLEAR = ")
+        end = self.template.index("  function shiftLane(")
+        script = self.template[start:end] + """
+const A = { x: 0, y: 0, w: 100, h: 100 }, B = { x: 200, y: 0, w: 100, h: 100 };
+const C = { x: 0, y: 200, w: 100, h: 100 }, D = { x: 200, y: 200, w: 100, h: 100 };
+const state = { layout: { boxes: [A, B] } };
+const result = {
+  free: allowedMove(A, 0, 300),
+  jumpToFreeSpot: allowedMove(A, 150, 300),
+  intoB: allowedMove(A, 150, 0),
+  slide: allowedMove(A, 150, 40),
+};
+state.layout.boxes = [A, B, C, D];
+result.boxedIn = allowedMove(A, 200, 200);
+const overlapping = { x: 150, y: 0, w: 100, h: 100 };
+state.layout.boxes = [overlapping, B];
+result.stuckFree = allowedMove(overlapping, -30, 0);
+console.log(JSON.stringify(result));
+"""
+        result = subprocess.run(["node", "-e", script], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        r = json.loads(result.stdout)
+        self.assertEqual(r["free"], [0, 300], "a free spot is reached in one move")
+        self.assertEqual(r["jumpToFreeSpot"], [150, 300], "a free spot past an obstacle is reached directly")
+        self.assertLessEqual(r["intoB"][0], 200 - 100 - 12 + 0.5, "a container stops short of another, with the gap")
+        self.assertEqual(r["intoB"][1], 0)
+        self.assertEqual(r["slide"], [0, 40], "a blocked move slides along the free axis")
+        x, y = r["boxedIn"]
+        self.assertTrue(0 < x <= 88.5 and abs(x - y) < 1e-6, f"boxed in, it moves part of the way: {r['boxedIn']}")
+        self.assertEqual(r["stuckFree"], [-30, 0], "an already overlapping container can be dragged clear")
 
     @unittest.skipUnless(shutil.which("node"), "node is not installed")
     def test_routing_follows_positions(self) -> None:
@@ -433,6 +466,23 @@ console.log(JSON.stringify({ out, boxes: Object.fromEntries([...pos].map(([k, v]
                     crosses = x0 < b["x"] + b["w"] and x1 > b["x"] and y0 < b["y"] + b["h"] and y1 > b["y"]
                     self.assertFalse(crosses, f"{src}->{dst} segment {p}->{q} crosses node {name}")
         self.assertNotEqual(data["out"][0]["mid"], data["out"][1]["mid"], "labels on parallel routes do not stack")
+        # Labels clear every node, the container header and each other.
+        header = {"x": 60, "y": 40, "w": 640, "h": 34}
+        rects = []
+        for route, label in zip(data["out"], ("skips the wall", "back")):
+            w = len(label) * 6 + 12
+            rects.append({"x": route["mid"][0] - w / 2, "y": route["mid"][1] - 9, "w": w, "h": 18})
+        overlap = lambda r, b: r["x"] < b["x"] + b["w"] and r["x"] + r["w"] > b["x"] and r["y"] < b["y"] + b["h"] and r["y"] + r["h"] > b["y"]
+        for r in rects:
+            for name, b in [*data["boxes"].items(), ("header", header)]:
+                self.assertFalse(overlap(r, b), f"label at {r} is covered by {name}")
+        self.assertFalse(overlap(rects[0], rects[1]), "labels overlap each other")
+
+    def test_labels_are_drawn_above_nodes_and_headers(self) -> None:
+        template = TEMPLATE.read_text(encoding="utf-8")
+        self.assertIn("viewport.append(gLayer, eLayer, hLayer, nLayer, lLayer);", template)
+        self.assertIn("state.layers.labels.append(label)", template)
+        self.assertIn(".dimming .edge-label:not(.lit)", template)
 
 
 class DiagramContractTests(unittest.TestCase):
