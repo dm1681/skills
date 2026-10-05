@@ -1,0 +1,10 @@
+{
+  "name": "paper",
+  "label": "Paper (custom)",
+  "extends": "latte",
+  "colors": {
+    "base": "#f6f1e7", "mantle": "#efe8da", "crust": "#e6dccb",
+    "surface0": "#ddd2bf", "surface1": "#cfc3ae", "surface2": "#bfb29c",
+    "text": "#3b3226", "subtext1": "#4f4535", "subtext0": "#62584a"
+  }
+}

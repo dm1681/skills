@@ -1,6 +1,6 @@
 ---
 name: flow-diagrams
-description: Draw flowcharts and block diagrams as interactive, self-contained HTML pages in the Catppuccin Mocha theme, where shapes, colours, arrow styles and container borders carry defined meanings shown in a live legend - one hue means one thing, red only means failure. Covers process flows, request or data pipelines, decision trees, state hand-offs, system and architecture block diagrams, with optional code snippets on hover, numbered step tours, drill-down between views, and live updates that turn a drawn page into a state tracker. Use when the user asks for a flowchart, flow diagram, block diagram, process map, pipeline or system diagram, wants a diagram "in the same style" as an onboarding page, wants to watch a process's state change on a diagram, or another skill needs this visual language.
+description: Draw flowcharts and block diagrams as interactive, self-contained HTML pages in Catppuccin colour themes (Mocha by default, light and validated custom themes too), where shapes, colours, arrow styles and container borders carry defined meanings shown in a live legend - one hue means one thing, red only means failure. Covers process flows, request or data pipelines, decision trees, state hand-offs, system and architecture block diagrams, with optional code snippets on hover, numbered step tours, drill-down between views, and live updates that turn a drawn page into a state tracker. Use when the user asks for a flowchart, flow diagram, block diagram, process map, pipeline or system diagram, wants a diagram "in the same style" as an onboarding page, wants to watch a process's state change on a diagram, or another skill needs this visual language.
 version: 1.0.0
 ---
 
@@ -85,6 +85,14 @@ agent, one command per step) or any program; the page redraws what changed.
 and can be passed as-is with `--css` / `--js`. Everything — the update API,
 feeds, atomic writes, drawing rules and limits — is in
 [references/live-updates.md](references/live-updates.md).
+
+## Themes
+
+Pages offer the four Catppuccin flavours with a picker by default.
+`--theme latte` opens in one, `--themes latte` locks to one, and
+`--theme-file my.json` adds a custom palette, which the build checks keeps
+kinds distinct and text readable. Format and rules:
+[references/themes.md](references/themes.md).
 
 ## Page features (for your hand-over)
 

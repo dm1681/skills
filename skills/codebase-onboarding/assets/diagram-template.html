@@ -18,6 +18,7 @@
     --subtext0: #a6adc8; --overlay2: #9399b2; --overlay1: #7f849c; --overlay0: #6c7086;
     --surface2: #585b70; --surface1: #45475a; --surface0: #313244; --base: #1e1e2e;
     --mantle: #181825; --crust: #11111b;
+    color-scheme: dark;
     --mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     color-scheme: dark;
@@ -54,6 +55,9 @@
   .search { background: var(--crust); border: 1px solid var(--surface1); border-radius: 6px;
             color: var(--text); padding: 3px 9px; width: 180px; font: 13px var(--sans); }
   .search:focus { outline: 1px solid var(--mauve); }
+  .theme-select { background: var(--crust); border: 1px solid var(--surface1); border-radius: 6px; color: var(--text);
+                  padding: 3px 6px; font: 13px var(--sans); }
+  .theme-select[hidden] { display: none; }
 
   /* Both side panels share one width and collapse to the same slim rail. */
   .body { --panel: 320px; --rail: 40px; --left: var(--panel); --right: var(--panel);
@@ -201,6 +205,7 @@
         <button class="btn" id="prev" title="Previous step (←)">◀</button>
         <span class="tour-label" id="tour-label"></span>
         <button class="btn" id="next" title="Next step (→)">▶</button>
+        <select class="theme-select" id="theme" aria-label="Colour theme" title="Colour theme" hidden></select>
         <button class="btn" id="header-toggle" aria-controls="header-detail" aria-expanded="true" title="Minimise header (h)">▴</button>
       </div>
     </div>
@@ -1101,6 +1106,30 @@
   }
   api.update = update;
   window.diagram = { update, model: MODEL };
+
+  // ---------- themes ----------
+  // A theme re-assigns the palette's named roles; every kind names a role,
+  // so meanings carry over. Without MODEL.themes the page keeps :root.
+  const THEMES = MODEL.themes || null;
+  function applyTheme(name) {
+    const theme = THEMES && THEMES[name];
+    if (!theme) return;
+    const root = document.documentElement;
+    for (const [role, value] of Object.entries(theme.colors)) root.style.setProperty(`--${role}`, value);
+    root.style.colorScheme = theme.dark ? "dark" : "light";
+    root.dataset.theme = name;
+    $("theme").value = name;
+    try { localStorage.setItem("diagram-theme", name); } catch { /* ignore */ }
+  }
+  if (THEMES) {
+    const picker = $("theme");
+    for (const [name, theme] of Object.entries(THEMES)) picker.append(el("option", { value: name }, theme.label || name));
+    picker.hidden = Object.keys(THEMES).length < 2;
+    picker.addEventListener("change", () => applyTheme(picker.value));
+    let saved = null;
+    try { saved = localStorage.getItem("diagram-theme"); } catch { /* ignore */ }
+    applyTheme(saved && THEMES[saved] ? saved : MODEL.theme);
+  }
 
   // ---------- views, tabs, deep links ----------
   function writeHash() {

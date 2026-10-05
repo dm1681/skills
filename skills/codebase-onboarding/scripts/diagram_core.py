@@ -16,7 +16,9 @@ copy Python imports first serves every caller identically.
 
 from __future__ import annotations
 
+import argparse
 import datetime as dt
+import itertools
 import json
 import re
 import sys
@@ -193,6 +195,153 @@ def _live(live: object, problems: list[str]) -> dict | None:
         problems.append("model: live.every must be a number of seconds, at least 0.5")
         return None
     return {"url": live["url"].strip(), "every": every}
+
+
+# ---------- themes ----------
+# A theme assigns values to the palette's named roles; the kinds table names
+# roles, never values, so every meaning survives a theme change. A custom
+# theme is checked so it cannot break "one hue means one thing".
+PALETTE = (
+    "rosewater", "flamingo", "pink", "mauve", "red", "maroon", "peach", "yellow", "green", "teal",
+    "sky", "sapphire", "blue", "lavender", "text", "subtext1", "subtext0", "overlay2", "overlay1",
+    "overlay0", "surface2", "surface1", "surface0", "base", "mantle", "crust",
+)
+HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
+MIN_HUE_DISTANCE = 8.0   # CIE76 ΔE between any two kind colours; the built-ins keep ≥ 10
+MIN_TEXT_CONTRAST = 4.5  # text on base (WCAG AA)
+MIN_MUTED_CONTRAST = 3.0  # subtext0, the secondary text, on base
+MIN_SHAPE_CONTRAST = 1.8  # a kind colour's outline against the container fill (mantle)
+
+
+def load_themes(path: Path) -> dict:
+    """Return the built-in themes: {name: {"label", "dark", "colors"}}."""
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _linear(channel: int) -> float:
+    c = channel / 255
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def _rgb(value: str) -> list[float]:
+    return [_linear(int(value[i:i + 2], 16)) for i in (1, 3, 5)]
+
+
+def _luminance(value: str) -> float:
+    r, g, b = _rgb(value)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def contrast(a: str, b: str) -> float:
+    """WCAG contrast ratio between two #rrggbb colours."""
+    high, low = sorted((_luminance(a), _luminance(b)), reverse=True)
+    return (high + 0.05) / (low + 0.05)
+
+
+def _lab(value: str) -> tuple[float, float, float]:
+    r, g, b = _rgb(value)
+    x = (r * 0.4124 + g * 0.3576 + b * 0.1805) / 0.95047
+    y = r * 0.2126 + g * 0.7152 + b * 0.0722
+    z = (r * 0.0193 + g * 0.1192 + b * 0.9505) / 1.08883
+    f = lambda t: t ** (1 / 3) if t > 0.008856 else 7.787 * t + 16 / 116  # noqa: E731
+    return 116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))
+
+
+def distance(a: str, b: str) -> float:
+    """CIE76 ΔE between two #rrggbb colours: about 2.3 is just noticeable."""
+    return sum((p - q) ** 2 for p, q in zip(_lab(a), _lab(b))) ** 0.5
+
+
+def theme_problems(name: str, theme: dict, kinds: dict) -> list[str]:
+    """Every reason `theme` cannot carry the visual language, or []."""
+    where = f"theme {name}"
+    colors = theme.get("colors") if isinstance(theme, dict) else None
+    if not isinstance(colors, dict):
+        return [f"{where}: colors must be an object of palette roles"]
+    problems = [f"{where}: {key!r} is not a palette role" for key in colors if key not in PALETTE]
+    problems += [f"{where}: missing {key}" for key in PALETTE if key not in colors]
+    problems += [f"{where}: {key} must be #rrggbb, not {value!r}"
+                 for key, value in colors.items() if key in PALETTE and not (isinstance(value, str) and HEX.match(value))]
+    if problems:
+        return problems
+    for role, floor in (("text", MIN_TEXT_CONTRAST), ("subtext0", MIN_MUTED_CONTRAST)):
+        ratio = contrast(colors[role], colors["base"])
+        if ratio < floor:
+            problems.append(f"{where}: {role} on base is {ratio:.1f}:1; it needs at least {floor}:1 to stay readable")
+    hues = sorted({spec["color"] for spec in kinds["nodes"].values()})
+    for hue in hues:
+        ratio = contrast(colors[hue], colors["mantle"])
+        if ratio < MIN_SHAPE_CONTRAST:
+            problems.append(f"{where}: {hue} on mantle is {ratio:.2f}:1; shapes in that colour would vanish (at least {MIN_SHAPE_CONTRAST}:1)")
+    for a, b in itertools.combinations(hues, 2):
+        gap = distance(colors[a], colors[b])
+        if gap < MIN_HUE_DISTANCE:
+            problems.append(f"{where}: {a} and {b} are ΔE {gap:.1f} apart; kinds need at least {MIN_HUE_DISTANCE} to stay distinct")
+    return problems
+
+
+def custom_theme(raw: dict, themes: dict, kinds: dict) -> tuple[str, dict]:
+    """Resolve and validate one custom theme; raise ModelError on any problem.
+
+    `{"name", "label"?, "dark"?, "extends"?, "colors"}`: with `extends`, only
+    the roles that differ need listing. `dark` defaults from the base colour.
+    """
+    name = raw.get("name") if isinstance(raw, dict) else None
+    if not isinstance(name, str) or not ID_PATTERN.match(name):
+        raise ModelError([f"custom theme: name must match {ID_PATTERN.pattern}"])
+    if name in themes:
+        raise ModelError([f"custom theme {name}: the name is taken by a built-in theme"])
+    parent = raw.get("extends")
+    if parent is not None and parent not in themes:
+        raise ModelError([f"custom theme {name}: extends {parent!r}, which is not one of {list(themes)}"])
+    colors = {**(themes[parent]["colors"] if parent else {}), **(raw.get("colors") or {})}
+    theme = {"label": str(raw.get("label") or name), "colors": colors}
+    problems = theme_problems(name, theme, kinds)
+    if problems:
+        raise ModelError(problems)
+    dark = raw.get("dark")
+    theme["dark"] = dark if isinstance(dark, bool) else _luminance(colors["base"]) < 0.18
+    return name, theme
+
+
+def apply_themes(built: dict, themes: dict, *, default: str | None = None, offer: list[str] | None = None) -> dict:
+    """Attach the themes a page offers and the one it opens in.
+
+    One offered theme locks the page to it; two or more add a picker whose
+    choice is remembered per viewer. Pages built without this keep the
+    template's own palette (Catppuccin Mocha) and show no picker.
+    """
+    names = offer or list(themes)
+    unknown = [n for n in names if n not in themes]
+    default = default or names[0]
+    if unknown or default not in names:
+        raise ModelError([f"themes: {', '.join(unknown or [default])} not available; choose from {list(themes)}"])
+    built["themes"] = {n: themes[n] for n in names}
+    built["theme"] = default
+    return built
+
+
+def add_theme_arguments(parser: argparse.ArgumentParser) -> None:
+    """The theme flags every builder shares."""
+    parser.add_argument("--theme", help="theme the page opens in (default: the first offered)")
+    parser.add_argument("--theme-file", type=Path, action="append", default=[],
+                        help="custom theme JSON to add; repeatable (see references/themes.md)")
+    parser.add_argument("--themes", default="all",
+                        help="comma-separated themes the viewer may pick from, or 'all' (default); one locks the page")
+
+
+def themes_from_args(args: argparse.Namespace, built: dict, themes: dict, kinds: dict) -> dict:
+    """Apply the shared theme flags to `built`; raise ModelError on bad input."""
+    themes = dict(themes)
+    custom = []
+    for path in args.theme_file:
+        name, theme = custom_theme(load_model(path), themes, kinds)
+        themes[name] = theme
+        custom.append(name)
+    offer = list(themes) if args.themes == "all" else [n.strip() for n in args.themes.split(",") if n.strip()]
+    # A custom theme someone bothered to write opens by default.
+    default = args.theme or (custom[0] if custom and custom[0] in offer else None)
+    return apply_themes(built, themes, default=default, offer=offer)
 
 
 def _inert(value: object) -> str:

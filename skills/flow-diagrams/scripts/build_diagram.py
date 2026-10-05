@@ -20,6 +20,7 @@ import diagram_core as core  # noqa: E402
 SKILL_ROOT = HERE.parent
 TEMPLATE = SKILL_ROOT / "assets" / "diagram-template.html"
 KINDS_FILE = SKILL_ROOT / "assets" / "diagram-kinds.json"
+THEMES_FILE = SKILL_ROOT / "assets" / "diagram-themes.json"
 VIEW_KINDS = {"flow", "map"}
 ModelError = core.ModelError
 
@@ -74,10 +75,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true", help="validate only; write nothing")
     parser.add_argument("--css", type=Path, help="extension stylesheet to inject (see references/extending.md)")
     parser.add_argument("--js", type=Path, help="extension script to inject (see references/extending.md)")
+    core.add_theme_arguments(parser)
     args = parser.parse_args(argv)
 
     try:
         built = build_model(core.load_model(args.model))
+        core.themes_from_args(args, built, core.load_themes(THEMES_FILE), load_kinds())
     except ModelError as exc:
         return core.report(args.model, exc)
     if args.check:

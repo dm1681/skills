@@ -1,11 +1,17 @@
 # Visual language
 
-The page ships one palette, Catppuccin Mocha, and one rule: **a hue means one
+Colours are named roles from the Catppuccin palette — `green`, `blue`,
+`peach`, `text`, `base`, … — and the page follows one rule: **a hue means one
 thing everywhere**. A teal node and a teal arrow both mean "asynchronous"; a
 yellow node and a yellow arrow both mean "branching". Pick a kind for what the
 thing *does*, never for how it should look. The legend on the page is drawn
 from the same kinds table the build script validates against, so it can only
 list kinds that exist, and it shows only the kinds the current view uses.
+
+Every kind points at a role, never at a value, so a theme (Catppuccin Mocha by
+default, its other flavours, or a validated custom palette) changes how the
+page looks without changing what anything means. Some skills lock their pages
+to one theme.
 
 This file is shared verbatim by every skill that renders this look. The owner
 is `skills/flow-diagrams`; edit it there and run

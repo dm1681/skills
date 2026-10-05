@@ -1,6 +1,6 @@
 ---
 name: codebase-onboarding
-description: Onboard someone to a codebase with an interactive, self-contained HTML flow diagram in the Catppuccin Mocha theme - an architecture map, one or more end-to-end flows, or both - where steps are grouped into one container per source file, shapes, colours and arrow styles carry defined meanings shown in a live legend, and every node reveals its real, syntax-highlighted source excerpt on hover. Use when a user is new to a repository, asks to be onboarded, wants a visual map of how a codebase fits together, asks how a request, command or feature flows through the code, or wants an onboarding page or diagram to share with a teammate.
+description: Onboard someone to a codebase with an interactive, self-contained HTML flow diagram in Catppuccin colour themes (Mocha by default, light and custom too) - an architecture map, one or more end-to-end flows, or both - where steps are grouped into one container per source file, shapes, colours and arrow styles carry defined meanings shown in a live legend, and every node reveals its real, syntax-highlighted source excerpt on hover. Use when a user is new to a repository, asks to be onboarded, wants a visual map of how a codebase fits together, asks how a request, command or feature flows through the code, or wants an onboarding page or diagram to share with a teammate.
 version: 1.0.1
 ---
 
@@ -67,7 +67,9 @@ python3 <skill-dir>/scripts/build_onboarding.py docs/onboarding/<name>.json --re
 
 It writes `docs/onboarding/<name>.html` (override with `--out`). It reports
 every problem at once; fix the model and rebuild — never hand-edit the HTML.
-`--check` validates without writing. Excerpt links point at the web host
+`--check` validates without writing. `--theme`, `--themes` and `--theme-file`
+choose colour themes as in `flow-diagrams` (all four Catppuccin flavours with
+a picker by default). Excerpt links point at the web host
 (GitHub/GitLab) at the exact commit when the worktree is clean;
 `--editor-links` links to `vscode://` on this machine instead — handy
 locally, but do not commit a page built that way.

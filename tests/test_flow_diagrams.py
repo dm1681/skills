@@ -273,6 +273,80 @@ class LiveUpdateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
 
+class ThemeTests(unittest.TestCase):
+    """Themes re-assign the palette's roles; meanings never change."""
+
+    def setUp(self) -> None:
+        self.core = build.core
+        self.kinds = build.load_kinds()
+        self.themes = self.core.load_themes(build.THEMES_FILE)
+        quiet = contextlib.ExitStack()
+        self.err = io.StringIO()
+        quiet.enter_context(contextlib.redirect_stdout(io.StringIO()))
+        quiet.enter_context(contextlib.redirect_stderr(self.err))
+        self.addCleanup(quiet.close)
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def test_built_in_themes_carry_the_language_and_mocha_is_the_template_default(self) -> None:
+        self.assertEqual(list(self.themes), ["mocha", "macchiato", "frappe", "latte"])
+        for name, theme in self.themes.items():
+            with self.subTest(theme=name):
+                self.assertEqual(self.core.theme_problems(name, theme, self.kinds), [])
+                self.assertEqual(theme["dark"], name != "latte")
+        root = dict(re.findall(r"--([a-z0-9]+): (#[0-9a-f]{6})", TEMPLATE.read_text(encoding="utf-8")[:3000]))
+        self.assertEqual({k: root[k] for k in self.core.PALETTE}, self.themes["mocha"]["colors"])
+
+    def test_custom_theme_extends_a_built_in_and_is_checked(self) -> None:
+        raw = json.loads((SKILL_ROOT / "examples" / "themes" / "paper.json").read_text(encoding="utf-8"))
+        name, theme = self.core.custom_theme(raw, self.themes, self.kinds)
+        self.assertEqual((name, theme["dark"], theme["colors"]["green"]), ("paper", False, self.themes["latte"]["colors"]["green"]))
+        for raw, expected in (
+            ({"name": "x", "colors": {"base": "#000000"}}, "missing text"),
+            ({"name": "x", "extends": "mocha", "colors": {"base": "black"}}, "must be #rrggbb"),
+            ({"name": "x", "extends": "mocha", "colors": {"accent": "#ffffff"}}, "not a palette role"),
+            ({"name": "x", "extends": "mocha", "colors": {"text": "#2a2a3a"}}, "text on base"),
+            ({"name": "x", "extends": "mocha", "colors": {"teal": "#74c7ec"}}, "sapphire and teal"),
+            ({"name": "x", "extends": "latte", "colors": {"yellow": "#e6e9ef"}}, "yellow on mantle"),
+            ({"name": "mocha", "extends": "mocha", "colors": {}}, "taken by a built-in"),
+            ({"name": "x", "extends": "dracula", "colors": {}}, "not one of"),
+            ({"name": "has space", "colors": {}}, "name must match"),
+        ):
+            with self.subTest(expected=expected), self.assertRaises(self.core.ModelError) as caught:
+                self.core.custom_theme(raw, self.themes, self.kinds)
+            self.assertTrue(any(expected in p for p in caught.exception.problems), caught.exception.problems)
+
+    def test_offer_and_default_decide_picker_and_lock(self) -> None:
+        built = self.core.apply_themes(build.build_model(_model()), self.themes, default="latte")
+        self.assertEqual((list(built["themes"]), built["theme"]), (list(self.themes), "latte"))
+        locked = self.core.apply_themes(build.build_model(_model()), self.themes, offer=["frappe"])
+        self.assertEqual((list(locked["themes"]), locked["theme"]), (["frappe"], "frappe"))
+        with self.assertRaises(self.core.ModelError):
+            self.core.apply_themes(build.build_model(_model()), self.themes, default="latte", offer=["mocha"])
+
+    def test_builder_flags(self) -> None:
+        model = self.tmp / "m.json"
+        model.write_text(json.dumps(_model()), encoding="utf-8")
+        page = lambda: json.loads(re.search(r'id="diagram-model">(.*?)</script>', (self.tmp / "m.html").read_text(encoding="utf-8"), re.S).group(1))
+        self.assertEqual(build.main([str(model)]), 0)
+        self.assertEqual((len(page()["themes"]), page()["theme"]), (4, "mocha"))
+        self.assertEqual(build.main([str(model), "--themes", "latte"]), 0)
+        self.assertEqual(list(page()["themes"]), ["latte"])
+        paper = SKILL_ROOT / "examples" / "themes" / "paper.json"
+        self.assertEqual(build.main([str(model), "--theme-file", str(paper)]), 0)
+        self.assertEqual((len(page()["themes"]), page()["theme"]), (5, "paper"))
+        bad = self.tmp / "bad.json"
+        bad.write_text(json.dumps({"name": "bad", "extends": "mocha", "colors": {"teal": "#74c7ec"}}), encoding="utf-8")
+        self.assertEqual(build.main([str(model), "--theme-file", str(bad), "--check"]), 1)
+        self.assertIn("sapphire and teal", self.err.getvalue())
+
+    def test_template_applies_a_theme_through_the_palette_variables(self) -> None:
+        template = TEMPLATE.read_text(encoding="utf-8")
+        for marker in ('root.style.setProperty(`--${role}`, value)', 'root.style.colorScheme = theme.dark ? "dark" : "light"',
+                       'picker.hidden = Object.keys(THEMES).length < 2', 'id="theme"'):
+            self.assertIn(marker, template)
+
+
 class DiagramContractTests(unittest.TestCase):
     def test_every_kind_is_documented_in_the_visual_language(self) -> None:
         kinds = build.load_kinds()

@@ -336,6 +336,9 @@ def _check_quality_contract(text: str, built: dict[str, Any]) -> list[str]:
             errors.append(f"strict page reintroduces {label}")
     if not re.search(r"--base:\s*#1e1e2e\b", stylesheets):
         errors.append("strict page is missing the Catppuccin Mocha base")
+    # The shared page can offer themes; the explorer stays on Mocha alone.
+    if set(built.get("themes") or {"mocha": None}) != {"mocha"}:
+        errors.append("strict page offers other colour themes; the explorer is locked to Catppuccin Mocha")
     for forbidden in (r"word-break:\s*break-all", r"overflow-wrap:\s*anywhere"):
         if re.search(forbidden, stylesheets):
             errors.append(f"strict page contains unsafe identifier wrapping: {forbidden}")
