@@ -29,6 +29,8 @@ def _load(name: str, path: Path):
 
 build = _load("build_diagram", SCRIPT)
 sync = _load("sync_shared_diagram", SYNC)
+state = _load("update_state", SKILL_ROOT / "scripts" / "update_state.py")
+EXAMPLE = SKILL_ROOT / "examples" / "status-tracker"
 
 
 def _model() -> dict:
@@ -177,6 +179,98 @@ class LibraryExtensionTests(unittest.TestCase):
         documented = set(re.findall(r"^\| `(\w+)\(", reference, re.MULTILINE))
         called = set(re.findall(r'call\("(\w+)"', template))
         self.assertEqual(documented, called)
+
+
+class LiveUpdateTests(unittest.TestCase):
+    """A drawn page whose node and edge data can change while it is open."""
+
+    def setUp(self) -> None:
+        quiet = contextlib.ExitStack()
+        self.err = io.StringIO()
+        quiet.enter_context(contextlib.redirect_stdout(io.StringIO()))
+        quiet.enter_context(contextlib.redirect_stderr(self.err))
+        self.addCleanup(quiet.close)
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def test_live_feed_is_validated_and_carried_to_the_page(self) -> None:
+        model = _model()
+        model["live"] = {"url": " state.json ", "every": 1}
+        self.assertEqual(build.build_model(model)["live"], {"url": "state.json", "every": 1})
+        self.assertNotIn("live", build.build_model(_model()))
+        for live, expected in (({"every": 2}, "live.url"), ({"url": "s.json", "every": 0.1}, "live.every"),
+                               ({"url": "s.json", "every": True}, "live.every"), ("s.json", "live.url")):
+            model["live"] = live
+            with self.subTest(live=live), self.assertRaises(build.ModelError) as caught:
+                build.build_model(model)
+            self.assertTrue(any(expected in p for p in caught.exception.problems))
+
+    def test_page_and_writer_agree_on_the_fields_that_place_an_element(self) -> None:
+        template = TEMPLATE.read_text(encoding="utf-8")
+        match = re.search(r'const FIXED = \{ nodes: (\[[^\]]*\]), edges: (\[[^\]]*\]) \};', template)
+        assert match is not None
+        self.assertEqual(set(json.loads(match.group(1))), state.FIXED["nodes"])
+        self.assertEqual(set(json.loads(match.group(2))), state.FIXED["edges"])
+        for marker in ("window.diagram = { update", "api.update = update", "if (MODEL.live) startLive(MODEL.live)"):
+            self.assertIn(marker, template)
+
+    def test_header_minimises_to_the_tab_row_and_keeps_the_live_status(self) -> None:
+        template = TEMPLATE.read_text(encoding="utf-8")
+        detail = re.search(r'<div class="header-detail" id="header-detail">(.*?)\n    </div>\n    <div class="toolbar">', template, re.DOTALL)
+        assert detail is not None, "the title, summary and extension header share one collapsible block"
+        for part in ('id="title"', 'id="summary"', 'id="ext-header"'):
+            self.assertIn(part, detail.group(1))
+        self.assertNotIn('id="tabs"', detail.group(1))
+        self.assertIn("header.top.minimised .header-detail { display: none; }", template)
+        self.assertIn('else if (e.key === "h") setHeader(!collapsed.header);', template)
+        self.assertIn('$("search").before(status);', template)
+
+    def test_writer_merges_parses_values_and_replaces_the_file(self) -> None:
+        path = self.tmp / "state.json"
+        self.assertEqual(state.main([str(path), "--node", "a", "status=running", "pct=40", "--edge", "a>b", "label=retrying"]), 0)
+        self.assertEqual(state.main([str(path), "--node", "a", "status=done", "--node", "b", 'tags=["x"]', "note=null"]), 0)
+        written = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(written["nodes"], {"a": {"status": "done", "pct": 40}, "b": {"tags": ["x"], "note": None}})
+        self.assertEqual(written["edges"], {"a>b": {"label": "retrying"}})
+        self.assertEqual([p.name for p in self.tmp.iterdir()], ["state.json"], "no temporary file is left behind")
+        self.assertEqual(state.main([str(path), "--reset", "--node", "c", "status=pending"]), 0)
+        self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["nodes"], {"c": {"status": "pending"}})
+
+    def test_writer_refuses_layout_fields_unknown_ids_and_broken_files(self) -> None:
+        path = self.tmp / "state.json"
+        model = self.tmp / "model.json"
+        model.write_text(json.dumps(_model()), encoding="utf-8")
+        for argv, expected in (
+            (["--node", "ask", "step=9"], "cannot change live"),
+            (["--edge", "ask>big", "from=x"], "cannot change live"),
+            (["--edge", "ask", "label=x"], "FROM>TO"),
+            (["--node", "ask", "status"], "KEY=VALUE"),
+            (["--node", "ghost", "status=done", "--model", str(model)], "no node 'ghost'"),
+        ):
+            with self.subTest(argv=argv):
+                self.assertEqual(state.main([str(path), *argv]), 1)
+                self.assertIn(expected, self.err.getvalue())
+        self.assertFalse(path.exists(), "a refused change writes nothing")
+        path.write_text("{oops", encoding="utf-8")
+        self.assertEqual(state.main([str(path), "--node", "ask", "status=done"]), 1)
+        self.assertIn("--reset", self.err.getvalue())
+
+    def test_status_tracker_example_builds_with_its_extension(self) -> None:
+        out = self.tmp / "page.html"
+        argv = [str(EXAMPLE / "pipeline.json"), "--out", str(out),
+                "--css", str(EXAMPLE / "status.css"), "--js", str(EXAMPLE / "status.js")]
+        self.assertEqual(build.main(argv), 0)
+        html = out.read_text(encoding="utf-8")
+        self.assertIn("window.diagramExtension", html)
+        self.assertIn('"live": {"url": "state.json"', html)
+        bad = self.tmp / "bad.js"
+        bad.write_text("x = '</script>'", encoding="utf-8")
+        self.assertEqual(build.main([*argv[:3], "--js", str(bad)]), 1)
+
+    @unittest.skipUnless(shutil.which("node"), "node is not installed")
+    def test_status_tracker_example_script_parses(self) -> None:
+        result = subprocess.run(["node", "--check", str(EXAMPLE / "status.js")], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 class DiagramContractTests(unittest.TestCase):

@@ -108,6 +108,7 @@ copies differ.
   "Comes from" / "Leads to" navigation.
 - Legend lists only the kinds the view uses; hovering an entry highlights
   every shape or arrow of that kind.
-- Both side panels share one width and collapse to a rail (`[` and `]`).
-- Keys: ← → walk steps, `/` search, `f` fit, `Esc` clear; drag to pan,
-  wheel to zoom. The URL hash deep-links the view and selected node.
+- Both side panels share one width and collapse to a rail (`[` and `]`);
+  ▴ (or `h`) minimises the header to the tab row.
+- Keys: ← → walk steps, `/` search, `f` fit, `h` header, `Esc` clear; drag
+  to pan, wheel to zoom. The URL hash deep-links the view and selected node.

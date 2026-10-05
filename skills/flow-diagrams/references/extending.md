@@ -83,7 +83,14 @@ Every hook receives `api` as its last argument.
 copying them: `el`, `sv` (DOM and SVG builders that never use innerHTML),
 `prose` (inline `` `code` `` spans), `highlight`, `codeBlock`, `sourceLink`,
 `kindChip`, `cssVar`, `lightUp(nodeIds, edgeFilter)`, `restoreFocus`,
-`select`, `centerOn`, `openView`, `KINDS`, `MODEL` and `state`.
+`select`, `centerOn`, `openView`, `update`, `KINDS`, `MODEL` and `state`.
+
+`api.update(patch)` (also `window.diagram.update`) changes data on existing
+nodes and edges and redraws them, re-running `decorateNode` / `decorateEdge`
+on fresh elements, so a decoration hook only ever draws from the current
+data and never has to undo an earlier one. Extra fields set by an update
+reach every hook. A model's `live` feed, the update rules and a worked
+status-tracker extension are in [live-updates.md](live-updates.md).
 
 ## Keep the language intact
 

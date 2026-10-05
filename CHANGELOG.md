@@ -5,6 +5,22 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+- Diagram pages (`flow-diagrams`, `codebase-onboarding`,
+  `semantic-pr-review`): a ▴ button or `h` minimises the header to the tab
+  row and its controls, remembered per viewer like the side panels. The live
+  feed indicator moves beside the controls so it stays visible.
+- `flow-diagrams`: live updates. A drawn page exposes
+  `window.diagram.update(patch)` (and `api.update` for extensions), which
+  changes data on existing nodes and edges and redraws only those; fields
+  that place an element are refused, since the layout is fixed. A model's
+  optional `live: {url, every}` makes the page poll a state file;
+  `scripts/update_state.py` writes that file atomically for agents and
+  scripts, checking ids against the model. `build_diagram.py` gains
+  `--css`/`--js` to inject an extension, and `examples/status-tracker/`
+  draws pending/running/done/failed/skipped. `references/live-updates.md`
+  explains how to turn a diagram into a state tracker.
+  `semantic-pr-review`'s verifier now rejects a page with a live feed
+  instead of grepping the shared page for `fetch(`.
 - **Breaking:** `semantic-pr-review` 2.0.0 renders through the shared
   flow-diagram page. The scaffold now writes one self-contained HTML page
   instead of a host fragment, so `render_standalone.py`,

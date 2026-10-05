@@ -425,6 +425,17 @@ class SemanticPrReviewPipelineTests(unittest.TestCase):
             )
             self.assertIn("code_preview bytes mismatch", result.stdout)
 
+    def test_verification_rejects_a_page_that_polls_a_live_feed(self) -> None:
+        """The shared page can poll; an explorer is a snapshot and must not."""
+        verify = _load_script("verify_pr_explorer")
+        with tempfile.TemporaryDirectory() as directory:
+            _, page, _ = self.build(directory)
+            text = page.read_text(encoding="utf-8")
+            built = verify._embedded(text)
+            self.assertEqual([], verify._check_page(text, built))
+            built["live"] = {"url": "state.json", "every": 2}
+            self.assertTrue(any("live feed" in e for e in verify._check_page(text, built)))
+
     def test_strict_verification_rejects_a_displayed_copy_that_differs(self) -> None:
         """The drawn excerpt is checked against the verified record, not trusted."""
         verify = _load_script("verify_pr_explorer")

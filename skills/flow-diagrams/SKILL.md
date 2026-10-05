@@ -1,6 +1,6 @@
 ---
 name: flow-diagrams
-description: Draw flowcharts and block diagrams as interactive, self-contained HTML pages in the Catppuccin Mocha theme, where shapes, colours, arrow styles and container borders carry defined meanings shown in a live legend - one hue means one thing, red only means failure. Covers process flows, request or data pipelines, decision trees, state hand-offs, system and architecture block diagrams, with optional code snippets on hover, numbered step tours and drill-down between views. Use when the user asks for a flowchart, flow diagram, block diagram, process map, pipeline or system diagram, wants a diagram "in the same style" as an onboarding page, or another skill needs this visual language.
+description: Draw flowcharts and block diagrams as interactive, self-contained HTML pages in the Catppuccin Mocha theme, where shapes, colours, arrow styles and container borders carry defined meanings shown in a live legend - one hue means one thing, red only means failure. Covers process flows, request or data pipelines, decision trees, state hand-offs, system and architecture block diagrams, with optional code snippets on hover, numbered step tours, drill-down between views, and live updates that turn a drawn page into a state tracker. Use when the user asks for a flowchart, flow diagram, block diagram, process map, pipeline or system diagram, wants a diagram "in the same style" as an onboarding page, wants to watch a process's state change on a diagram, or another skill needs this visual language.
 version: 1.0.0
 ---
 
@@ -75,6 +75,17 @@ Tell the user the file path, how to open it, and the view to start with.
 Offer to publish it if a publishing or artifact tool is available (the file
 is self-contained). Suggest committing the `.json` next to the `.html`.
 
+## Live state
+
+A drawn page can change while open: the graph is fixed, the data on nodes
+and edges is not. Add `"live": {"url": "state.json"}` to the model, serve the
+folder over HTTP, and write the state with `scripts/update_state.py` (an
+agent, one command per step) or any program; the page redraws what changed.
+`examples/status-tracker/` draws pending / running / done / failed / skipped
+and can be passed as-is with `--css` / `--js`. Everything — the update API,
+feeds, atomic writes, drawing rules and limits — is in
+[references/live-updates.md](references/live-updates.md).
+
 ## Page features (for your hand-over)
 
 - Tabs per view; nodes marked "open ⤵" jump to their drill-down view.
@@ -82,9 +93,11 @@ is self-contained). Suggest committing the `.json` next to the `.html`.
   Click pins it in the side panel with "Comes from" / "Leads to" links.
 - The legend lists only the kinds the view uses; hovering an entry
   highlights every shape or arrow of that kind.
+- ▴ (or `h`) minimises the header to the tab row and its controls; the
+  choice is remembered per viewer, like the panels.
 - Keys: ← → walk steps, `/` search, `f` fit, `[` `]` collapse panels,
-  `Esc` clear; drag to pan, wheel to zoom. The URL hash deep-links the
-  view and selected node.
+  `h` header, `Esc` clear; drag to pan, wheel to zoom. The URL hash
+  deep-links the view and selected node.
 
 ## Building another skill on this look
 
@@ -96,4 +109,5 @@ script and stylesheet for anything domain-specific. The API, the page hooks
 and the sync step are in [references/extending.md](references/extending.md);
 `codebase-onboarding` (Python hooks only) and `semantic-pr-review` (hooks
 plus an extension) are the worked examples. `scripts/build_diagram.py` is
-the plain consumer and stays free of extensions.
+the plain consumer: it ships no extension of its own, and `--css` / `--js`
+inject yours.

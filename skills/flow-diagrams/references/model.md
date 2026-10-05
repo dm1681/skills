@@ -10,9 +10,14 @@ validates it and renders the page. Keep the model next to the page
 {
   "title": "Order fulfilment",
   "summary": "From a paid order to a parcel at the door.",
+  "live": {"url": "state.json", "every": 2},
   "views": [ View, ... ]
 }
 ```
+
+`live` is optional: the page polls `url` every `every` seconds (default 2,
+at least 0.5) and applies it as an update. See
+[live-updates.md](live-updates.md).
 
 `summary` fields accept inline `` `code` `` spans; everything else is plain text.
 
