@@ -110,6 +110,8 @@ copies differ.
   "Comes from" / "Leads to" navigation.
 - Legend lists only the kinds the view uses; hovering an entry highlights
   every shape or arrow of that kind.
+- Drag a file container by its header to move it with its steps (⟲ or `r`
+  restores the automatic layout).
 - Both side panels share one width and collapse to a rail (`[` and `]`);
   ▴ (or `h`) minimises the header to the tab row.
 - Keys: ← → walk steps, `/` search, `f` fit, `h` header, `Esc` clear; drag

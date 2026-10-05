@@ -118,7 +118,8 @@ same files to `diagram_core.render` as its extension.
 ## Limits
 
 - **Structure is fixed.** No adding or removing nodes or edges while live; a
-  layout recomputed on every change would make everything jump. Draw every
+  layout recomputed on every change would make everything jump. Containers a
+  viewer has moved stay where they put them while updates arrive. Draw every
   step up front and mark the ones that will not run as `skipped`.
 - **Polling, not push.** The built-in feed checks the file every few seconds.
   For sub-second updates, use your own channel.
