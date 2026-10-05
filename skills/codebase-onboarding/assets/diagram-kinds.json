@@ -1,0 +1,28 @@
+{
+  "nodes": {
+    "entry":     {"label": "Entry point", "shape": "stadium",       "color": "green",    "definition": "Where the flow starts: a request, command, trigger, event or user action."},
+    "step":      {"label": "Step",        "shape": "rounded",       "color": "blue",     "definition": "Ordinary work: a function, task or process step."},
+    "decision":  {"label": "Decision",    "shape": "diamond",       "color": "yellow",   "definition": "A branch that changes the path; its yellow arrows are the outcomes."},
+    "store":     {"label": "Data store",  "shape": "cylinder",      "color": "peach",    "definition": "State that outlives the step: database, file, cache, queue, ledger."},
+    "external":  {"label": "External",    "shape": "hexagon",       "color": "mauve",    "definition": "Outside the system drawn: third-party API, vendor, OS, another team's service."},
+    "async":     {"label": "Async",       "shape": "parallelogram", "color": "teal",     "definition": "Work that continues later or elsewhere: queue, event, background job, callback."},
+    "config":    {"label": "Config",      "shape": "note",          "color": "lavender", "definition": "Settings that shape behaviour: env vars, config files, flags, policies."},
+    "exit":      {"label": "Success exit","shape": "stadium2",      "color": "pink",     "definition": "Where the flow ends successfully: response sent, value returned, job done."},
+    "error":     {"label": "Failure",     "shape": "octagon",       "color": "red",      "definition": "Where the flow ends in failure: exception, rejection, non-zero exit."},
+    "component": {"label": "Component",   "shape": "component",     "color": "sapphire", "definition": "A part treated as one block: module, package, service, device (maps)."}
+  },
+  "edges": {
+    "call":    {"label": "Calls",       "dash": "",      "head": "triangle", "color": "subtext0", "width": 1.8, "definition": "Synchronous hand-off: A passes control or work to B and waits."},
+    "return":  {"label": "Returns",     "dash": "",      "head": "chevron",  "color": "overlay2", "width": 1.2, "definition": "A result flowing back to the caller."},
+    "branch":  {"label": "Branch",      "dash": "",      "head": "triangle", "color": "yellow",   "width": 1.8, "definition": "One outcome of a decision; the label names the condition."},
+    "async":   {"label": "Async",       "dash": "7 5",   "head": "triangle", "color": "teal",     "width": 1.8, "definition": "Fire-and-forget: publish, enqueue, schedule. The sender does not wait."},
+    "data":    {"label": "Reads/writes","dash": "1.5 5", "head": "dot",      "color": "peach",    "width": 2.2, "definition": "Reads from or writes to a data store."},
+    "error":   {"label": "Error path",  "dash": "7 5",   "head": "triangle", "color": "red",      "width": 1.8, "definition": "Failure propagating: raise, reject, error response, escalation."},
+    "depends": {"label": "Depends on",  "dash": "12 6",  "head": "chevron",  "color": "overlay1", "width": 1.4, "definition": "A relies on B: imports, requires or cannot run without it (maps)."}
+  },
+  "groups": {
+    "unit":    {"label": "Unit",    "border": "solid",  "definition": "One thing that owns everything inside it: a file, service, machine, team."},
+    "area":    {"label": "Area",    "border": "dashed", "definition": "A loose collection: a directory, department, network zone, phase."},
+    "outside": {"label": "Outside", "border": "dotted", "heading": "Outside the system", "definition": "Actors and systems outside the thing being drawn."}
+  }
+}

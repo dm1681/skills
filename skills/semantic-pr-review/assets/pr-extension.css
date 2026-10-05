@@ -1,0 +1,64 @@
+/* semantic-pr-review's styles on top of the shared flow-diagram page.
+     Dark-only, from the page's own Catppuccin Mocha variables. Rosewater is
+     the one hue the visual language leaves free, so it means "changed in this
+     PR" and nothing else; the corner symbol carries the same meaning. */
+  .prx-orientation { display: grid; gap: 6px; margin: 2px 0 10px; max-width: 150ch; }
+  .prx-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+  .prx-badge { font: 600 11px var(--mono); color: var(--subtext1); background: var(--surface0);
+               border: 1px solid var(--surface1); border-radius: 99px; padding: 1px 9px; text-decoration: none; }
+  a.prx-badge:hover { border-color: var(--surface2); }
+  .prx-orient-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 4px 18px; }
+  .prx-field { display: grid; grid-template-columns: 9.5em minmax(0, 1fr); gap: 8px; font-size: 13px; }
+  .prx-field-name { color: var(--overlay1); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; padding-top: 2px; }
+  .prx-field-value { color: var(--subtext1); }
+  .prx-fields { display: grid; gap: 4px; margin: 6px 0 8px; }
+  .prx-chain { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; color: var(--subtext1); }
+  .prx-chain-step + .prx-chain-step::before { content: "→ "; color: var(--overlay1); }
+  .prx-notices { display: grid; gap: 2px; font-size: 13px; color: var(--subtext1); border-left: 3px solid var(--rosewater);
+                 padding: 4px 10px; background: var(--crust); border-radius: 0 6px 6px 0; }
+  .prx-notices[hidden] { display: none; }
+  .prx-rail { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; font-size: 13px; color: var(--subtext1); margin-bottom: 8px; }
+
+  /* Identifiers wrap only at the <wbr> boundaries the extension inserts. */
+  .tip code, .details code, .prx-orientation code, .prx-rail code { word-break: normal; overflow-wrap: normal; white-space: normal;
+    background: var(--surface0); border-radius: 4px; padding: 0 4px; font-size: 12px; }
+  .prx-prose-line, .prx-prose-bullet { display: block; margin-top: 4px; }
+  .prx-prose-line:first-child, .prx-prose-bullet:first-child { margin-top: 0; }
+  .prx-prose-bullet { position: relative; padding-left: 1.1em; }
+  /* Absolute marker, so a wrapped bullet keeps its text aligned. */
+  .prx-prose-bullet::before { content: "\2022"; position: absolute; left: .2em; color: var(--overlay1); }
+  .prx-change { font-size: 13px; color: var(--subtext1); margin: 0 0 6px; padding-left: 8px; border-left: 3px solid var(--surface1); }
+  .prx-change:not([data-change-status="context"]) { border-left-color: var(--rosewater); color: var(--text); }
+  .prx-detail { font-size: 13px; color: var(--subtext1); margin: 0 0 6px; }
+  .prx-handoff { font-size: 13px; color: var(--subtext0); margin: 0 0 8px; }
+  .prx-sources { list-style: none; padding: 0; margin: 4px 0 0; display: grid; gap: 4px; font-size: 13px; }
+  .prx-sources li { display: flex; gap: 10px; flex-wrap: wrap; }
+  .prx-source { color: var(--sapphire); }
+
+  /* Change marks on the canvas. Context edges recede; changed ones stand out. */
+  .prx-mark-bg { fill: var(--rosewater); }
+  .prx-mark-text { fill: var(--crust); font: 800 13px var(--mono); pointer-events: none; }
+  .node .prx-mark { pointer-events: none; }
+  .node.prx-removed .shape { stroke-dasharray: 5 4; }
+  .edge[data-change-status="context"] path.line { opacity: .45; }
+  .edge:not([data-change-status="context"]) path.line { filter: drop-shadow(0 0 1.5px var(--rosewater)); }
+  .prx-legend-node { fill: var(--mantle); stroke: var(--surface2); stroke-width: 1.5; }
+  .prx-branch-line { stroke: var(--yellow); stroke-width: 1.8; fill: none; }
+
+  /* Markdown excerpts: the same surface as a code block, read as a document. */
+  .prx-markdown-preview { display: grid; gap: 6px; margin: 0; padding: 10px; color: var(--text); background: var(--base);
+    border: 1px solid var(--surface0); border-radius: 8px; font-size: 13px; overflow-wrap: normal; word-break: normal; }
+  .prx-md-heading { color: var(--blue); font-weight: 600; line-height: 1.3; }
+  .prx-md-heading[data-level="1"] { font-size: 1.15em; }
+  .prx-md-heading[data-level="2"] { font-size: 1.08em; }
+  .prx-md-item { display: flex; gap: .5em; align-items: baseline; }
+  .prx-md-item[data-indent="1"] { padding-left: 1.2em; }
+  .prx-md-item[data-indent="2"] { padding-left: 2.4em; }
+  .prx-md-item[data-indent="3"] { padding-left: 3.6em; }
+  .prx-md-marker { flex: none; color: var(--overlay0); }
+  .prx-md-quote { padding-left: .7em; border-left: 2px solid var(--surface1); font-style: italic; }
+  .prx-md-code { margin: 0; padding: 8px; background: var(--surface0); border-radius: 6px; white-space: pre-wrap;
+    overflow-wrap: normal; word-break: normal; tab-size: 2; font-size: 12px; }
+  .prx-md-code code { padding: 0; background: transparent; }
+  .prx-md-link { color: var(--sapphire); text-decoration: underline; text-underline-offset: 2px; }
+  .prx-markdown-preview hr { width: 100%; height: 1px; margin: 2px 0; background: var(--surface1); border: 0; }

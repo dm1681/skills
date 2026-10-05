@@ -13,6 +13,7 @@ self-contained under [`skills/`](skills/).
 | `asd-ste100` | Write clear, explicit technical updates using Simplified Technical English principles. |
 | `ponytail` | Minimize unnecessary code by reusing existing code, the standard library, and native platform features. |
 | `space-domain-awareness` | Reduce observations, fit and propagate orbits, associate tracks, and triage maneuvers and anomalies with explicit uncertainty. |
+| `flow-diagrams` | Draw flowcharts and block diagrams as interactive Catppuccin pages whose shapes, colours and arrows carry defined meanings. |
 | `semantic-pr-review` | Explain a pull request as a source-verified semantic hierarchy and interactive flowchart. |
 | `viz-driven-dev` | Build the plot, overlay, or video that would show a feature's effect before implementing it, then regenerate it from real output. |
 | `wow-addon-dev` | Build, debug, package, and publish retail World of Warcraft addons under the taint and secret-value fences. |
@@ -52,12 +53,14 @@ blob by the bundled scripts rather than hand-copied:
 
 ```sh
 python3 <skill-root>/scripts/scaffold_pr_explorer.py --data pr-model.json \
-  --output pr-fragment.html --repo-root /path/to/repo --source-ref <head-sha>
-python3 <skill-root>/scripts/render_standalone.py --fragment pr-fragment.html \
-  --output page.html --title "PR 54 Dispatch Explorer"
-python3 <skill-root>/scripts/verify_pr_explorer.py pr-fragment.html \
-  --standalone page.html --source-repo /path/to/repo --source-ref <head-sha> --strict
+  --output pr-54-dispatch-explorer.html --repo-root /path/to/repo --source-ref <head-sha>
+python3 <skill-root>/scripts/verify_pr_explorer.py pr-54-dispatch-explorer.html \
+  --source-repo /path/to/repo --source-ref <head-sha> --strict
 ```
+
+The page draws in the same visual language as `flow-diagrams` and
+`codebase-onboarding` — shape and colour say what a node does, systems are its
+containers, and a corner mark says what the PR changed.
 
 Strict verification compares every preview byte-for-byte with its Git blob and
 fails closed when a link, label, or editor target drifts from the analyzed

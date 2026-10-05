@@ -21,6 +21,7 @@ REFERENCES = (
     "explorer-data-model",
     "interactive-flowchart",
     "build-and-verify",
+    "visual-language",
 )
 SOURCE = """def dispatch(request):
     backend = resolve(request.mode)
@@ -172,6 +173,16 @@ def _model(head_sha: str) -> dict[str, object]:
     }
 
 
+def _materialized(model: dict) -> dict:
+    """Fill what the scaffold derives from Git, for tests that skip Git."""
+    model = json.loads(json.dumps(model))
+    for node in model["nodes"]:
+        node["code_preview"]["code"] = "pass"
+        for source in node["sources"]:
+            source["github_url"] = f"https://github.com/o/r/blob/sha/{source['path']}#L1-L2"
+    return model
+
+
 class NodeChangeNoteTests(unittest.TestCase):
     """The optional per-node sentence describing what the PR did."""
 
@@ -205,19 +216,13 @@ class NodeChangeNoteTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertTrue(self.errors_for(value))
 
-    def test_the_template_falls_back_to_a_sentence_per_status(self) -> None:
+    def test_the_extension_falls_back_to_a_sentence_per_status(self) -> None:
         """Every status maps to a sentence, so the line is never a bare word."""
-        template = (
-            ROOT
-            / "skills"
-            / "semantic-pr-review"
-            / "assets"
-            / "pr-explorer-template.html"
-        ).read_text(encoding="utf-8")
+        extension = (SKILL_ROOT / "assets" / "pr-extension.js").read_text(encoding="utf-8")
         for status in ("added", "modified", "removed", "context"):
-            self.assertIn(f"{status}:", template)
-        self.assertIn("changeSentence", template)
-        self.assertIn("node.change_note", template)
+            self.assertIn(f"{status}: {{ mark:", extension)
+        self.assertIn("changeSentence", extension)
+        self.assertIn("item.change_note", extension)
 
 
 class SemanticPrReviewPackagingTests(unittest.TestCase):
@@ -239,7 +244,8 @@ class SemanticPrReviewPackagingTests(unittest.TestCase):
         for script in sorted(SCRIPTS.glob("*.py")):
             with self.subTest(script=script.name):
                 self.assertIn(f"scripts/{script.name}", entrypoint)
-        self.assertTrue((SKILL_ROOT / "assets" / "pr-explorer-template.html").is_file())
+        for asset in ("diagram-template.html", "diagram-kinds.json", "pr-extension.js", "pr-extension.css"):
+            self.assertTrue((SKILL_ROOT / "assets" / asset).is_file(), asset)
 
     def test_commands_stay_portable_across_install_locations(self) -> None:
         entrypoint = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
@@ -261,6 +267,9 @@ class SemanticPrReviewPackagingTests(unittest.TestCase):
                     continue
                 for module in modules:
                     root = module.split(".")[0]
+                    if root == "diagram_core":
+                        # The shared core ships beside the scripts, itself stdlib-only.
+                        continue
                     with self.subTest(script=script.name, module=module):
                         self.assertIn(root, standard_library)
 
@@ -289,11 +298,49 @@ class SemanticPrReviewPackagingTests(unittest.TestCase):
         )
 
     def test_template_keeps_the_placeholders_the_scaffold_replaces(self) -> None:
-        template = (SKILL_ROOT / "assets" / "pr-explorer-template.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("__PR_EXPLORER_ROOT_ID__", template)
-        self.assertIn("__PR_EXPLORER_DATA__", template)
+        template = (SKILL_ROOT / "assets" / "diagram-template.html").read_text(encoding="utf-8")
+        for marker in ("__DIAGRAM_MODEL__", "__DIAGRAM_KINDS__", "__DIAGRAM_EXTENSION_JS__",
+                       "/* __DIAGRAM_EXTENSION_CSS__ */"):
+            self.assertIn(marker, template)
+
+    @unittest.skipUnless(shutil.which("node"), "node is not installed")
+    def test_extension_script_parses_and_defines_every_hook_the_verifier_needs(self) -> None:
+        verify = _load_script("verify_pr_explorer")
+        path = SKILL_ROOT / "assets" / "pr-extension.js"
+        result = subprocess.run(["node", "--check", str(path)], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        text = path.read_text(encoding="utf-8")
+        for hook in verify.EXTENSION_HOOKS:
+            self.assertRegex(text, rf"\n    {hook}\(")
+
+    def test_kinds_follow_the_runtime_role(self) -> None:
+        """Entry, fan-out decision, exit and branch edges come from the paths."""
+        scaffold = _load_script("scaffold_pr_explorer")
+        model = json.loads(json.dumps(_model("0" * 40)))
+        model["nodes"].append(_node("legacy", "legacy()", "removed", "selection.py", 6, 7))
+        model["branches"].append({"id": "mode-b", "label": "Mode B", "system": "shared", "path": ["legacy", "engine"]})
+        model["edges"].append(_edge("dispatch", "legacy", "removed"))
+        full = scaffold._diagram_model(_materialized(model))["views"][0]
+        kinds = {n["id"]: n["kind"] for n in full["nodes"]}
+        self.assertEqual((kinds["caller"], kinds["dispatch"], kinds["consumer"]), ("entry", "decision", "exit"))
+        edges = {(e["from"], e["to"]): e for e in full["edges"]}
+        self.assertEqual((edges["dispatch", "adapter"]["kind"], edges["dispatch", "adapter"]["label"]), ("branch", "Mode A"))
+        self.assertEqual((edges["caller", "dispatch"]["kind"], edges["caller", "dispatch"]["label"]), ("call", "hands off"))
+        self.assertEqual([n["step"] for n in full["nodes"]], list(range(1, len(full["nodes"]) + 1)))
+
+    def test_an_authored_kind_wins_and_the_delta_view_appears_only_when_it_hides_something(self) -> None:
+        scaffold = _load_script("scaffold_pr_explorer")
+        model = json.loads(json.dumps(_model("0" * 40)))
+        model["nodes"][4]["kind"] = "store"
+        views = scaffold._diagram_model(_materialized(model))["views"]
+        self.assertEqual([v["id"] for v in views], ["full"], "every node neighbours a change")
+        self.assertEqual(views[0]["nodes"][4]["kind"], "store")
+        for node in model["nodes"]:
+            node["change_status"] = "context"
+        model["nodes"][0]["change_status"] = "modified"
+        views = scaffold._diagram_model(_materialized(model))["views"]
+        self.assertEqual([v["id"] for v in views], ["full", "delta"])
+        self.assertEqual([n["id"] for n in views[1]["nodes"]], ["caller", "dispatch"])
 
 
 @unittest.skipIf(shutil.which("git") is None, "requires Git for snapshot fixtures")
@@ -318,42 +365,30 @@ class SemanticPrReviewPipelineTests(unittest.TestCase):
         self.assertEqual(expected, result.returncode, result.stdout + result.stderr)
         return result
 
-    def build(self, directory: str) -> tuple[Path, Path, Path, str]:
-        """Scaffold and render one explorer from a fresh fixture snapshot."""
+    def build(self, directory: str) -> tuple[Path, Path, str]:
+        """Scaffold one explorer page from a fresh fixture snapshot."""
         repository, head_sha = self.fixture(directory)
         data = Path(directory) / "pr-model.json"
         data.write_text(json.dumps(_model(head_sha)), encoding="utf-8")
-        fragment = Path(directory) / "fragment.html"
         page = Path(directory) / "page.html"
         self.run_script(
             "scaffold_pr_explorer.py",
             "--data",
             str(data),
             "--output",
-            str(fragment),
+            str(page),
             "--repo-root",
             str(repository),
             "--source-ref",
             head_sha,
         )
-        self.run_script(
-            "render_standalone.py",
-            "--fragment",
-            str(fragment),
-            "--output",
-            str(page),
-            "--title",
-            "PR 1 Dispatch Explorer",
-        )
-        return repository, fragment, page, head_sha
+        return repository, page, head_sha
 
     def test_scaffold_render_and_strict_verification_agree_on_one_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            repository, fragment, page, head_sha = self.build(directory)
+            repository, page, head_sha = self.build(directory)
             result = self.run_script(
                 "verify_pr_explorer.py",
-                str(fragment),
-                "--standalone",
                 str(page),
                 "--source-repo",
                 str(repository),
@@ -362,8 +397,9 @@ class SemanticPrReviewPipelineTests(unittest.TestCase):
                 "--strict",
             )
             self.assertIn("OK", result.stdout)
-            rendered = fragment.read_text(encoding="utf-8")
-            self.assertNotIn("__PR_EXPLORER_", rendered)
+            rendered = page.read_text(encoding="utf-8")
+            self.assertNotIn("__DIAGRAM_", rendered)
+            self.assertIn("<title>PR 1: ", rendered)
             self.assertIn(head_sha, rendered)
             self.assertIn(
                 f"https://github.com/owner/repository/blob/{head_sha}/selection.py",
@@ -372,14 +408,14 @@ class SemanticPrReviewPipelineTests(unittest.TestCase):
 
     def test_strict_verification_rejects_a_hand_edited_preview(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            repository, fragment, _, head_sha = self.build(directory)
-            tampered = fragment.read_text(encoding="utf-8").replace(
+            repository, page, head_sha = self.build(directory)
+            tampered = page.read_text(encoding="utf-8").replace(
                 "backend.run(request)", "backend.run(other)"
             )
-            fragment.write_text(tampered, encoding="utf-8")
+            page.write_text(tampered, encoding="utf-8")
             result = self.run_script(
                 "verify_pr_explorer.py",
-                str(fragment),
+                str(page),
                 "--source-repo",
                 str(repository),
                 "--source-ref",
@@ -388,6 +424,17 @@ class SemanticPrReviewPipelineTests(unittest.TestCase):
                 expected=1,
             )
             self.assertIn("code_preview bytes mismatch", result.stdout)
+
+    def test_strict_verification_rejects_a_displayed_copy_that_differs(self) -> None:
+        """The drawn excerpt is checked against the verified record, not trusted."""
+        verify = _load_script("verify_pr_explorer")
+        with tempfile.TemporaryDirectory() as directory:
+            _, page, _ = self.build(directory)
+            text = page.read_text(encoding="utf-8")
+            built = verify._embedded(text)
+            built["views"][0]["nodes"][0]["source"]["code"] = "print('other')"
+            errors = verify._check_quality_contract(text, built)
+            self.assertTrue(any("displays a different code" in e for e in errors), errors)
 
     def test_scaffold_refuses_a_model_that_does_not_match_the_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -400,7 +447,7 @@ class SemanticPrReviewPipelineTests(unittest.TestCase):
                 "--data",
                 str(data),
                 "--output",
-                str(Path(directory) / "fragment.html"),
+                str(Path(directory) / "page.html"),
                 "--repo-root",
                 str(repository),
                 "--source-ref",
@@ -414,14 +461,13 @@ class SemanticPrReviewPipelineTests(unittest.TestCase):
             repository, head_sha = self.fixture(directory)
             data = Path(directory) / "pr-model.json"
             data.write_text(json.dumps(_model(head_sha)), encoding="utf-8")
-            fragment = Path(directory) / "fragment.html"
             page = Path(directory) / "page.html"
             self.run_script(
                 "scaffold_pr_explorer.py",
                 "--data",
                 str(data),
                 "--output",
-                str(fragment),
+                str(page),
                 "--repo-root",
                 str(repository),
                 "--source-ref",
@@ -430,7 +476,7 @@ class SemanticPrReviewPipelineTests(unittest.TestCase):
                 str(repository),
             )
             urls = set(
-                re.findall(r'"cursor_url":"([^"]+)"', fragment.read_text(encoding="utf-8"))
+                re.findall(r'"cursor_url": "([^"]+)"', page.read_text(encoding="utf-8"))
             )
             self.assertTrue(urls, "scaffold emitted no editor deep links")
             for url in urls:
@@ -442,19 +488,8 @@ class SemanticPrReviewPipelineTests(unittest.TestCase):
                     parsed = urlparse(url)
                     self.assertEqual("cursor", parsed.scheme)
                     self.assertEqual("file", parsed.netloc)
-            self.run_script(
-                "render_standalone.py",
-                "--fragment",
-                str(fragment),
-                "--output",
-                str(page),
-                "--title",
-                "PR 1 Dispatch Explorer",
-            )
             result = self.run_script(
                 "verify_pr_explorer.py",
-                str(fragment),
-                "--standalone",
                 str(page),
                 "--source-repo",
                 str(repository),
@@ -471,13 +506,13 @@ class SemanticPrReviewPipelineTests(unittest.TestCase):
             _commit(repository, "later work")
             data = Path(directory) / "pr-model.json"
             data.write_text(json.dumps(_model(head_sha)), encoding="utf-8")
-            fragment = Path(directory) / "fragment.html"
+            page = Path(directory) / "page.html"
             result = self.run_script(
                 "scaffold_pr_explorer.py",
                 "--data",
                 str(data),
                 "--output",
-                str(fragment),
+                str(page),
                 "--repo-root",
                 str(repository),
                 "--source-ref",
@@ -488,12 +523,12 @@ class SemanticPrReviewPipelineTests(unittest.TestCase):
             self.assertIn("editor links omitted", result.stderr)
             self.assertIn("not the analyzed snapshot", result.stderr)
             # The explorer still builds, just without links it cannot verify.
-            rendered = fragment.read_text(encoding="utf-8")
+            rendered = page.read_text(encoding="utf-8")
             self.assertNotIn("cursor://", rendered)
             # The reader never sees stderr, so the page carries the reason
             # and still offers the immutable GitHub link.
-            self.assertIn('"notices":["editor links omitted', rendered)
-            self.assertIn('data-role="notices"', rendered)
+            self.assertIn('"notices": ["editor links omitted', rendered)
+            self.assertIn('"data-role": "notices"', rendered)
             self.assertIn("https://github.com/owner/repository/blob/", rendered)
 
     def test_a_remote_worktree_warns_and_omits_editor_links(self) -> None:
@@ -501,13 +536,13 @@ class SemanticPrReviewPipelineTests(unittest.TestCase):
             repository, head_sha = self.fixture(directory)
             data = Path(directory) / "pr-model.json"
             data.write_text(json.dumps(_model(head_sha)), encoding="utf-8")
-            fragment = Path(directory) / "fragment.html"
+            page = Path(directory) / "page.html"
             result = self.run_script(
                 "scaffold_pr_explorer.py",
                 "--data",
                 str(data),
                 "--output",
-                str(fragment),
+                str(page),
                 "--repo-root",
                 str(repository),
                 "--source-ref",
@@ -516,7 +551,7 @@ class SemanticPrReviewPipelineTests(unittest.TestCase):
                 r"\\fileserver\share\checkout",
             )
             self.assertIn("is a remote path", result.stderr)
-            self.assertNotIn("cursor://", fragment.read_text(encoding="utf-8"))
+            self.assertNotIn("cursor://", page.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

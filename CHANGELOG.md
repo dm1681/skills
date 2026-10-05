@@ -5,6 +5,34 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+- **Breaking:** `semantic-pr-review` 2.0.0 renders through the shared
+  flow-diagram page. The scaffold now writes one self-contained HTML page
+  instead of a host fragment, so `render_standalone.py`,
+  `prepare_standalone.py`, `pr-explorer-template.html` and
+  `pr-explorer-base.css` are removed, and `verify_pr_explorer.py` takes the
+  page (`--standalone` is gone). Systems become containers and colour now
+  means node kind (`systems[].color_token` is ignored); nodes and edges take
+  an optional `kind`, otherwise derived from the paths; changes are drawn as
+  corner marks, and a `PR delta` tab appears when the PR touches only part of
+  the path. Everything PR-specific — orientation, notices, handoff cards,
+  markdown excerpts — lives in the skill's own `pr-extension.js`/`.css`.
+  Models from 1.x build unchanged; pages built by 1.x no longer pass `--strict`.
+- Add the `flow-diagrams` skill: interactive Catppuccin Mocha flowcharts and
+  block diagrams from a small JSON model, using the visual language extracted
+  from `codebase-onboarding` (one hue means one thing, red only for failure,
+  container borders for ownership), with labelled groups, header tags, inline
+  code snippets, step tours and drill-down views. It is also the library the
+  other diagram skills draw with: `diagram_core.build` hooks
+  (`check_group`/`check_node`/`check_edge`) and page extension hooks
+  (`header`, `nodeCard`, `edgeCard`, `sourceBlock`, `decorateNode`,
+  `decorateEdge`, `legend`, `searchText`) let a consumer add domain meaning
+  without the library learning it.
+- `codebase-onboarding` 1.0.1: render through the shared diagram core. The
+  page, kinds table, `diagram_core.py` and visual language are now
+  byte-identical copies of the files `flow-diagrams` owns, kept in step by
+  `scripts/sync_shared_diagram.py` (`--check` runs in the test suite). Models
+  and output are unchanged apart from legend definitions worded for any
+  diagram.
 - `space-domain-awareness` 1.1.0: add §16 operational recipes in a new
   `references/operations.md` (maneuver detection on sparse optical arcs,
   fit acceptance and publish gates, timing calibration and sensor-bias

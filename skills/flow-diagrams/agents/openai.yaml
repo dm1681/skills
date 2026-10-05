@@ -1,0 +1,4 @@
+interface:
+  display_name: "Flow Diagrams"
+  short_description: "Interactive Catppuccin flowcharts and block diagrams"
+  default_prompt: "Use $flow-diagrams to draw this as an interactive flowchart or block diagram: shapes, colours and arrows with defined meanings, a live legend, numbered steps and details on hover."
