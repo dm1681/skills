@@ -1,7 +1,7 @@
 ---
 name: semantic-pr-review
 description: Pull and explain a GitHub pull request as a source-referenced hierarchy and interactive semantic flowchart with complete execution branches, DTO-labeled handoffs, source-excerpt hover cards, and code-linked details. Use when a user wants to understand a PR, trace its architectural layers, compare execution strategies, inspect boundary or ownership shifts, or receive a standalone interactive walkthrough instead of a flat diff summary.
-version: 1.0.0
+version: 2.0.0
 ---
 
 # Semantic PR Review
@@ -12,11 +12,11 @@ Turn a pull request into an evidence-backed architectural walkthrough and an int
 
 Use any available read-only GitHub integration, API client, CLI, or local Git refs for PR metadata and patch context. Prefer a purpose-built integration when it is available, but do not require a specifically named tool or companion skill.
 
-Build the interactive explainer with the bundled template and scripts. A host-provided visualization surface may display or preview the result, but the workflow must still work when the agent has only filesystem access, Python 3, Git, and a browser. Produce a guided narrative directly when requested.
+Build the interactive explainer with the bundled scripts. The output is one self-contained HTML page; a host-provided visualization surface may display or preview it, but the workflow must still work when the agent has only filesystem access, Python 3, Git, and a browser. Produce a guided narrative directly when requested.
 
 Resolve paths relative to this `SKILL.md` — command examples write its directory as `<skill-root>` — and never assume the skill was installed under a particular agent, user, or home-directory convention. If a preferred capability is unavailable, use the documented fallback and state the resulting limitation.
 
-Read [references/semantic-layers.md](references/semantic-layers.md) before classifying the PR. Read [references/explorer-data-model.md](references/explorer-data-model.md), [references/interactive-flowchart.md](references/interactive-flowchart.md), and [references/build-and-verify.md](references/build-and-verify.md) before building the visual.
+Read [references/semantic-layers.md](references/semantic-layers.md) before classifying the PR. Read [references/explorer-data-model.md](references/explorer-data-model.md), [references/interactive-flowchart.md](references/interactive-flowchart.md), [references/visual-language.md](references/visual-language.md), and [references/build-and-verify.md](references/build-and-verify.md) before building the visual.
 
 ## Workflow
 
@@ -82,15 +82,15 @@ Separate confirmed runtime behavior from inference. Call out incomplete neutrali
 
 Start with a prominent orientation block: central goal, old-to-new model, ownership chain, architectural payoff, and primary residual debt. Show the complete runtime path of every real execution alternative — caller and boundary contract, dispatch, adapters, translated requests, engines, mode-specific results, convergence, downstream handoff, and cross-cutting guardrails — without collapsing a multi-step branch into one summary node.
 
-Render every runtime handoff as an arrow with a concise visible verb and exact transferred DTOs on hover or keyboard focus. Distinguish what the PR changed from unchanged context in every view, show the analyzed head SHA, and give every node a compact, source-backed code preview. The explorer is dark-only (Catppuccin Mocha) by design.
+Render every runtime handoff as an arrow with a concise visible verb and exact transferred DTOs on hover or keyboard focus. Distinguish what the PR changed from unchanged context in every view, show the analyzed head SHA, and give every node a compact, source-backed code preview. The explorer is dark-only (Catppuccin Mocha) by design, and draws in the shared flow-diagram visual language: a node's shape and colour say what it does, systems are its containers, and a corner mark says what the PR changed.
 
 The full presentation contract — controls, tooltips, previews, change-status encoding, link strategy, accessibility, and responsive behavior — is in [references/interactive-flowchart.md](references/interactive-flowchart.md). Define code previews only as source records; the scaffold derives excerpts, labels, and immutable links from the Git blob per [references/explorer-data-model.md](references/explorer-data-model.md).
 
-Author the model, then validate it with the scaffold's `--check` mode before rendering anything — it reports every violation at once. Build from [assets/pr-explorer-template.html](assets/pr-explorer-template.html) through `scripts/scaffold_pr_explorer.py` when the standard explorer shape fits, and create a standalone page with `scripts/render_standalone.py` when the user needs to open or share the page outside the agent's native artifact surface; `scripts/prepare_standalone.py` only adapts a sandboxed page produced by another renderer. Commands and flag semantics are in [references/build-and-verify.md](references/build-and-verify.md).
+Author the model, then validate it with the scaffold's `--check` mode before rendering anything — it reports every violation at once. Then build the page with `scripts/scaffold_pr_explorer.py`. It renders through the shared diagram core, `scripts/diagram_core.py`, with [assets/diagram-template.html](assets/diagram-template.html), and injects this skill's extension, [assets/pr-extension.js](assets/pr-extension.js) and [assets/pr-extension.css](assets/pr-extension.css), which draws everything PR-specific. Commands and flag semantics are in [references/build-and-verify.md](references/build-and-verify.md).
 
 ### 7. Verify
 
-Verify in proportion to risk: run the repository tests the changed contracts deserve, run `scripts/verify_pr_explorer.py --strict` against the artifacts, and exercise the rendered page in a real browser following the procedure in [references/build-and-verify.md](references/build-and-verify.md).
+Verify in proportion to risk: run the repository tests the changed contracts deserve, run `scripts/verify_pr_explorer.py --strict` against the page, and exercise the rendered page in a real browser following the procedure in [references/build-and-verify.md](references/build-and-verify.md).
 
 Do not claim local tests passed when they did not run. Report current CI and review state separately from local verification.
 
@@ -104,9 +104,13 @@ Return:
 4. important tradeoffs and residual risks
 5. verification status and known limitations
 
-When the user asks to keep the standalone page in the repository, save it under the closest architecture or developer-documentation directory using `pr-<number>-<scope>-explorer.html`, follow repository naming conventions when they differ, and add it to the nearest documentation index. Keep the editable fragment in the current session's artifact or output directory.
+When the user asks to keep the page in the repository, save it under the closest architecture or developer-documentation directory using `pr-<number>-<scope>-explorer.html`, follow repository naming conventions when they differ, and add it to the nearest documentation index. Keep the model JSON beside it, or in the current session's output directory, so the page can be rebuilt.
 
 When the user asked for a complete understanding pass, cover every semantic layer in one response. When they prefer guided learning, pause at meaningful boundaries and ask them to summarize the flow in their own words.
+
+## Shared look
+
+The page template, kinds table, `scripts/diagram_core.py` and the visual language are copies of files owned by the `flow-diagrams` skill. Edit them there and run the skills repository's `scripts/sync_shared_diagram.py`; a test fails while the copies differ. Everything that is about pull requests lives in this skill's scaffold and extension.
 
 ## Quality bar
 

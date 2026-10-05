@@ -3,27 +3,37 @@
 
 The model names *where* each excerpt lives (path + line range); this script
 reads the lines from the repository itself, so the page can never show code
-that is not in the checkout. The node/edge/group kinds are read from the
-template's own `onb-kinds` block, so the validator and the rendered legend
-cannot disagree.
+that is not in the checkout. The graph rules, the kinds table and the page
+come from the shared diagram core (`diagram_core.py`, `assets/diagram-*`);
+this script adds what is specific to code: file and module containers,
+excerpts, drift anchors and links back to the host.
 """
 
 from __future__ import annotations
 
 import argparse
-import datetime as dt
-import json
 import re
 import subprocess
 import sys
 from pathlib import Path
 
-SKILL_ROOT = Path(__file__).resolve().parents[1]
-TEMPLATE = SKILL_ROOT / "assets" / "onboarding-template.html"
-MAX_EXCERPT_LINES = 16
-MAX_LINE_CHARS = 120
-ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import diagram_core as core  # noqa: E402
+
+SKILL_ROOT = HERE.parent
+TEMPLATE = SKILL_ROOT / "assets" / "diagram-template.html"
+KINDS_FILE = SKILL_ROOT / "assets" / "diagram-kinds.json"
+MAX_EXCERPT_LINES = core.MAX_SNIPPET_LINES
+MAX_LINE_CHARS = core.MAX_LINE_CHARS
 VIEW_KINDS = {"architecture", "flow"}
+# Onboarding names the shared container borders after what they hold.
+GROUPS = {
+    "file":    {"label": "File", "border": "solid", "definition": "Every step inside comes from this one file."},
+    "module":  {"label": "Module", "border": "dashed", "definition": "A directory or package; steps may come from any file in it."},
+    "outside": {"label": "Outside repo", "border": "dotted", "heading": "Outside the repo",
+                "definition": "Callers and services with no source in this repo."},
+}
 LANGUAGES = {
     ".py": "python", ".pyi": "python", ".js": "javascript", ".mjs": "javascript",
     ".cjs": "javascript", ".jsx": "jsx", ".ts": "typescript", ".mts": "typescript",
@@ -33,25 +43,12 @@ LANGUAGES = {
     ".sql": "sql", ".c": "c", ".h": "c", ".cc": "cpp", ".cpp": "cpp",
     ".hpp": "cpp", ".cs": "csharp", ".swift": "swift", ".css": "css",
 }
+ModelError = core.ModelError
 
 
-class ModelError(Exception):
-    """Every problem found in a model, reported together."""
-
-    def __init__(self, problems: list[str]):
-        super().__init__("\n".join(problems))
-        self.problems = problems
-
-
-def load_kinds(template: Path = TEMPLATE) -> dict:
-    """Return the kinds table embedded in the template."""
-    text = template.read_text(encoding="utf-8")
-    match = re.search(
-        r'<script type="application/json" id="onb-kinds">(.*?)</script>', text, re.DOTALL
-    )
-    if match is None:
-        raise RuntimeError(f"{template} has no onb-kinds block")
-    return json.loads(match.group(1))
+def load_kinds() -> dict:
+    """Return the shared kinds table with onboarding's container names."""
+    return {**core.load_kinds(KINDS_FILE), "groups": GROUPS}
 
 
 def language_for(path: str) -> str:
@@ -135,148 +132,50 @@ def _excerpt(repo: Path, source: dict, where: str, problems: list[str]) -> dict 
 
 def build_model(model: dict, repo: Path, kinds: dict | None = None, editor_links: bool = False) -> dict:
     """Validate `model` and return the render-ready copy, or raise ModelError."""
-    kinds = kinds or load_kinds()
-    problems: list[str] = []
     info = repo_info(repo)
-    if not isinstance(model.get("title"), str) or not model["title"].strip():
-        problems.append("model: title is required")
-    views = model.get("views")
-    if not isinstance(views, list) or not views:
-        raise ModelError(problems + ["model: views must be a non-empty list"])
-    view_ids = [v.get("id") for v in views if isinstance(v, dict)]
-    out_views = []
-    for vi, view in enumerate(views):
-        where = f"views[{vi}]"
-        if not isinstance(view, dict):
-            problems.append(f"{where}: must be an object")
-            continue
-        vid = view.get("id")
-        if not isinstance(vid, str) or not ID_PATTERN.match(vid):
-            problems.append(f"{where}: id must match {ID_PATTERN.pattern}")
-        elif view_ids.count(vid) > 1:
-            problems.append(f"{where}: duplicate view id {vid!r}")
-        where = f"view {vid}"
-        if view.get("kind") not in VIEW_KINDS:
-            problems.append(f"{where}: kind must be one of {sorted(VIEW_KINDS)}")
-        if not view.get("title"):
-            problems.append(f"{where}: title is required")
 
-        groups = {}
-        for gi, group in enumerate(view.get("groups", [])):
-            gid = group.get("id")
-            gw = f"{where} groups[{gi}]"
-            if not isinstance(gid, str) or not ID_PATTERN.match(gid):
-                problems.append(f"{gw}: id must match {ID_PATTERN.pattern}")
-                continue
-            if gid in groups:
-                problems.append(f"{gw}: duplicate group id {gid!r}")
-            gkind = group.get("kind", "file")
-            if gkind not in kinds["groups"] or gkind == "outside":
-                problems.append(f"{gw}: kind must be 'file' or 'module'")
-            if gkind == "file" and not (repo / str(group.get("path", ""))).is_file():
-                problems.append(f"{gw}: file group path {group.get('path')!r} is not a file in the repo")
-            if gkind == "module" and not (repo / str(group.get("path", ""))).is_dir():
-                problems.append(f"{gw}: module group path {group.get('path')!r} is not a directory in the repo")
-            groups[gid] = {
-                "id": gid, "kind": gkind, "path": group.get("path"), "summary": group.get("summary", ""),
-                "lang": group.get("lang") or (language_for(group["path"]) if gkind == "file" and group.get("path") else None),
-            }
-            if groups[gid]["lang"] == "text":
-                groups[gid]["lang"] = None
+    def check_group(where: str, raw: dict, out: dict, problems: list[str]) -> None:
+        path = raw.get("path")
+        if out["kind"] == "file" and not (repo / str(path or "")).is_file():
+            problems.append(f"{where}: file group path {path!r} is not a file in the repo")
+        if out["kind"] == "module" and not (repo / str(path or "")).is_dir():
+            problems.append(f"{where}: module group path {path!r} is not a directory in the repo")
+        out["path"] = path
+        lang = raw.get("lang") or (language_for(path) if out["kind"] == "file" and path else None)
+        if lang and lang != "text":
+            out["tag"] = lang
 
-        nodes, node_ids, steps = [], set(), {}
-        for ni, node in enumerate(view.get("nodes", [])):
-            nid = node.get("id")
-            nw = f"{where} node {nid or ni}"
-            if not isinstance(nid, str) or not ID_PATTERN.match(nid):
-                problems.append(f"{nw}: id must match {ID_PATTERN.pattern}")
-                continue
-            if nid in node_ids:
-                problems.append(f"{nw}: duplicate node id")
-            node_ids.add(nid)
-            if node.get("kind") not in kinds["nodes"]:
-                problems.append(f"{nw}: kind {node.get('kind')!r} is not one of {list(kinds['nodes'])}")
-            if not node.get("label"):
-                problems.append(f"{nw}: label is required")
-            gid = node.get("group")
-            if gid is not None and gid not in groups:
-                problems.append(f"{nw}: group {gid!r} is not defined in this view")
-            step = node.get("step")
-            if step is not None:
-                if not isinstance(step, int) or step < 1:
-                    problems.append(f"{nw}: step must be a positive integer")
-                elif step in steps:
-                    problems.append(f"{nw}: step {step} is also used by {steps[step]}")
-                else:
-                    steps[step] = nid
-            drill = node.get("drill")
-            if drill is not None and (drill not in view_ids or drill == vid):
-                problems.append(f"{nw}: drill must name another view id")
-            source = None
-            if node.get("source") is not None:
-                source = _excerpt(repo, node["source"], nw, problems)
-                group = groups.get(gid) if gid else None
-                if source and group:
-                    if group["kind"] == "file" and source["path"] != group["path"]:
-                        problems.append(
-                            f"{nw}: excerpt is from {source['path']} but its file group is {group['path']}; "
-                            "a file container holds only that file's steps"
-                        )
-                    if group["kind"] == "module" and not source["path"].startswith(str(group["path"]).rstrip("/") + "/"):
-                        problems.append(f"{nw}: excerpt {source['path']} is outside module {group['path']}")
-                if source:
-                    if editor_links:
-                        source["href"] = f"vscode://file/{(repo / source['path']).resolve()}:{source['start']}"
-                    elif info["web"]:
-                        source["href"] = f"{info['web']}{source['path']}#L{source['start']}-L{source['end']}"
-            elif gid and groups.get(gid, {}).get("kind") == "file":
-                problems.append(f"{nw}: nodes in a file group need a source excerpt")
-            nodes.append({
-                "id": nid, "kind": node.get("kind"), "label": node.get("label", ""),
-                "summary": node.get("summary", ""), "group": gid, "step": step,
-                "drill": drill, "source": source,
-            })
+    def check_node(where: str, raw: dict, out: dict, group: dict | None, problems: list[str]) -> None:
+        if raw.get("source") is None:
+            if group and group["kind"] == "file":
+                problems.append(f"{where}: nodes in a file group need a source excerpt")
+            return
+        source = _excerpt(repo, raw["source"], where, problems)
+        if not source:
+            return
+        if group and group["kind"] == "file" and source["path"] != group["path"]:
+            problems.append(
+                f"{where}: excerpt is from {source['path']} but its file group is {group['path']}; "
+                "a file container holds only that file's steps"
+            )
+        if group and group["kind"] == "module" and not source["path"].startswith(str(group["path"]).rstrip("/") + "/"):
+            problems.append(f"{where}: excerpt {source['path']} is outside module {group['path']}")
+        if editor_links:
+            source["href"] = f"vscode://file/{(repo / source['path']).resolve()}:{source['start']}"
+        elif info["web"]:
+            source["href"] = f"{info['web']}{source['path']}#L{source['start']}-L{source['end']}"
+        out["source"] = source
 
-        edges = []
-        for ei, edge in enumerate(view.get("edges", [])):
-            ew = f"{where} edges[{ei}] {edge.get('from')}->{edge.get('to')}"
-            kind = edge.get("kind", "call")
-            if kind not in kinds["edges"]:
-                problems.append(f"{ew}: kind {kind!r} is not one of {list(kinds['edges'])}")
-            for end in ("from", "to"):
-                if edge.get(end) not in node_ids:
-                    problems.append(f"{ew}: {end} {edge.get(end)!r} is not a node in this view")
-            if kind == "branch" and not edge.get("label"):
-                problems.append(f"{ew}: branch edges need a label naming the condition")
-            edges.append({"from": edge.get("from"), "to": edge.get("to"), "kind": kind, "label": edge.get("label", "")})
-
-        if view.get("kind") == "flow" and not any(n["kind"] == "entry" for n in nodes):
-            problems.append(f"{where}: a flow needs at least one entry node")
-        out_views.append({
-            "id": vid, "title": view.get("title", ""), "kind": view.get("kind"),
-            "summary": view.get("summary", ""), "groups": list(groups.values()),
-            "nodes": nodes, "edges": edges,
-        })
-
-    if problems:
-        raise ModelError(problems)
-    return {
-        "title": model["title"],
-        "summary": model.get("summary", ""),
-        "source": {"repo": info["repo"], "commit": info["commit"], "generated": dt.date.today().isoformat()},
-        "views": out_views,
-    }
+    return core.build(
+        model, kinds or load_kinds(), view_kinds=VIEW_KINDS, default_group="file",
+        check_group=check_group, check_node=check_node,
+        meta={"label": " @ ".join(filter(None, [info["repo"], info["commit"]]))},
+    )
 
 
-def render(built: dict, template: Path = TEMPLATE) -> str:
-    """Inject the built model into the template as inert JSON."""
-    payload = json.dumps(built, ensure_ascii=False, indent=None)
-    # A literal `<` could close the <script> element (`</script>`) or open an
-    # HTML comment (`<!--`); `\u003c` is the same character to JSON.parse.
-    payload = payload.replace("<", "\\u003c")
-    title = built["title"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    html = template.read_text(encoding="utf-8")
-    return html.replace("__ONB_TITLE__", title, 1).replace("__ONB_MODEL__", payload, 1)
+def render(built: dict, kinds: dict | None = None) -> str:
+    """Inject the built model into the shared template as inert JSON."""
+    return core.render(built, kinds or load_kinds(), TEMPLATE)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -291,25 +190,17 @@ def main(argv: list[str] | None = None) -> int:
 
     repo = args.repo.resolve()
     try:
-        model = json.loads(args.model.read_text(encoding="utf-8"))
-        built = build_model(model, repo, editor_links=args.editor_links)
-    except json.JSONDecodeError as exc:
-        print(f"error: {args.model} is not valid JSON: {exc}", file=sys.stderr)
-        return 1
+        built = build_model(core.load_model(args.model), repo, editor_links=args.editor_links)
     except ModelError as exc:
-        print(f"error: {len(exc.problems)} problem(s) in {args.model}:", file=sys.stderr)
-        for problem in exc.problems:
-            print(f"  - {problem}", file=sys.stderr)
-        return 1
+        return core.report(args.model, exc)
 
-    counts = ", ".join(f"{v['id']}: {len(v['nodes'])} nodes/{len(v['edges'])} edges" for v in built["views"])
     if args.check:
-        print(f"ok: {counts}")
+        print(f"ok: {core.counts(built)}")
         return 0
     out = args.out or repo / "docs" / "onboarding" / f"{args.model.stem}.html"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(render(built), encoding="utf-8")
-    print(f"wrote {out} ({counts})")
+    print(f"wrote {out} ({core.counts(built)})")
     return 0
 
 

@@ -3,11 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>__ONB_TITLE__</title>
+<title>__DIAGRAM_TITLE__</title>
 <style>
   /* Catppuccin Mocha only. One hue means one thing on nodes and edges alike;
-     the meaning table is the onb-kinds JSON block below, which the build
-     script also validates models against. */
+     the meaning table is the diagram-kinds JSON block below, which the build
+     script injects from the same table it validates models against.
+     Shared byte-for-byte by every skill that renders this look: edit it in
+     skills/flow-diagrams and run scripts/sync_shared_diagram.py. */
   :root {
     --rosewater: #f5e0dc; --flamingo: #f2cdcd; --pink: #f5c2e7; --mauve: #cba6f7;
     --red: #f38ba8; --maroon: #eba0ac; --peach: #fab387; --yellow: #f9e2af;
@@ -93,13 +95,14 @@
   .zoom { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 4px; }
 
   .group-box { fill: var(--mantle); stroke: var(--surface1); stroke-width: 1.5; }
-  .group-box.module { stroke-dasharray: 7 5; }
-  .group-box.outside { stroke-dasharray: 2 5; fill: transparent; }
+  .group-box.border-dashed { stroke-dasharray: 7 5; }
+  .group-box.border-dotted { stroke-dasharray: 2 5; fill: transparent; }
   .group-head { fill: var(--crust); }
   .group-dir { fill: var(--overlay1); font: 12px var(--mono); }
   .group-file { fill: var(--text); font: 600 12px var(--mono); }
-  .group-lang { fill: var(--overlay2); font: 10px var(--mono); }
-  .group-lang-bg { fill: var(--surface0); }
+  .group-name { fill: var(--text); font: 600 12px var(--sans); }
+  .group-tag { fill: var(--overlay2); font: 10px var(--mono); }
+  .group-tag-bg { fill: var(--surface0); }
   .group:hover .group-box { stroke: var(--surface2); }
 
   .node { cursor: pointer; outline: none; }
@@ -171,6 +174,8 @@
     .controls { margin-left: 0; }
     .search { width: 140px; }
   }
+  .ext-header[hidden] { display: none; }
+  /* __DIAGRAM_EXTENSION_CSS__ */
 </style>
 </head>
 <body>
@@ -181,6 +186,7 @@
       <span class="meta" id="meta"></span>
     </div>
     <p class="summary" id="summary"></p>
+    <div class="ext-header" id="ext-header" hidden></div>
     <div class="toolbar">
       <nav class="tabs" id="tabs" role="tablist" aria-label="Views"></nav>
       <div class="controls">
@@ -221,42 +227,17 @@
   </div>
 </div>
 
-<script type="application/json" id="onb-kinds">
-{
-  "nodes": {
-    "entry":     {"label": "Entry point", "shape": "stadium",       "color": "green",    "definition": "Where control enters: route, CLI command, main, event handler, exported API."},
-    "step":      {"label": "Step",        "shape": "rounded",       "color": "blue",     "definition": "A function or block doing ordinary work: validate, transform, compute."},
-    "decision":  {"label": "Decision",    "shape": "diamond",       "color": "yellow",   "definition": "A branch that changes the path; its yellow arrows are the outcomes."},
-    "store":     {"label": "Data store",  "shape": "cylinder",      "color": "peach",    "definition": "State that outlives the call: database, file, cache, session."},
-    "external":  {"label": "External",    "shape": "hexagon",       "color": "mauve",    "definition": "Outside this repo: HTTP API, SDK, OS process, another service."},
-    "async":     {"label": "Async",       "shape": "parallelogram", "color": "teal",     "definition": "Work that continues later or elsewhere: queue, event, task, callback."},
-    "config":    {"label": "Config",      "shape": "note",          "color": "lavender", "definition": "Settings that shape behaviour: env vars, config files, flags."},
-    "exit":      {"label": "Success exit","shape": "stadium2",      "color": "pink",     "definition": "Where the flow ends successfully: response sent, value returned."},
-    "error":     {"label": "Failure",     "shape": "octagon",       "color": "red",      "definition": "Where the flow ends in failure: exception, error response, non-zero exit."},
-    "component": {"label": "Component",   "shape": "component",     "color": "sapphire", "definition": "A module, package or service treated as one unit (architecture views)."}
-  },
-  "edges": {
-    "call":    {"label": "Calls",       "dash": "",      "head": "triangle", "color": "subtext0", "width": 1.8, "definition": "Synchronous call or hand-off: A invokes B and waits."},
-    "return":  {"label": "Returns",     "dash": "",      "head": "chevron",  "color": "overlay2", "width": 1.2, "definition": "A value flowing back to the caller."},
-    "branch":  {"label": "Branch",      "dash": "",      "head": "triangle", "color": "yellow",   "width": 1.8, "definition": "One outcome of a decision; the label names the condition."},
-    "async":   {"label": "Async",       "dash": "7 5",   "head": "triangle", "color": "teal",     "width": 1.8, "definition": "Fire-and-forget: publish, enqueue, schedule. The caller does not wait."},
-    "data":    {"label": "Reads/writes","dash": "1.5 5", "head": "dot",      "color": "peach",    "width": 2.2, "definition": "Reads from or writes to a data store."},
-    "error":   {"label": "Error path",  "dash": "7 5",   "head": "triangle", "color": "red",      "width": 1.8, "definition": "Failure propagating: raise, throw, reject, error response."},
-    "depends": {"label": "Depends on",  "dash": "12 6",  "head": "chevron",  "color": "overlay1", "width": 1.4, "definition": "Build-time dependency: A imports or requires B (architecture views)."}
-  },
-  "groups": {
-    "file":    {"label": "File",         "definition": "Every step inside comes from this one file."},
-    "module":  {"label": "Module",       "definition": "A directory or package; steps may come from any file in it."},
-    "outside": {"label": "Outside repo", "definition": "Callers and services with no source in this repo."}
-  }
-}
-</script>
-<script type="application/json" id="onb-model">__ONB_MODEL__</script>
+<script type="application/json" id="diagram-kinds">__DIAGRAM_KINDS__</script>
+<script type="application/json" id="diagram-model">__DIAGRAM_MODEL__</script>
+<script id="diagram-extension">__DIAGRAM_EXTENSION_JS__</script>
 <script>
 (() => {
   "use strict";
-  const KINDS = JSON.parse(document.getElementById("onb-kinds").textContent);
-  const MODEL = JSON.parse(document.getElementById("onb-model").textContent);
+  const KINDS = JSON.parse(document.getElementById("diagram-kinds").textContent);
+  const MODEL = JSON.parse(document.getElementById("diagram-model").textContent);
+  // A skill built on this page may inject one extension script that sets
+  // window.diagramExtension; its hooks are optional and each receives `api`.
+  const EXT = window.diagramExtension || {};
   const SVG = "http://www.w3.org/2000/svg";
   const $ = (id) => document.getElementById(id);
   const cssVar = (name) => `var(--${name})`;
@@ -373,7 +354,7 @@
     const scratch = el("div");
     highlight(scratch, src.code, src.lang);
     const pre = el("pre", { class: "code" });
-    let line = src.start;
+    let line = src.start || 1;
     let row = el("span", { class: "row" }, el("span", { class: "ln" }, String(line)));
     const flush = () => { pre.append(row); line += 1; row = el("span", { class: "row" }, el("span", { class: "ln" }, String(line))); };
     for (const piece of scratch.childNodes) {
@@ -388,7 +369,10 @@
     pre.append(row);
     return pre;
   }
+  // Code from a file shows path:lines (linked when the build knew a URL);
+  // an inline snippet shows its title, if any.
   function sourceLink(src) {
+    if (!src.path) return src.title ? el("span", { class: "loc" }, src.title) : null;
     const text = `${src.path}:${src.start}${src.end > src.start ? `–${src.end}` : ""}`;
     return src.href
       ? el("a", { class: "loc", href: src.href, target: "_blank", rel: "noopener" }, text + " ↗")
@@ -501,7 +485,7 @@
     const OUT = "__outside__";
     for (const n of nodes) {
       const gid = n.group && groups.has(n.group) ? n.group : OUT;
-      if (!groups.has(gid)) groups.set(gid, { id: OUT, kind: "outside", label: "Outside the repo", members: [] });
+      if (!groups.has(gid)) groups.set(gid, { id: OUT, kind: "outside", label: KINDS.groups.outside?.heading || "Outside", members: [] });
       groups.get(gid).members.push(n);
     }
     const lanes = [...groups.values()].filter((g) => g.members.length);
@@ -594,25 +578,35 @@
     viewport.append(gLayer, eLayer, hLayer, nLayer);
 
     for (const box of L.boxes) {
-      const lane = box.lane, kind = lane.kind || "file";
+      const lane = box.lane, kind = lane.kind;
+      const border = KINDS.groups[kind]?.border || "solid";
       const g = sv("g", { class: "group", "data-group": lane.id });
       const head = sv("g", { class: "group", "data-group": lane.id });
-      g.append(sv("rect", { class: `group-box ${kind}`, x: box.x, y: box.y, width: box.w, height: box.h, rx: 12 }));
-      if (kind !== "outside") head.append(sv("path", { class: "group-head", d: `M${box.x + 1},${box.y + HEAD_H} V${box.y + 12} Q${box.x + 1},${box.y + 1} ${box.x + 12},${box.y + 1} H${box.x + box.w - 12} Q${box.x + box.w - 1},${box.y + 1} ${box.x + box.w - 1},${box.y + 12} V${box.y + HEAD_H} Z` }));
-      const path = lane.path || lane.label || lane.id;
-      const cut = path.lastIndexOf("/");
-      const langW = lane.lang ? lane.lang.length * 6.4 + 12 : 0;
-      const maxChars = Math.floor((box.w - 28 - langW) / 7.3);
-      let dir = cut >= 0 ? path.slice(0, cut + 1) : "", file = cut >= 0 ? path.slice(cut + 1) : path;
-      if (kind === "outside") { dir = ""; file = lane.label; }
-      if (dir.length + file.length > maxChars) dir = "…" + dir.slice(Math.max(0, dir.length - Math.max(0, maxChars - file.length - 1)));
-      const icon = kind === "module" ? "▣ " : kind === "outside" ? "◌ " : "▤ ";
-      head.append(sv("text", { x: box.x + 12, y: box.y + 22 }, sv("tspan", { class: "group-dir" }, icon + dir), sv("tspan", { class: "group-file" }, file)));
-      if (lane.lang) {
-        head.append(sv("rect", { class: "group-lang-bg", x: box.x + box.w - langW - 10, y: box.y + 9, width: langW, height: 17, rx: 8 }));
-        head.append(sv("text", { class: "group-lang", x: box.x + box.w - langW / 2 - 10, y: box.y + 21, "text-anchor": "middle" }, lane.lang));
+      g.append(sv("rect", { class: `group-box border-${border}`, x: box.x, y: box.y, width: box.w, height: box.h, rx: 12 }));
+      if (border !== "dotted") head.append(sv("path", { class: "group-head", d: `M${box.x + 1},${box.y + HEAD_H} V${box.y + 12} Q${box.x + 1},${box.y + 1} ${box.x + 12},${box.y + 1} H${box.x + box.w - 12} Q${box.x + box.w - 1},${box.y + 1} ${box.x + box.w - 1},${box.y + 12} V${box.y + HEAD_H} Z` }));
+      // A path header dims the directory and brightens the file name; a plain
+      // label is shown whole.
+      const name = lane.path || lane.label || lane.id;
+      const tagW = lane.tag ? lane.tag.length * 6.4 + 12 : 0;
+      const maxChars = Math.floor((box.w - 28 - tagW) / 7.3);
+      const icon = { solid: "▤ ", dashed: "▣ ", dotted: "◌ " }[border] || "";
+      const text = sv("text", { x: box.x + 12, y: box.y + 22 });
+      if (lane.path) {
+        const cut = name.lastIndexOf("/");
+        let dir = cut >= 0 ? name.slice(0, cut + 1) : "";
+        const file = cut >= 0 ? name.slice(cut + 1) : name;
+        if (dir.length + file.length > maxChars) dir = "…" + dir.slice(Math.max(0, dir.length - Math.max(0, maxChars - file.length - 1)));
+        text.append(sv("tspan", { class: "group-dir" }, icon + dir), sv("tspan", { class: "group-file" }, file));
+      } else {
+        const label = name.length > maxChars ? name.slice(0, Math.max(1, maxChars - 1)) + "…" : name;
+        text.append(sv("tspan", { class: "group-dir" }, icon), sv("tspan", { class: "group-name" }, label));
       }
-      head.append(sv("title", {}, `${KINDS.groups[kind]?.label || "Group"}: ${path}${lane.summary ? "\n" + lane.summary : ""}`));
+      head.append(text);
+      if (lane.tag) {
+        head.append(sv("rect", { class: "group-tag-bg", x: box.x + box.w - tagW - 10, y: box.y + 9, width: tagW, height: 17, rx: 8 }));
+        head.append(sv("text", { class: "group-tag", x: box.x + box.w - tagW / 2 - 10, y: box.y + 21, "text-anchor": "middle" }, lane.tag));
+      }
+      head.append(sv("title", {}, `${KINDS.groups[kind]?.label || "Group"}: ${name}${lane.summary ? "\n" + lane.summary : ""}`));
       gLayer.append(g);
       hLayer.append(head);
       els.groups.set(lane.id, [g, head]);
@@ -636,6 +630,7 @@
         g.append(sv("g", { class: "edge-label" }, sv("rect", { x: mx - w / 2, y: my - 9, width: w, height: 18, rx: 9 }),
           sv("text", { x: mx, y: my + 4, "text-anchor": "middle" }, e.label)));
       }
+      call("decorateEdge", e, g);
       g.addEventListener("pointerenter", (ev) => { hoverEdge(e); showEdgeTip(e, ev); });
       g.addEventListener("pointerleave", () => { hoverEdge(null); hideTipSoon(); });
       eLayer.append(g);
@@ -657,6 +652,7 @@
           sv("text", { x: 2, y: 6, "text-anchor": "middle" }, String(n.step))));
       }
       if (n.drill) g.append(sv("text", { class: "drill", x: p.w - 8, y: p.h - 6, "text-anchor": "end" }, "open ⤵"));
+      call("decorateNode", n, g, { w: p.w, h: p.h });
       g.addEventListener("pointerenter", () => { hoverNode(n.id); showNodeTip(n); });
       g.addEventListener("pointerleave", () => { hoverNode(null); hideTipSoon(); });
       g.addEventListener("focus", () => { hoverNode(n.id); showNodeTip(n); });
@@ -743,11 +739,11 @@
     const view = state.view;
     const group = view.groups.find((g) => g.id === n.group);
     const body = [el("div", {}, kindChip("nodes", n.kind), n.step != null ? el("span", { class: "meta" }, `  step ${n.step}`) : null),
-      el("div", { class: "card-title" }, n.label), prose("p", "card-summary", n.summary)];
-    if (n.source) body.push(sourceLink(n.source), codeBlock(n.source));
+      el("div", { class: "card-title" }, n.label), prose("p", "card-summary", n.summary), ...(call("nodeCard", n, "tip") || [])];
+    if (n.source) body.push(sourceLink(n.source), sourceBlock(n.source));
     else if (group) body.push(el("span", { class: "loc" }, group.path || group.label));
     if (n.drill) body.push(el("div", { class: "meta", style: "margin-top:6px" }, "Double-click or use the details panel to open this flow."));
-    tip.replaceChildren(...body);
+    tip.replaceChildren(...body.filter(Boolean));
     state.tipFor = { node: n.id };
     placeTip(els.nodes.get(n.id).getBoundingClientRect());
   }
@@ -758,7 +754,8 @@
     tip.replaceChildren(el("div", {}, kindChip("edges", e.kind)),
       el("div", { class: "card-title" }, `${nodes.get(e.from).label} → ${nodes.get(e.to).label}`),
       e.label ? prose("p", "card-summary", e.label) : null,
-      el("p", { class: "card-summary", style: "color:var(--overlay2);margin:0" }, spec.definition));
+      el("p", { class: "card-summary", style: "color:var(--overlay2);margin:0" }, spec.definition),
+      ...(call("edgeCard", e) || []));
     state.tipFor = { edge: e };
     placeTip({ left: ev.clientX - 6, right: ev.clientX + 6, top: ev.clientY - 10, bottom: ev.clientY + 10 });
   }
@@ -779,7 +776,7 @@
     if (!id) {
       panel.replaceChildren(el("h2", {}, view.title), prose("p", "view-summary", view.summary),
         el("h2", {}, "How to read this"),
-        el("p", { class: "empty" }, "Hover any shape for its code. Click to pin it here. ",
+        el("p", { class: "empty" }, "Hover any shape for its details. Click to pin it here. ",
           state.tour.length ? "Use ◀ ▶ or the arrow keys to walk the numbered steps in order." : "Nodes that say “open ⤵” lead to a detailed flow."));
       return;
     }
@@ -790,16 +787,16 @@
       kindChip("edges", e.kind), el("span", {}, other.label), e.label ? el("span", { class: "conn-label" }, e.label) : null));
     const incoming = view.edges.filter((e) => e.to === id), outgoing = view.edges.filter((e) => e.from === id);
     const children = [el("div", {}, kindChip("nodes", n.kind), n.step != null ? el("span", { class: "meta" }, `  step ${n.step}`) : null),
-      el("div", { class: "card-title" }, n.label), prose("p", "card-summary", n.summary)];
-    if (group) children.push(el("span", { class: "loc" }, `${KINDS.groups[group.kind || "file"].label}: ${group.path || group.label}`));
-    if (n.source) children.push(sourceLink(n.source), codeBlock(n.source));
+      el("div", { class: "card-title" }, n.label), prose("p", "card-summary", n.summary), ...(call("nodeCard", n, "details") || [])];
+    if (group) children.push(el("span", { class: "loc" }, `${KINDS.groups[group.kind]?.label || "Group"}: ${group.path || group.label}`));
+    if (n.source) children.push(sourceLink(n.source), sourceBlock(n.source));
     if (incoming.length) children.push(el("h2", {}, "Comes from"), el("ul", { class: "conn-list" }, incoming.map((e) => conn(e, nodes.get(e.from)))));
     if (outgoing.length) children.push(el("h2", {}, "Leads to"), el("ul", { class: "conn-list" }, outgoing.map((e) => conn(e, nodes.get(e.to)))));
     if (n.drill) {
       const target = MODEL.views.find((v) => v.id === n.drill);
       children.push(el("button", { class: "btn drill-btn", onclick: () => openView(n.drill) }, `Open flow: ${target ? target.title : n.drill} ⤵`));
     }
-    panel.replaceChildren(...children);
+    panel.replaceChildren(...children.filter(Boolean));
   }
   function select(id) {
     state.selected = id;
@@ -825,14 +822,14 @@
   }
   function legendGroup(kind) {
     const s = sv("svg", { viewBox: "0 0 46 26" });
-    s.append(sv("rect", { class: `group-box ${kind}`, x: 2, y: 3, width: 42, height: 20, rx: 5 }));
+    s.append(sv("rect", { class: `group-box border-${KINDS.groups[kind]?.border || "solid"}`, x: 2, y: 3, width: 42, height: 20, rx: 5 }));
     return s;
   }
   function renderLegend(view) {
     const used = (list, key) => [...new Set(list.map((x) => x[key]))];
     const nodeKinds = Object.keys(KINDS.nodes).filter((k) => used(view.nodes, "kind").includes(k));
     const edgeKinds = Object.keys(KINDS.edges).filter((k) => used(view.edges, "kind").includes(k));
-    const groupKinds = Object.keys(KINDS.groups).filter((k) => view.groups.some((g) => (g.kind || "file") === k) || (k === "outside" && view.nodes.some((n) => !n.group)));
+    const groupKinds = Object.keys(KINDS.groups).filter((k) => view.groups.some((g) => g.kind === k) || (k === "outside" && view.nodes.some((n) => !n.group)));
     const item = (svgNode, spec, onEnter) => el("div", { class: "legend-item", tabindex: 0,
       onpointerenter: onEnter, onpointerleave: () => restoreFocus(), onfocus: onEnter, onblur: () => restoreFocus() },
       svgNode, el("div", {}, el("span", { class: "legend-name" }, spec.label), el("span", { class: "legend-def" }, spec.definition)));
@@ -842,7 +839,8 @@
       el("h2", {}, "Arrows"),
       ...edgeKinds.map((k) => item(legendLine(k), KINDS.edges[k], () => lightUp(view.edges.filter((e) => e.kind === k).flatMap((e) => [e.from, e.to]), (e) => e.kind === k))),
       el("h2", {}, "Containers"),
-      ...groupKinds.map((k) => item(legendGroup(k), KINDS.groups[k], () => lightUp(view.nodes.filter((n) => (k === "outside" ? !n.group : view.groups.find((g) => g.id === n.group && (g.kind || "file") === k))).map((n) => n.id), () => false))),
+      ...groupKinds.map((k) => item(legendGroup(k), KINDS.groups[k], () => lightUp(view.nodes.filter((n) => (k === "outside" ? !n.group : view.groups.find((g) => g.id === n.group && g.kind === k))).map((n) => n.id), () => false))),
+      ...(call("legend", view) || []),
       el("h2", {}, "Keys"),
       el("div", { class: "keys" }, el("kbd", {}, "←"), " ", el("kbd", {}, "→"), " walk steps · ", el("kbd", {}, "/"), " search · ",
         el("kbd", {}, "f"), " fit · ", el("kbd", {}, "["), " ", el("kbd", {}, "]"), " panels · ", el("kbd", {}, "Esc"), " clear · drag to pan · wheel to zoom"));
@@ -870,7 +868,7 @@
     q = q.trim().toLowerCase();
     state.match.clear();
     for (const n of state.view.nodes) {
-      const hay = [n.label, n.summary, n.source?.path, n.source?.code].join(" ").toLowerCase();
+      const hay = [n.label, n.summary, n.source?.path, n.source?.code, call("searchText", n)].join(" ").toLowerCase();
       const on = !!q && hay.includes(q);
       if (on) state.match.add(n.id);
       els.nodes.get(n.id)?.classList.toggle("match", on);
@@ -944,7 +942,7 @@
     legend: { side: "left", open: "«", shut: "»", name: "legend", key: "[" },
     details: { side: "right", open: "»", shut: "«", name: "details", key: "]" },
   };
-  const storeKey = "onb-collapsed";
+  const storeKey = "diagram-collapsed";
   let collapsed = {};
   try { collapsed = JSON.parse(localStorage.getItem(storeKey) || "{}") || {}; } catch { collapsed = {}; }
   function setPanel(id, shut, refit = true) {
@@ -980,6 +978,16 @@
     else if (e.key === "Escape") { hideTip(); select(null); }
   });
 
+  // ---------- extension hooks ----------
+  // The page's own helpers, handed to every hook so an extension draws with
+  // the same parts instead of copying them.
+  const api = { el, sv, prose, highlight, codeBlock, sourceLink, kindChip, cssVar, lightUp, restoreFocus,
+    select, centerOn, openView, KINDS, MODEL, state };
+  function call(name, ...args) {
+    return typeof EXT[name] === "function" ? EXT[name](...args, api) : null;
+  }
+  function sourceBlock(src) { return call("sourceBlock", src) || codeBlock(src); }
+
   // ---------- views, tabs, deep links ----------
   function writeHash() {
     const params = new URLSearchParams({ v: state.view.id });
@@ -1000,12 +1008,15 @@
   $("title").textContent = MODEL.title;
   document.title = MODEL.title;
   const src = MODEL.source || {};
-  $("meta").textContent = [src.repo, src.commit && `@ ${src.commit}`, src.generated && `· ${src.generated}`].filter(Boolean).join(" ");
+  $("meta").textContent = [src.label, src.generated && `· ${src.generated}`].filter(Boolean).join(" ");
   $("summary").replaceWith(Object.assign(prose("p", "summary", MODEL.summary), { id: "summary" }));
+  const extHeader = $("ext-header");
+  call("header", extHeader);
+  extHeader.hidden = !extHeader.childNodes.length;
   const tabs = $("tabs");
   for (const v of MODEL.views) {
     tabs.append(el("button", { class: "tab", role: "tab", "data-view": v.id, "aria-selected": "false", onclick: () => openView(v.id) },
-      v.title, el("span", { class: "tab-kind" }, v.kind === "architecture" ? "map" : "flow")));
+      v.title, el("span", { class: "tab-kind" }, v.tag || (v.kind === "flow" ? "flow" : "map"))));
   }
   markerDefs();
   let initial = new URLSearchParams();

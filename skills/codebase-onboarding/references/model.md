@@ -36,10 +36,10 @@ A `flow` needs at least one `entry` node.
 | Field | Required | Meaning |
 |---|---|---|
 | `id` | yes | Unique within the view. |
-| `kind` | no | `file` (default) or `module`. |
+| `kind` | no | `file` (default, solid border) or `module` (dashed border). |
 | `path` | yes | Repo-relative. A `file` group's path must be a file; a `module` group's a directory. |
 | `summary` | no | Shown when hovering the container header. |
-| `lang` | no | Override the language chip; inferred from the extension otherwise. |
+| `lang` | no | Override the language chip on the header; inferred from a file group's extension otherwise. |
 
 ### Node
 

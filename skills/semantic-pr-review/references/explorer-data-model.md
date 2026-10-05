@@ -8,13 +8,14 @@ Use this model to separate source-backed analysis from presentation. Populate it
 | --- | --- |
 | `pr` | `number`, `repository`, `head_sha`, optional `evidence_sha`, optional `url` |
 | `summary` | `goal`, `old_to_new`, `ownership_chain`, `payoff`, and `residual_debt` |
-| `systems` | Stable owner or branch identities with `id`, `label`, and theme `color_token` |
+| `systems` | Stable owner identities with `id` (`[A-Za-z0-9_-]+`) and `label`; each becomes a container on the page. A `color_token` from 1.x is accepted and ignored: colour now means node kind. |
 | `nodes` | Semantic components keyed by unique `id` |
 | `edges` | Evidence-backed runtime handoffs |
 | `branches` | Real execution alternatives and their ordered node paths |
 | `shared_before` | Ordered nodes before branch dispatch |
 | `convergence_node` | Shared normalized output node |
 | `shared_after` | Ordered nodes after convergence |
+| `evidence_rail` | Optional cross-cutting tests, rules and docs: `label` and `evidence` per item, shown above the canvas with no runtime DTO |
 
 ## Choosing the analyzed snapshot
 
@@ -159,6 +160,8 @@ Every node must contain:
 - `sources`
 - `code_preview`
 
+A node may also set `kind` to any node kind in [visual-language.md](visual-language.md). Without it the scaffold derives one from the paths: the first node is `entry`, a dispatch that fans out to several branches is `decision`, the last node is `exit`, and the rest are `step`. Set it when the node is something else — a `store`, `external`, `async`, `config` or `error` node — never for decoration.
+
 Each raw source record contains:
 
 - `label`: descriptive semantic evidence label
@@ -197,6 +200,8 @@ Every runtime edge must contain:
 - `transformation`: translation, normalization, or routing behavior
 - `evidence`: source or test reference
 
+An edge may also set `kind` to any edge kind in [visual-language.md](visual-language.md) — `data` for a read or write against a store, `async` for fire-and-forget, `error` for failure propagation. Without it the edge is a `call`, except a dispatch-to-branch handoff, which becomes a `branch` edge labelled with the branch it opens. Every other edge shows its `verb` as its visible label.
+
 Use an empty `transfer` list only when the edge explicitly represents control flow with no runtime payload. Cross-cutting tests and documentation belong on a separate evidence rail rather than payload-free runtime edges.
 
 Classify the handoff itself, not merely its endpoint nodes. An edge is `context` when the PR leaves the transfer and transformation unchanged, even if an adjacent node changed. Use the edge status to style the visible path segment in both full-path and delta views.
@@ -229,7 +234,7 @@ A real implementation branch should normally include adapter, translated request
     "residual_debt": "One legacy branch remains isolated."
   },
   "systems": [
-    {"id": "shared", "label": "Shared contract", "color_token": "var(--viz-series-1)"}
+    {"id": "shared", "label": "Shared contract"}
   ],
   "shared_before": ["caller", "dispatch"],
   "branches": [

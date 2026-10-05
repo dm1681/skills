@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SKILL_ROOT = ROOT / "skills" / "codebase-onboarding"
 SCRIPT = SKILL_ROOT / "scripts" / "build_onboarding.py"
-TEMPLATE = SKILL_ROOT / "assets" / "onboarding-template.html"
+TEMPLATE = SKILL_ROOT / "assets" / "diagram-template.html"
 
 ROUTES = """from app.service import place
 
@@ -110,13 +110,13 @@ class OnboardingBuildTests(unittest.TestCase):
         post = built["views"][1]["nodes"][0]
         self.assertEqual(post["source"]["code"], "def create_order(request):\n    order = place(request.json)")
         self.assertEqual(post["source"]["lang"], "python")
-        self.assertEqual(built["views"][1]["groups"][0]["lang"], "python")
+        self.assertEqual(built["views"][1]["groups"][0]["tag"], "python")
 
     def test_render_leaves_no_placeholders_and_keeps_script_inert(self) -> None:
         html = build.render(build.build_model(_model(), self.tmp))
-        self.assertNotIn("__ONB_", html)
-        self.assertEqual(html.count("</script>"), 3, "excerpt text must not close a <script>")
-        match = re.search(r'id="onb-model">(.*?)</script>', html, re.DOTALL)
+        self.assertNotIn("__DIAGRAM_", html)
+        self.assertEqual(html.count("</script>"), 4, "excerpt text must not close a <script>")
+        match = re.search(r'id="diagram-model">(.*?)</script>', html, re.DOTALL)
         assert match is not None
         self.assertNotIn("<", match.group(1))
         self.assertEqual(json.loads(match.group(1))["views"][1]["nodes"][1]["source"]["code"].count("</script>"), 1)

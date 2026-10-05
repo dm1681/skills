@@ -1,7 +1,7 @@
 ---
 name: codebase-onboarding
 description: Onboard someone to a codebase with an interactive, self-contained HTML flow diagram in the Catppuccin Mocha theme - an architecture map, one or more end-to-end flows, or both - where steps are grouped into one container per source file, shapes, colours and arrow styles carry defined meanings shown in a live legend, and every node reveals its real, syntax-highlighted source excerpt on hover. Use when a user is new to a repository, asks to be onboarded, wants a visual map of how a codebase fits together, asks how a request, command or feature flows through the code, or wants an onboarding page or diagram to share with a teammate.
-version: 1.0.0
+version: 1.0.1
 ---
 
 # Codebase onboarding
@@ -43,8 +43,9 @@ Never draw an edge or a branch you have not seen in the code.
 Write `docs/onboarding/<name>.json` in the target repository. The field
 reference and an example are in [references/model.md](references/model.md);
 what each shape, colour and arrow means — and when to use it — is in
-[references/visual-language.md](references/visual-language.md). The rules
-that matter most:
+[references/visual-language.md](references/visual-language.md), where this
+skill's `file` and `module` containers are the solid and dashed borders. The
+rules that matter most:
 
 - **One container per file.** A `file` group holds only nodes whose excerpt
   comes from that file; the build rejects anything else.
@@ -90,6 +91,14 @@ with. Offer to publish it as a shareable page if a publishing or artifact
 tool is available (the file is self-contained, so it can be published
 as-is). Suggest committing the `.json` next to the `.html` so the page can
 be rebuilt when the code changes.
+
+## Shared look
+
+The page, kinds table, `scripts/diagram_core.py` and the visual language are
+copies of files owned by the `flow-diagrams` skill, which draws the same look
+for diagrams that are not about a codebase. Edit them there and run the
+skills repository's `scripts/sync_shared_diagram.py`; a test fails while the
+copies differ.
 
 ## Page features (for reference in your hand-over)
 

@@ -1,18 +1,44 @@
 #!/usr/bin/env python3
-"""Build a PR explorer fragment from a source-verified JSON model."""
+"""Build a PR explorer page from a source-verified JSON model.
+
+The PR model names where each excerpt lives; this script reads the bytes from
+one immutable Git snapshot, validates the semantic contract, maps the model
+onto the shared flow-diagram page (`diagram_core.py`, `assets/diagram-*`) and
+injects this skill's extension (`assets/pr-extension.*`), which draws
+everything PR-specific: orientation, change status, handoffs and notices.
+"""
 
 from __future__ import annotations
 
 import argparse
 import copy
 import json
-import re
 import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import diagram_core as core  # noqa: E402
+
+SKILL_ROOT = HERE.parent
+TEMPLATE = SKILL_ROOT / "assets" / "diagram-template.html"
+KINDS_FILE = SKILL_ROOT / "assets" / "diagram-kinds.json"
+EXTENSION = {
+    "css": SKILL_ROOT / "assets" / "pr-extension.css",
+    "js": SKILL_ROOT / "assets" / "pr-extension.js",
+}
+# Systems own nodes, so they are the page's containers.
+GROUPS = {
+    "system": {"label": "System", "border": "solid",
+               "definition": "One owner: every node inside belongs to this system."},
+    "outside": {"label": "Outside", "border": "dotted", "heading": "Outside the PR's systems",
+                "definition": "Nodes that name no system."},
+}
+VIEW_KINDS = {"flow", "delta"}
 
 REQUIRED_TOP_LEVEL = {
     "pr",
@@ -526,49 +552,133 @@ def _validate_model(model: dict[str, Any]) -> list[str]:
     return errors
 
 
-def _root_id(model: dict[str, Any], requested: str | None) -> str:
-    """Return a safe fragment root ID."""
-    if requested:
-        candidate = requested
-    else:
-        number = model.get("pr", {}).get("number", "unknown")
-        candidate = f"pr-{number}-semantic-explorer"
-    candidate = re.sub(r"[^a-zA-Z0-9_-]+", "-", str(candidate)).strip("-")
-    if not candidate:
-        raise ValueError("root ID is empty after normalization")
-    return candidate
+def load_kinds() -> dict:
+    """Return the shared kinds table with systems as the only containers."""
+    return {**core.load_kinds(KINDS_FILE), "groups": GROUPS}
 
 
-def _render(
-    model: dict[str, Any],
-    template_path: Path,
-    output_path: Path,
-    requested_root_id: str | None,
-) -> None:
-    """Render one fragment from the reusable template."""
-    template = template_path.read_text(encoding="utf-8")
-    root_id = _root_id(model, requested_root_id)
-    model_json = json.dumps(model, separators=(",", ":"), ensure_ascii=False)
-    model_json = model_json.replace("</", "<\\/")
+def _diagram_model(model: dict[str, Any]) -> dict[str, Any]:
+    """Map a validated PR model onto the shared diagram model.
 
-    rendered = template.replace("__PR_EXPLORER_ROOT_ID__", root_id)
-    rendered = rendered.replace("__PR_EXPLORER_DATA__", model_json)
-    if "__PR_EXPLORER_" in rendered:
-        raise ValueError("template contains unresolved explorer placeholders")
+    Kinds follow the runtime role unless a node or edge names one: the first
+    node is the entry, a dispatch that fans out to several branches is a
+    decision, and the last node is the exit. A dispatch-to-branch handoff is
+    a branch edge labelled with the branch it opens; every other edge is
+    labelled with its verb. Systems become containers, and steps follow the
+    trunk, each branch in turn, convergence, then the tail.
+    """
+    pr_nodes = {node["id"]: node for node in model["nodes"]}
+    systems = {system["id"]: system for system in model["systems"]}
+    before, after = model["shared_before"], model["shared_after"]
+    convergence, branches = model["convergence_node"], model["branches"]
+    origin = before[-1] if before else None
+    fans_out = origin is not None and len(branches) > 1
+    heads = {branch["path"][0]: branch for branch in branches if branch["path"]}
 
+    order: list[str] = []
+    for node_id in [*before, *(n for b in branches for n in b["path"]), convergence, *after,
+                    *pr_nodes]:
+        if node_id not in order:
+            order.append(node_id)
+    last = after[-1] if after else convergence
+
+    def kind_of(node_id: str) -> str:
+        if pr_nodes[node_id].get("kind"):
+            return pr_nodes[node_id]["kind"]
+        if node_id == order[0]:
+            return "entry"
+        if fans_out and node_id == origin:
+            return "decision"
+        return "exit" if node_id == last else "step"
+
+    def diagram_node(node_id: str) -> dict[str, Any]:
+        node = pr_nodes[node_id]
+        preview = node["code_preview"]
+        source = node["sources"][preview["source_index"]]
+        return {
+            "id": node_id, "kind": kind_of(node_id), "label": node["label"],
+            "summary": str(node["purpose"]).strip().split("\n")[0].strip(),
+            "group": node["system"], "step": order.index(node_id) + 1,
+            "source": {
+                "path": source["path"], "start": source["start_line"], "end": source["end_line"],
+                "lang": preview["language"], "code": preview["code"],
+                "href": source.get("cursor_url") or source["github_url"],
+            },
+        }
+
+    def diagram_edge(edge: dict[str, Any]) -> dict[str, Any]:
+        branch = heads.get(edge["to"]) if fans_out and edge["from"] == origin else None
+        kind = edge.get("kind") or ("branch" if branch else "call")
+        label = branch["label"] if branch and kind == "branch" else edge["verb"]
+        return {"from": edge["from"], "to": edge["to"], "kind": kind, "label": label}
+
+    def view(view_id: str, title: str, kind: str, node_ids: list[str], summary: str) -> dict[str, Any]:
+        keep = set(node_ids)
+        used = list(dict.fromkeys(pr_nodes[n]["system"] for n in node_ids))
+        result = {
+            "id": view_id, "title": title, "kind": kind, "summary": summary,
+            "groups": [{"id": s, "kind": "system", "label": systems[s].get("label", s)} for s in used],
+            "nodes": [diagram_node(n) for n in node_ids],
+            "edges": [diagram_edge(e) for e in model["edges"] if e["from"] in keep and e["to"] in keep],
+        }
+        if kind == "delta":
+            result["tag"] = "delta"
+        return result
+
+    views = [view("full", "Full request path", "flow", order,
+                  "PR changes together with the unchanged context they run through.")]
+    # The delta keeps every changed node plus its direct neighbours, so the
+    # boundaries a change plugs into stay visible. It is only worth a tab
+    # when it actually hides something.
+    changed = {n for n in order if pr_nodes[n]["change_status"] != "context"}
+    boundary = set(changed)
+    for edge in model["edges"]:
+        if edge["from"] in changed or edge["to"] in changed:
+            boundary.update((edge["from"], edge["to"]))
+    if changed and boundary != set(order):
+        views.append(view("delta", "PR delta", "delta", [n for n in order if n in boundary],
+                          "Only what the PR changed, with the neighbours it connects to."))
+
+    pr = model["pr"]
+    return {"title": f"PR {pr['number']}: {model['summary']['goal']}", "views": views}
+
+
+def _build(model: dict[str, Any]) -> dict[str, Any]:
+    """Return the render-ready page model, or raise core.ModelError."""
+    def check_group(where: str, raw: dict, out: dict, problems: list[str]) -> None:
+        out["label"] = raw["label"]
+
+    def check_node(where: str, raw: dict, out: dict, group: dict | None, problems: list[str]) -> None:
+        out["source"] = raw["source"]
+
+    pr = model["pr"]
+    sha = _analysis_sha(model) or ""
+    built = core.build(
+        _diagram_model(model), load_kinds(), view_kinds=VIEW_KINDS, default_group="system",
+        check_group=check_group, check_node=check_node, meta={"label": f"{pr['repository']} @ {sha[:10]}"},
+    )
+    # The extension reads the materialized PR model; the verifier re-checks
+    # every displayed excerpt against it and against the Git blob.
+    built["pr_model"] = model
+    return built
+
+
+def _render(built: dict[str, Any], output_path: Path) -> None:
+    """Write the self-contained page with this skill's extension injected."""
+    extension = {key: path.read_text(encoding="utf-8") for key, path in EXTENSION.items()}
+    html = core.render(built, load_kinds(), TEMPLATE, extension)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(rendered, encoding="utf-8")
+    output_path.write_text(html, encoding="utf-8")
 
 
 def main() -> int:
-    """Validate a model and render a reusable PR explorer fragment."""
-    skill_root = Path(__file__).resolve().parents[1]
+    """Validate a model and render a self-contained PR explorer page."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", required=True, type=Path)
     parser.add_argument(
         "--output",
         type=Path,
-        help="Fragment to write; not required with --check",
+        help="HTML page to write; not required with --check",
     )
     parser.add_argument(
         "--check",
@@ -600,12 +710,6 @@ def main() -> int:
             "the analyzed snapshot"
         ),
     )
-    parser.add_argument(
-        "--template",
-        type=Path,
-        default=skill_root / "assets" / "pr-explorer-template.html",
-    )
-    parser.add_argument("--root-id")
     args = parser.parse_args()
 
     if args.output is None and not args.check:
@@ -639,6 +743,11 @@ def main() -> int:
         print(f"ERROR: source materialization failed: {exc}")
         return 1
     errors = _validate_model(model)
+    if not errors:
+        try:
+            built = _build(model)
+        except core.ModelError as exc:
+            errors = exc.problems
     if errors:
         for error in errors:
             print(f"ERROR: {error}")
@@ -652,7 +761,7 @@ def main() -> int:
         )
         return 0
 
-    _render(model, args.template, args.output, args.root_id)
+    _render(built, args.output)
     print(args.output)
     return 0
 
