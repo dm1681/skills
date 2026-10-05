@@ -436,6 +436,17 @@ class SemanticPrReviewPipelineTests(unittest.TestCase):
             built["live"] = {"url": "state.json", "every": 2}
             self.assertTrue(any("live feed" in e for e in verify._check_page(text, built)))
 
+    def test_strict_verification_keeps_the_explorer_on_mocha(self) -> None:
+        verify = _load_script("verify_pr_explorer")
+        with tempfile.TemporaryDirectory() as directory:
+            _, page, _ = self.build(directory)
+            text = page.read_text(encoding="utf-8")
+            built = verify._embedded(text)
+            self.assertNotIn("themes", built, "the scaffold offers no themes")
+            built["themes"] = {"mocha": {}, "latte": {}}
+            errors = verify._check_quality_contract(text, built)
+            self.assertTrue(any("locked to Catppuccin Mocha" in e for e in errors), errors)
+
     def test_strict_verification_rejects_a_displayed_copy_that_differs(self) -> None:
         """The drawn excerpt is checked against the verified record, not trusted."""
         verify = _load_script("verify_pr_explorer")

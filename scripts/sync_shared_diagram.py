@@ -20,6 +20,7 @@ OWNER = ROOT / "skills" / "flow-diagrams"
 SHARED = (
     "assets/diagram-template.html",
     "assets/diagram-kinds.json",
+    "assets/diagram-themes.json",
     "scripts/diagram_core.py",
     "references/visual-language.md",
 )

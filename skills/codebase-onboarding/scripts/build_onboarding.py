@@ -24,6 +24,7 @@ import diagram_core as core  # noqa: E402
 SKILL_ROOT = HERE.parent
 TEMPLATE = SKILL_ROOT / "assets" / "diagram-template.html"
 KINDS_FILE = SKILL_ROOT / "assets" / "diagram-kinds.json"
+THEMES_FILE = SKILL_ROOT / "assets" / "diagram-themes.json"
 MAX_EXCERPT_LINES = core.MAX_SNIPPET_LINES
 MAX_LINE_CHARS = core.MAX_LINE_CHARS
 VIEW_KINDS = {"architecture", "flow"}
@@ -186,11 +187,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true", help="validate only; write nothing")
     parser.add_argument("--editor-links", action="store_true",
                         help="link excerpts to vscode:// on this machine instead of the web host (do not commit)")
+    core.add_theme_arguments(parser)
     args = parser.parse_args(argv)
 
     repo = args.repo.resolve()
     try:
         built = build_model(core.load_model(args.model), repo, editor_links=args.editor_links)
+        core.themes_from_args(args, built, core.load_themes(THEMES_FILE), load_kinds())
     except ModelError as exc:
         return core.report(args.model, exc)
 

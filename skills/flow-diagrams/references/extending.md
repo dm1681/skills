@@ -92,6 +92,15 @@ data and never has to undo an earlier one. Extra fields set by an update
 reach every hook. A model's `live` feed, the update rules and a worked
 status-tracker extension are in [live-updates.md](live-updates.md).
 
+## 4. Themes
+
+A page built without themes keeps the template's Mocha palette and shows no
+picker. Offer themes with `core.apply_themes(built, themes, default=..., offer=[...])`,
+or add the shared flags with `core.add_theme_arguments(parser)` and
+`core.themes_from_args(...)`. Offer one theme to lock the page. Extension CSS
+should use the palette variables, never literal colours, so it follows the
+theme. Details: [themes.md](themes.md).
+
 ## Keep the language intact
 
 - Never recolour a kind or reuse a kind's hue for something else. Rosewater,

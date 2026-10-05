@@ -5,6 +5,14 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+- Diagram colour themes. `assets/diagram-themes.json` (shared) holds the four
+  Catppuccin flavours — Mocha, Macchiato, Frappé, Latte — and a page can
+  offer any of them with a picker remembered per viewer, or lock to one.
+  Custom themes (`--theme-file`, optionally `extends` a built-in) are
+  validated so kind colours stay at least ΔE 8 apart and text stays
+  readable. `flow-diagrams` and `codebase-onboarding` builders take
+  `--theme`, `--themes` and `--theme-file`; `semantic-pr-review` stays
+  locked to Mocha and its verifier rejects a page offering other themes.
 - Diagram pages (`flow-diagrams`, `codebase-onboarding`,
   `semantic-pr-review`): a ▴ button or `h` minimises the header to the tab
   row and its controls, remembered per viewer like the side panels. The live
