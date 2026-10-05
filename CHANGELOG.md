@@ -5,6 +5,8 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+## [11.0.0] - 2026-10-05
+
 - Diagram pages: fewer arrow crossings. Other arrows are soft obstacles to
   the router: crossing one costs as much as a 40-cell detour and running on
   top of one costs 12 per cell, so an arrow goes round when the detour is
@@ -87,7 +89,7 @@ All notable changes to this repository are documented here. Versions follow
   (`header`, `nodeCard`, `edgeCard`, `sourceBlock`, `decorateNode`,
   `decorateEdge`, `legend`, `searchText`) let a consumer add domain meaning
   without the library learning it.
-- `codebase-onboarding` 1.0.1: render through the shared diagram core. The
+- `codebase-onboarding` renders through the shared diagram core. The
   page, kinds table, `diagram_core.py` and visual language are now
   byte-identical copies of the files `flow-diagrams` owns, kept in step by
   `scripts/sync_shared_diagram.py` (`--check` runs in the test suite). Models
