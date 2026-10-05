@@ -31,7 +31,8 @@ the model's paths:
   the PR changed only part of the path: it keeps every changed node plus its
   direct neighbours, so each change is shown with the boundaries it plugs into.
 
-Above the canvas, the extension draws one orientation block:
+Above the canvas, the extension draws one orientation block (hidden with the
+rest of the header when the reader minimises it with ▴ or `h`):
 
 - the PR number (linked when `pr.url` is set) and the analyzed snapshot badge
 - old → new boundary or ownership shift

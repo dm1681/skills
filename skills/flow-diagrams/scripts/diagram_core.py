@@ -167,14 +167,32 @@ def build(
             out_view["tag"] = str(view["tag"])
         out_views.append(out_view)
 
+    live = _live(model.get("live"), problems)
     if problems:
         raise ModelError(problems)
-    return {
+    built = {
         "title": model["title"],
         "summary": model.get("summary", ""),
         "source": {**(meta or {}), "generated": dt.date.today().isoformat()},
         "views": out_views,
     }
+    if live:
+        built["live"] = live
+    return built
+
+
+def _live(live: object, problems: list[str]) -> dict | None:
+    """Validate the optional live feed: a state file the page polls."""
+    if live is None:
+        return None
+    if not isinstance(live, dict) or not isinstance(live.get("url"), str) or not live["url"].strip():
+        problems.append("model: live.url must name the state file the page polls")
+        return None
+    every = live.get("every", 2)
+    if isinstance(every, bool) or not isinstance(every, (int, float)) or every < 0.5:
+        problems.append("model: live.every must be a number of seconds, at least 0.5")
+        return None
+    return {"url": live["url"].strip(), "every": every}
 
 
 def _inert(value: object) -> str:

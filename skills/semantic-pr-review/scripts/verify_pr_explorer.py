@@ -61,10 +61,14 @@ def _check_page(text: str, built: dict[str, Any] | None) -> list[str]:
         errors.append("page model has no views")
     if "window.diagramExtension" not in _extension(text):
         errors.append("page does not carry the PR extension script")
+    # The shared page can poll a live state file, but only when its model
+    # names one; an explorer is a snapshot and must never fetch anything.
+    if built.get("live"):
+        errors.append("page enables a live feed; an explorer must make no network requests")
+    for forbidden in ("fetch(", "XMLHttpRequest", "WebSocket", "EventSource"):
+        if forbidden in _extension(text):
+            errors.append(f"page extension contains forbidden network API: {forbidden}")
     code = "\n".join(body for tag, body in _scripts(text) if "application/json" not in tag)
-    for forbidden in ("fetch(", "XMLHttpRequest", "WebSocket"):
-        if forbidden in code:
-            errors.append(f"page contains forbidden network API: {forbidden}")
     # Source links leave the page; they must never replace it.
     if 'target: "_blank", rel: "noopener"' not in code:
         errors.append("page source links do not open a new browsing context")

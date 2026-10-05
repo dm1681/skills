@@ -31,6 +31,9 @@
 
   .app { display: grid; grid-template-rows: auto 1fr; height: 100%; }
   header.top { padding: 12px 16px 0; background: var(--mantle); border-bottom: 1px solid var(--surface0); }
+  /* Minimised, the header is only the tab row and its controls. */
+  header.top.minimised { padding-top: 4px; }
+  header.top.minimised .header-detail { display: none; }
   .title-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
   .title-row h1 { margin: 0; font-size: 18px; font-weight: 650; }
   .meta { color: var(--overlay1); font: 12px var(--mono); }
@@ -175,18 +178,22 @@
     .search { width: 140px; }
   }
   .ext-header[hidden] { display: none; }
+  .live { font: 12px var(--mono); color: var(--subtext0); }
+  .live[data-state="down"] { color: var(--overlay1); }
   /* __DIAGRAM_EXTENSION_CSS__ */
 </style>
 </head>
 <body>
 <div class="app">
   <header class="top">
-    <div class="title-row">
-      <h1 id="title"></h1>
-      <span class="meta" id="meta"></span>
+    <div class="header-detail" id="header-detail">
+      <div class="title-row">
+        <h1 id="title"></h1>
+        <span class="meta" id="meta"></span>
+      </div>
+      <p class="summary" id="summary"></p>
+      <div class="ext-header" id="ext-header" hidden></div>
     </div>
-    <p class="summary" id="summary"></p>
-    <div class="ext-header" id="ext-header" hidden></div>
     <div class="toolbar">
       <nav class="tabs" id="tabs" role="tablist" aria-label="Views"></nav>
       <div class="controls">
@@ -194,6 +201,7 @@
         <button class="btn" id="prev" title="Previous step (←)">◀</button>
         <span class="tour-label" id="tour-label"></span>
         <button class="btn" id="next" title="Next step (→)">▶</button>
+        <button class="btn" id="header-toggle" aria-controls="header-detail" aria-expanded="true" title="Minimise header (h)">▴</button>
       </div>
     </div>
   </header>
@@ -568,6 +576,49 @@
   const els = { nodes: new Map(), edges: [], groups: new Map() };
   const svg = $("canvas"), viewport = $("viewport"), tip = $("tip"), wrap = $("wrap");
 
+  // One edge or node, drawn from its current data. Positions come from the
+  // view's layout, so a live update can redraw a single element in place.
+  function drawEdge(e, c) {
+    const d = `M${c[0]},${c[1]} C${c[2]},${c[3]} ${c[4]},${c[5]} ${c[6]},${c[7]}`;
+    const g = sv("g", { class: "edge", "data-kind": e.kind, tabindex: -1 });
+    g.append(sv("path", { class: "line", d, ...edgeStyle(e.kind) }), sv("path", { class: "hit", d }));
+    if (e.label) {
+      const [mx, my] = bezier(c, 0.5);
+      const w = e.label.length * 6 + 12;
+      g.append(sv("g", { class: "edge-label" }, sv("rect", { x: mx - w / 2, y: my - 9, width: w, height: 18, rx: 9 }),
+        sv("text", { x: mx, y: my + 4, "text-anchor": "middle" }, e.label)));
+    }
+    call("decorateEdge", e, g);
+    g.addEventListener("pointerenter", (ev) => { hoverEdge(e); showEdgeTip(e, ev); });
+    g.addEventListener("pointerleave", () => { hoverEdge(null); hideTipSoon(); });
+    return g;
+  }
+  function drawNode(n) {
+    const p = state.layout.pos.get(n.id);
+    const g = sv("g", { class: "node", "data-kind": n.kind, transform: `translate(${p.x},${p.y})`, tabindex: 0, role: "button",
+      "aria-label": `${KINDS.nodes[n.kind]?.label}: ${n.label}` });
+    g.append(shapeGroup(n.kind, p.w, p.h));
+    const lines = wrapLabel(n.label);
+    const t = sv("text", { class: "label", x: p.w / 2, y: p.h / 2 + (lines.length === 1 ? 5 : -3), "text-anchor": "middle" });
+    lines.forEach((line, i) => t.append(sv("tspan", { x: p.w / 2, dy: i ? 16 : 0 }, line)));
+    g.append(t);
+    if (n.step != null) {
+      const color = cssVar(KINDS.nodes[n.kind]?.color || "blue");
+      g.append(sv("g", { class: "badge", transform: "translate(0,0)" }, sv("circle", { cx: 2, cy: 2, r: 11, stroke: color }),
+        sv("text", { x: 2, y: 6, "text-anchor": "middle" }, String(n.step))));
+    }
+    if (n.drill) g.append(sv("text", { class: "drill", x: p.w - 8, y: p.h - 6, "text-anchor": "end" }, "open ⤵"));
+    call("decorateNode", n, g, { w: p.w, h: p.h });
+    g.addEventListener("pointerenter", () => { hoverNode(n.id); showNodeTip(n); });
+    g.addEventListener("pointerleave", () => { hoverNode(null); hideTipSoon(); });
+    g.addEventListener("focus", () => { hoverNode(n.id); showNodeTip(n); });
+    g.addEventListener("blur", () => { hoverNode(null); hideTip(); });
+    g.addEventListener("click", (ev) => { ev.stopPropagation(); select(n.id); });
+    g.addEventListener("dblclick", (ev) => { ev.stopPropagation(); if (n.drill) openView(n.drill); });
+    g.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(n.id); } });
+    return g;
+  }
+
   function render(view) {
     state.view = view;
     viewport.replaceChildren();
@@ -621,45 +672,13 @@
       pairCount.set(key, n + 1);
       const offset = n === 0 ? 0 : (n % 2 ? 1 : -1) * Math.ceil(n / 2) * 14;
       const c = edgeGeometry(a, b, L.back.has(`${e.from}>${e.to}`), offset);
-      const d = `M${c[0]},${c[1]} C${c[2]},${c[3]} ${c[4]},${c[5]} ${c[6]},${c[7]}`;
-      const g = sv("g", { class: "edge", "data-kind": e.kind, tabindex: -1 });
-      g.append(sv("path", { class: "line", d, ...edgeStyle(e.kind) }), sv("path", { class: "hit", d }));
-      if (e.label) {
-        const [mx, my] = bezier(c, 0.5);
-        const w = e.label.length * 6 + 12;
-        g.append(sv("g", { class: "edge-label" }, sv("rect", { x: mx - w / 2, y: my - 9, width: w, height: 18, rx: 9 }),
-          sv("text", { x: mx, y: my + 4, "text-anchor": "middle" }, e.label)));
-      }
-      call("decorateEdge", e, g);
-      g.addEventListener("pointerenter", (ev) => { hoverEdge(e); showEdgeTip(e, ev); });
-      g.addEventListener("pointerleave", () => { hoverEdge(null); hideTipSoon(); });
+      const g = drawEdge(e, c);
       eLayer.append(g);
-      els.edges.push({ e, g });
+      els.edges.push({ e, g, c });
     }
 
     for (const n of view.nodes) {
-      const p = L.pos.get(n.id);
-      const g = sv("g", { class: "node", "data-kind": n.kind, transform: `translate(${p.x},${p.y})`, tabindex: 0, role: "button",
-        "aria-label": `${KINDS.nodes[n.kind]?.label}: ${n.label}` });
-      g.append(shapeGroup(n.kind, p.w, p.h));
-      const lines = wrapLabel(n.label);
-      const t = sv("text", { class: "label", x: p.w / 2, y: p.h / 2 + (lines.length === 1 ? 5 : -3), "text-anchor": "middle" });
-      lines.forEach((line, i) => t.append(sv("tspan", { x: p.w / 2, dy: i ? 16 : 0 }, line)));
-      g.append(t);
-      if (n.step != null) {
-        const color = cssVar(KINDS.nodes[n.kind]?.color || "blue");
-        g.append(sv("g", { class: "badge", transform: "translate(0,0)" }, sv("circle", { cx: 2, cy: 2, r: 11, stroke: color }),
-          sv("text", { x: 2, y: 6, "text-anchor": "middle" }, String(n.step))));
-      }
-      if (n.drill) g.append(sv("text", { class: "drill", x: p.w - 8, y: p.h - 6, "text-anchor": "end" }, "open ⤵"));
-      call("decorateNode", n, g, { w: p.w, h: p.h });
-      g.addEventListener("pointerenter", () => { hoverNode(n.id); showNodeTip(n); });
-      g.addEventListener("pointerleave", () => { hoverNode(null); hideTipSoon(); });
-      g.addEventListener("focus", () => { hoverNode(n.id); showNodeTip(n); });
-      g.addEventListener("blur", () => { hoverNode(null); hideTip(); });
-      g.addEventListener("click", (ev) => { ev.stopPropagation(); select(n.id); });
-      g.addEventListener("dblclick", (ev) => { ev.stopPropagation(); if (n.drill) openView(n.drill); });
-      g.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(n.id); } });
+      const g = drawNode(n);
       nLayer.append(g);
       els.nodes.set(n.id, g);
     }
@@ -843,7 +862,7 @@
       ...(call("legend", view) || []),
       el("h2", {}, "Keys"),
       el("div", { class: "keys" }, el("kbd", {}, "←"), " ", el("kbd", {}, "→"), " walk steps · ", el("kbd", {}, "/"), " search · ",
-        el("kbd", {}, "f"), " fit · ", el("kbd", {}, "["), " ", el("kbd", {}, "]"), " panels · ", el("kbd", {}, "Esc"), " clear · drag to pan · wheel to zoom"));
+        el("kbd", {}, "f"), " fit · ", el("kbd", {}, "["), " ", el("kbd", {}, "]"), " panels · ", el("kbd", {}, "h"), " header · ", el("kbd", {}, "Esc"), " clear · drag to pan · wheel to zoom"));
   }
 
   // ---------- tour ----------
@@ -956,6 +975,18 @@
     try { localStorage.setItem(storeKey, JSON.stringify(collapsed)); } catch { /* ignore */ }
     if (refit) requestAnimationFrame(() => { hideTip(); if (state.layout) fit(); });
   }
+  function setHeader(minimised, refit = true) {
+    const button = $("header-toggle");
+    document.querySelector("header.top").classList.toggle("minimised", minimised);
+    button.textContent = minimised ? "▾" : "▴";
+    button.setAttribute("aria-expanded", String(!minimised));
+    button.title = `${minimised ? "Show" : "Minimise"} header (h)`;
+    collapsed.header = minimised;
+    try { localStorage.setItem(storeKey, JSON.stringify(collapsed)); } catch { /* ignore */ }
+    if (refit) requestAnimationFrame(() => { hideTip(); if (state.layout) fit(); });
+  }
+  $("header-toggle").addEventListener("click", () => setHeader(!collapsed.header));
+  setHeader(!!collapsed.header, false);
   for (const id of Object.keys(PANELS)) {
     const panel = $(`${id}-panel`);
     $(`${id}-toggle`).addEventListener("click", (ev) => { ev.stopPropagation(); setPanel(id, !panel.classList.contains("collapsed")); });
@@ -973,6 +1004,7 @@
     else if (e.key === "f") fit();
     else if (e.key === "[") setPanel("legend", !$("legend-panel").classList.contains("collapsed"));
     else if (e.key === "]") setPanel("details", !$("details-panel").classList.contains("collapsed"));
+    else if (e.key === "h") setHeader(!collapsed.header);
     else if (e.key === "+" || e.key === "=") zoomCenter(1.25);
     else if (e.key === "-") zoomCenter(0.8);
     else if (e.key === "Escape") { hideTip(); select(null); }
@@ -987,6 +1019,88 @@
     return typeof EXT[name] === "function" ? EXT[name](...args, api) : null;
   }
   function sourceBlock(src) { return call("sourceBlock", src) || codeBlock(src); }
+
+  // ---------- live updates ----------
+  // update() changes the data on nodes and edges that already exist and
+  // redraws only those, in every view that shows them. The layout is fixed,
+  // so the fields that place an element cannot change.
+  const FIXED = { nodes: ["id", "group", "step", "drill"], edges: ["from", "to"] };
+  const keyOf = { nodes: (n) => n.id, edges: (e) => `${e.from}>${e.to}` };
+  function update(patch) {
+    const changed = { nodes: new Set(), edges: new Set() };
+    for (const table of ["nodes", "edges"]) {
+      for (const [id, fields] of Object.entries(patch?.[table] || {})) {
+        const fixed = Object.keys(fields || {}).filter((k) => FIXED[table].includes(k));
+        if (fixed.length) throw new Error(`diagram.update: ${table} ${id} cannot change ${fixed.join(", ")}; the layout is fixed`);
+        if ("kind" in fields && !KINDS[table][fields.kind]) throw new Error(`diagram.update: ${table} ${id} has unknown kind ${fields.kind}`);
+        let found = false;
+        for (const view of MODEL.views) {
+          for (const item of view[table]) {
+            if (keyOf[table](item) !== id) continue;
+            found = true;
+            for (const [k, value] of Object.entries(fields)) {
+              if (JSON.stringify(item[k]) === JSON.stringify(value)) continue;
+              item[k] = value;
+              changed[table].add(id);
+            }
+          }
+        }
+        if (!found) console.warn(`diagram.update: no ${table.slice(0, -1)} ${id} in any view`);
+      }
+    }
+    if (changed.nodes.size || changed.edges.size) redraw(changed);
+    return changed.nodes.size + changed.edges.size;
+  }
+  function redraw(changed) {
+    const view = state.view;
+    for (const n of view.nodes) {
+      if (!changed.nodes.has(n.id)) continue;
+      const g = drawNode(n);
+      els.nodes.get(n.id).replaceWith(g);
+      els.nodes.set(n.id, g);
+      g.classList.toggle("selected", n.id === state.selected);
+    }
+    for (const record of els.edges) {
+      if (!changed.edges.has(keyOf.edges(record.e))) continue;
+      const g = drawEdge(record.e, record.c);
+      record.g.replaceWith(g);
+      record.g = g;
+    }
+    renderLegend(view);
+    renderDetails(state.selected);
+    applySearch($("search").value);
+    if (state.hover) hoverNode(state.hover);
+    if (!tip.hidden && changed.nodes.has(state.tipFor?.node)) showNodeTip(view.nodes.find((n) => n.id === state.tipFor.node));
+  }
+  // A model with `live: {url, every}` polls a state file and applies it.
+  // Fetching needs the page served over HTTP; a file:// page says so.
+  function startLive(live) {
+    // Beside the controls, so it stays visible when the header is minimised.
+    const status = el("span", { class: "live", "aria-live": "polite" });
+    $("search").before(status);
+    const every = Math.max(0.5, Number(live.every) || 2) * 1000;
+    let last = "";
+    async function tick() {
+      try {
+        const sep = live.url.includes("?") ? "&" : "?";
+        const response = await fetch(`${live.url}${sep}t=${Date.now()}`, { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const text = await response.text();
+        if (text !== last) { update(JSON.parse(text)); last = text; }
+        status.dataset.state = "ok";
+        status.textContent = `● live · ${new Date().toLocaleTimeString()}`;
+        status.title = `Polling ${live.url} every ${every / 1000}s`;
+      } catch (err) {
+        status.dataset.state = "down";
+        status.textContent = location.protocol === "file:" ? "○ live feed needs the page served over HTTP" : "○ live feed unreachable";
+        status.title = `${live.url}: ${err.message || err}`;
+      }
+      setTimeout(tick, every);
+    }
+    tick();
+  }
+  api.update = update;
+  window.diagram = { update, model: MODEL };
 
   // ---------- views, tabs, deep links ----------
   function writeHash() {
@@ -1008,7 +1122,7 @@
   $("title").textContent = MODEL.title;
   document.title = MODEL.title;
   const src = MODEL.source || {};
-  $("meta").textContent = [src.label, src.generated && `· ${src.generated}`].filter(Boolean).join(" ");
+  $("meta").textContent = [src.label, src.generated].filter(Boolean).join(" · ");
   $("summary").replaceWith(Object.assign(prose("p", "summary", MODEL.summary), { id: "summary" }));
   const extHeader = $("ext-header");
   call("header", extHeader);
@@ -1022,6 +1136,7 @@
   let initial = new URLSearchParams();
   try { initial = new URLSearchParams(location.hash.slice(1)); } catch { /* ignore */ }
   openView(initial.get("v") || MODEL.views[0].id, initial.get("n"));
+  if (MODEL.live) startLive(MODEL.live);
 })();
 </script>
 </body>

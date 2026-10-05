@@ -63,8 +63,8 @@ def build_model(model: dict, kinds: dict | None = None) -> dict:
     )
 
 
-def render(built: dict, kinds: dict | None = None) -> str:
-    return core.render(built, kinds or load_kinds(), TEMPLATE)
+def render(built: dict, kinds: dict | None = None, extension: dict | None = None) -> str:
+    return core.render(built, kinds or load_kinds(), TEMPLATE, extension)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -72,6 +72,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("model", type=Path, help="diagram model JSON")
     parser.add_argument("--out", type=Path, help="HTML file to write (default: the model path with .html)")
     parser.add_argument("--check", action="store_true", help="validate only; write nothing")
+    parser.add_argument("--css", type=Path, help="extension stylesheet to inject (see references/extending.md)")
+    parser.add_argument("--js", type=Path, help="extension script to inject (see references/extending.md)")
     args = parser.parse_args(argv)
 
     try:
@@ -83,7 +85,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     out = args.out or args.model.with_suffix(".html")
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(render(built), encoding="utf-8")
+    extension = {key: path.read_text(encoding="utf-8") for key, path in (("css", args.css), ("js", args.js)) if path}
+    try:
+        html = render(built, extension=extension)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    out.write_text(html, encoding="utf-8")
     print(f"wrote {out} ({core.counts(built)})")
     return 0
 
