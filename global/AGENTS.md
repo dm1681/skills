@@ -143,6 +143,30 @@ assume 32 GB. That clears every consumer VRAM gate for local generative models,
 so when recommending local AI tooling default to the highest-quality tier, not
 the low-VRAM tier.
 
+## Olympus (headless Linux host)
+
+When `hostname` prints `olympus`, you are on the owner's headless Linux server
+(RTX 4070 SUPER, 12 GB), not the Windows desktop above. Nobody sits at it:
+there is no browser and no desktop to open a URL in. The owner reaches it over
+the LAN from other machines.
+
+- Anything served for the owner to look at (dev servers, dashboards, label
+  tools, uvicorn, Flask, Vite, `http.server`) binds to `0.0.0.0` on an
+  explicitly chosen port, and the handoff gives the LAN URL
+  `http://192.168.0.52:<port>` (also `http://olympus.lan:<port>`). Never hand
+  the owner a `localhost` or `127.0.0.1` URL for this host.
+- A tool hard-wired to `127.0.0.1` is a defect here: add a host/port option
+  (flag or environment variable) instead of telling the owner to tunnel. Until
+  it is fixed, the stopgap is `ssh -L <port>:127.0.0.1:<port> olympus` from the
+  owner's machine; say so explicitly.
+- Binding to all interfaces exposes the service to the LAN. Keep it on the LAN
+  (no port forwarding, no public tunnels), stop it when the task ends, and
+  name it in the handoff when it can write private data or holds credentials.
+- Visual checks run headless: Playwright/Chromium screenshots to a file, never
+  "open the browser" or `xdg-open`.
+- Exception: services meant only for other processes on the host (the
+  Dispatcher dashboard on `127.0.0.1:8792`, local MCP servers) stay on loopback.
+
 ## GitHub identities and SSH remotes
 
 `~/.ssh/config` has **no `Host github.com` entry** — only per-account aliases
