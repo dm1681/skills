@@ -9,7 +9,6 @@ self-contained under [`skills/`](skills/).
 | Skill | Purpose |
 | --- | --- |
 | `cloudflare-artifacts` | Upload completed artifacts to the Cloudflare library and return verified public URLs and GitHub-ready Markdown links. |
-| `olympus-report-progress` | Report a repository checkout and append a session update to a running Olympus server, from any repository. |
 | `asd-ste100` | Write clear, explicit technical updates using Simplified Technical English principles. |
 | `ponytail` | Minimize unnecessary code by reusing existing code, the standard library, and native platform features. |
 | `space-domain-awareness` | Reduce observations, fit and propagate orbits, associate tracks, and triage maneuvers and anomalies with explicit uncertainty. |
@@ -91,33 +90,6 @@ python3 <skill-root>/scripts/check_toc.py path/to/AddOns/MyAddon
 It catches folder/TOC name mismatches, malformed Interface versions, missing
 listed files, and invalid SavedVariables names. It cannot tell you whether the
 Interface number is current — only the in-game build check can.
-
-## Olympus progress reporting
-
-`olympus-report-progress` reports where an agent session happened and what it
-did to a running [Olympus](https://github.com/dm1681/Olympus) server: it upserts
-the Repository Checkout, resolves the Olympus Project for that repository, and
-appends a short Session Update.
-
-The skill is **vendored** from the Olympus repository
-(`.claude/skills/olympus-report-progress/SKILL.md`, commit `252f467`) rather
-than authored here. Olympus skills are normally thin wrappers over versioned
-repo docs; this one is the documented exception, because the sessions that most
-need it run in *other* repositories where those docs do not exist, so it states
-its whole spec inline. That is also why its `SKILL.md` is far over this repo's
-150-line entrypoint budget and why `validate_repo.py` warns about it: nothing in
-it can be replaced by a link an off-repo agent cannot follow.
-
-Being a second copy, it drifts. A change to the Olympus Agent Interface — MCP
-tool names, `/api/agent/v1` request or response shapes, Session Update fields —
-lands upstream first; re-copy the file afterwards and update the commit named in
-the note at the top of `SKILL.md`.
-
-It needs a reachable Olympus server and nothing else. It prefers an MCP adapter
-registered as `olympus` and falls back to plain HTTP against
-`$OLYMPUS_BASE_URL/api/agent/v1/...`, so it is fully usable with no MCP server
-configured; this installer does not register one. Registering the adapter is a
-manual, optional step in your own agent configuration.
 
 ## Ponytail
 
@@ -214,10 +186,8 @@ and explains what to pass instead, rather than defaulting to every skill in
 every root.
 
 Skills that declare `global_default: false` in their `agents/openai.yaml` are
-labelled `repo-level only` on their tile. `wow-addon-dev` and
-`olympus-report-progress` are the two: a narrow, domain-specific skill, and
-one that does nothing without a server you may not run, should not reach
-every unrelated session.
+labelled `repo-level only` on their tile. `wow-addon-dev` is the one: a
+narrow, domain-specific skill should not reach every unrelated session.
 
 On Windows PowerShell:
 
@@ -572,7 +542,7 @@ The marker (`~/.dm1681-skills-profile`) makes every later install on that
 machine work-safe, with no flag to remember:
 
 - personal skills (`install.PERSONAL_SKILLS`: `cloudflare-artifacts`,
-  `olympus-report-progress`, `wow-addon-dev`) are skipped by a default install
+  `wow-addon-dev`) are skipped by a default install
   and refused when named, from the installer, the dashboard and `skills`;
   the dashboard and guided wizard hide them (and the global instructions) and
   say why;

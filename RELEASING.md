@@ -90,10 +90,11 @@ collection-wide freshness check. That is also why CI checks out with
 `fetch-depth: 0`: a shallow clone has no tags, and a check that cannot run is
 a check that always passes.
 
-`skills/olympus-report-progress` carries no `version:` and is exempt from
-this check entirely — it is vendored, pinned by the SHA256 of its upstream
-bytes rather than by a local version, and a version key there would hash as
-drift the skill never actually had (see `install.VENDORED_SKILLS`).
+Vendored skills (`ponytail`, `asd-ste100`) are exempt from this check
+entirely — each is pinned by the SHA256 of its upstream bytes rather than by a
+local version. A version key added here would hash as drift the skill never
+actually had; an upstream one is kept as-is and recorded in
+`VendoredSkill.upstream_version` (see `install.VENDORED_SKILLS`).
 
 ## Prepare a release
 

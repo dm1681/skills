@@ -31,12 +31,12 @@ VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 MANAGED_MARKER = "<!-- dm1681/skills: managed file -->"
 
 # Skills tied to the owner's personal systems: they publish to personal
-# infrastructure, report to a home server, or are hobby tooling. A machine
+# infrastructure or are hobby tooling. A machine
 # marked with the work profile (`--set-profile work`) never receives them, and
 # never receives the global instructions, which name personal accounts. This is
 # the one list; the guards below and the sync script's refusal all key off it
 # or off the profile marker.
-PERSONAL_SKILLS = frozenset({"cloudflare-artifacts", "olympus-report-progress", "wow-addon-dev"})
+PERSONAL_SKILLS = frozenset({"cloudflare-artifacts", "wow-addon-dev"})
 PROFILE_FILE = ".dm1681-skills-profile"
 PROFILE_ENV = "DM1681_SKILLS_PROFILE"
 PROFILES = ("work",)
@@ -187,13 +187,6 @@ class VendoredSkill(NamedTuple):
 
 
 VENDORED_SKILLS = (
-    VendoredSkill(
-        skill="olympus-report-progress",
-        entrypoint="SKILL.md",
-        upstream="dm1681/Olympus .claude/skills/olympus-report-progress/SKILL.md",
-        commit="252f467",
-        sha256="5a2a30d8056ab340cce4f6006050166cd0d9c99b5d69777264c246e7867d3732",
-    ),
     VendoredSkill(
         skill="ponytail",
         entrypoint="SKILL.md",

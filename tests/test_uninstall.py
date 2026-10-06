@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -204,6 +205,20 @@ class OrphansTests(unittest.TestCase):
         self.assertTrue((self.root / OTHER).is_dir())
         receipt = json.loads((self.root / install.RECEIPT_NAME).read_text())
         self.assertEqual(sorted([SKILL, OTHER]), sorted(receipt["skills"]))
+
+    def test_orphans_removes_a_link_install_left_dangling_by_the_retirement(self) -> None:
+        # A link-mode install points into the checkout, so retiring the skill
+        # there leaves a broken symlink behind: it must still count as present
+        # and be cleared, not skipped as "already gone" with its receipt entry kept.
+        dangling = self.root / "retired-skill"
+        os.symlink(self.directory / "checkout" / "retired-skill", dangling)
+        _receipt(self.root, ["retired-skill"])
+
+        removed = install.uninstall_many([self.root], orphans=True, emit=SILENT)
+
+        self.assertTrue(any(message.startswith("removed") for message in removed))
+        self.assertFalse(dangling.is_symlink())
+        self.assertEqual((), tuple(install.root_status(self.root).skills))
 
     def test_orphans_leaves_a_root_with_no_orphans_completely_alone(self) -> None:
         shutil.copytree(install.SOURCE_ROOT / SKILL, self.root / SKILL)

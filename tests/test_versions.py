@@ -109,7 +109,7 @@ class SkillVersionTests(unittest.TestCase):
 
 class SkillIsVendoredTests(unittest.TestCase):
     def test_the_vendored_skill_is_vendored(self) -> None:
-        self.assertTrue(install.skill_is_vendored("olympus-report-progress"))
+        self.assertTrue(install.skill_is_vendored("ponytail"))
 
     def test_a_first_party_skill_is_not_vendored(self) -> None:
         self.assertFalse(install.skill_is_vendored(SKILL))
@@ -159,8 +159,7 @@ class CollectionVersionCoverageTests(unittest.TestCase):
         real file: splice a `version:` line into the same bytes
         `vendored_status` hashes and show the digest no longer matches the
         pinned SHA256. This is *why* constraint 2 (never add `version:` to
-        skills/olympus-report-progress/SKILL.md) is load-bearing rather than
-        cosmetic."""
+        a vendored SKILL.md) is load-bearing rather than cosmetic."""
         entry = install.VENDORED_SKILLS[0]
         entrypoint = install.SOURCE_ROOT / entry.skill / entry.entrypoint
         upstream = install.vendored_upstream_text(entrypoint)

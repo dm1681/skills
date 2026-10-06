@@ -117,7 +117,7 @@ class VendoredDriftTests(unittest.TestCase):
     def test_the_hash_ignores_platform_line_endings(self) -> None:
         """A CRLF checkout must not read as drift.
 
-        The vendored file is 45,958 bytes on Windows and fewer on Linux for
+        A vendored file has more bytes on Windows than on Linux for
         identical content, so hashing raw bytes would report drift on one
         platform and nothing on the other.
         """
