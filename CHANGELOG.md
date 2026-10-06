@@ -5,6 +5,15 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+### Removed
+
+- **Breaking:** retired the vendored `olympus-report-progress` skill. The
+  Olympus app it reported to is deprecated and its server is shutting down.
+  Installing it by name now fails; the skill and its history stay recoverable
+  from Git. An existing install shows as `orphan` in `--status`; clear it with
+  `./install.sh --uninstall --orphans` (backed up first). The vendoring
+  mechanism stays for `ponytail` and `asd-ste100`.
+
 ## [11.0.0] - 2026-10-05
 
 - Diagram pages: fewer arrow crossings. Other arrows are soft obstacles to

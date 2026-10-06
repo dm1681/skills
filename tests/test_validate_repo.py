@@ -46,13 +46,11 @@ class SkillWarningTests(unittest.TestCase):
         self.assertEqual([], VALIDATOR.skill_warnings("demo", text))
 
 
-# `olympus-report-progress` is vendored from the Olympus repository, and the
-# sessions that load it run in unrelated repositories where Olympus's own docs
-# do not exist -- so it states its whole spec inline and cannot be split into
-# references/ the way the budget warning suggests. Splitting it would break the
-# case it exists for, and it is not ours to split: the copy here is pinned to
-# upstream by SHA256, so editing it is drift, not a fix.
-SELF_CONTAINED_BY_DESIGN = "olympus-report-progress"
+# `ponytail` is vendored from DietrichGebert/ponytail, and its upstream
+# description carries no "Use when" trigger phrasing. It is not ours to
+# rephrase: the copy here is pinned to upstream by SHA256, so editing it is
+# drift, not a fix.
+UPSTREAM_PHRASED_BY_DESIGN = "ponytail"
 
 
 class ShippedSkillTests(unittest.TestCase):
@@ -70,18 +68,17 @@ class ShippedSkillTests(unittest.TestCase):
     def test_the_vendored_skill_is_the_one_that_would_otherwise_warn(self) -> None:
         """Pins *why* the exemption is load-bearing rather than decorative.
 
-        If upstream ever trims the entrypoint under budget, this fails and the
+        If upstream ever adopts the trigger phrasing, this fails and the
         exemption can be reconsidered on purpose instead of quietly covering
         for a skill that no longer needs it.
         """
-        entrypoint = VALIDATOR.ROOT / "skills" / SELF_CONTAINED_BY_DESIGN / "SKILL.md"
+        entrypoint = VALIDATOR.ROOT / "skills" / UPSTREAM_PHRASED_BY_DESIGN / "SKILL.md"
         text = entrypoint.read_text(encoding="utf-8")
-        self.assertIn(SELF_CONTAINED_BY_DESIGN, VALIDATOR.VENDORED_SKILL_NAMES)
-        self.assertGreater(len(text.splitlines()), VALIDATOR.SKILL_LINE_BUDGET)
+        self.assertIn(UPSTREAM_PHRASED_BY_DESIGN, VALIDATOR.VENDORED_SKILL_NAMES)
         # Same text under a non-vendored name still warns: the silence is the
         # exemption's doing, not a hole in the budget check itself.
         self.assertTrue(VALIDATOR.skill_warnings("not-vendored", text))
-        self.assertEqual([], VALIDATOR.skill_warnings(SELF_CONTAINED_BY_DESIGN, text))
+        self.assertEqual([], VALIDATOR.skill_warnings(UPSTREAM_PHRASED_BY_DESIGN, text))
 
 
 if __name__ == "__main__":

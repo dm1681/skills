@@ -117,8 +117,8 @@ GLOBAL_SUMMARY = (
 GLOBAL_STATES = {"missing": AVAILABLE, "current": INSTALLED, "differs": OUTDATED}
 # Wide enough for the longest name any row renders. A name that overflows does
 # not wrap - it shoves the version column and the pill right, so one long skill
-# breaks the alignment of every row beside it. `olympus-report-progress` is 23
-# characters and already did. A test pins this against the real collection, so
+# breaks the alignment of every row beside it; a 23-character name already
+# did once. A test pins this against the real collection, so
 # a longer name added later fails there rather than silently skewing a column.
 NAME_WIDTH = 26
 
