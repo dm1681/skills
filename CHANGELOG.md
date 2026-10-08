@@ -5,6 +5,15 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+### Changed
+
+- `ponytail` re-synced to upstream v5.1.0 (commit
+  `9cc65d03aa2da1db7121b912d03596409ee340b8`). Upstream rewrote the core
+  skill: a "before you write" scope pass, a six-step smallest-complete-change
+  order replacing the seven-rung ladder, a closing line on what was skipped
+  or unchecked, and `shortcut:` replacing `ponytail:` as the code-comment
+  marker for known limits. LICENSE is unchanged; pin and hash updated.
+
 ## [11.0.0] - 2026-10-05
 
 - Diagram pages: fewer arrow crossings. Other arrows are soft obstacles to

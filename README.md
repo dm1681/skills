@@ -121,15 +121,16 @@ manual, optional step in your own agent configuration.
 
 ## Ponytail
 
-`ponytail` applies a simplicity ladder to coding tasks: question speculative
-requirements, reuse existing code, reach for the standard library and native
-platform features, then write the minimum implementation that works. It offers
+`ponytail` makes the smallest change that fully solves a coding task: map
+what the change must reach, skip speculative requirements, reuse existing code,
+reach for the standard library and native platform features, then write the
+minimum implementation that works. It offers
 `lite`, `full` (default), and `ultra` levels while preserving validation,
 security, accessibility, and explicitly requested behavior.
 
 The core instruction skill is vendored from
-[DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail/tree/356918eba965ee1eac64bd3a7f0dd02108350de5/skills/ponytail)
-at commit `356918eba965ee1eac64bd3a7f0dd02108350de5`, with its MIT license
+[DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail/tree/9cc65d03aa2da1db7121b912d03596409ee340b8/skills/ponytail)
+at commit `9cc65d03aa2da1db7121b912d03596409ee340b8`, with its MIT license
 included. Its upstream contents are pinned in `install.VENDORED_SKILLS` for
 offline drift detection; the provenance note in `SKILL.md` explains re-syncs.
 See [provenance, vetting, and validation](docs/ponytail.md) for the import scope

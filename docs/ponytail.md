@@ -7,10 +7,10 @@ or activate a plugin on the developer's machine.
 ## Pinned source
 
 - Publisher: [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail).
-- Commit: `356918eba965ee1eac64bd3a7f0dd02108350de5` (2026-09-07).
+- Commit: `9cc65d03aa2da1db7121b912d03596409ee340b8` (2026-10-08, tag `v5.1.0`).
 - Source: `skills/ponytail/SKILL.md`; that upstream directory contains only this file.
-- Normalized SHA256: `1316a2f3f95741d2300b116fe0c2d81ce4a9568656ed0a62643f54aaf09957f2`.
-- [MIT license at the same commit](https://github.com/DietrichGebert/ponytail/blob/356918eba965ee1eac64bd3a7f0dd02108350de5/LICENSE),
+- Normalized SHA256: `ba68ff26239c3c3b05b2a9a47ee0d9a6b93a69639a2555ec87a5d44bffaf2f0c`.
+- [MIT license at the same commit](https://github.com/DietrichGebert/ponytail/blob/9cc65d03aa2da1db7121b912d03596409ee340b8/LICENSE),
   copyright 2026 DietrichGebert, copied to `skills/ponytail/LICENSE`.
   Normalized license SHA256: `fb1bc6909ac3ef82d5c22106e32ef682b0cff66788fa915fb9b53b15c9d2f3ab`.
 
@@ -20,12 +20,15 @@ comment, following `install.VENDORED_SKILLS`. Hashes normalize line endings.
 skills, hooks, MCP server, benchmark scripts, or executables are included.
 Update upstream first, then re-sync the pinned files and hashes together.
 
-## Vetting snapshot (2026-09-23)
+## Vetting snapshot (2026-10-08)
 
-GitHub's repository API reported an unarchived repository, last pushed
-2026-09-14, with 145,088 stars. This indicates activity and adoption, not a
-security guarantee. The public repository advisories endpoint returned no
-published advisories. Issue search did reveal relevant reports:
+Refreshed for the v5.1.0 re-sync (previous pin `356918e`, 2026-09-07; the
+LICENSE is byte-identical across both). GitHub's repository API reported an
+unarchived MIT repository, last pushed 2026-10-08, with 158,261 stars. This
+indicates activity and adoption, not a security guarantee. The public
+repository advisories endpoint returned no published advisories. An issue
+search for security and malware reports opened since the previous snapshot
+found nothing new that touches the core skill. Earlier reports still apply:
 
 - [#735](https://github.com/DietrichGebert/ponytail/issues/735) reports malware in
   an unrelated lookalike fork. This import uses the named upstream and contains
@@ -37,10 +40,13 @@ published advisories. Issue search did reveal relevant reports:
   components are excluded; their reports were inspected, not reproduced here.
 - [#823](https://github.com/DietrichGebert/ponytail/issues/823) concerns the core
   skill's instruction to leave one runnable check even for security paths.
-  That wording is present in this pin. Project-required validation and explicit
-  task requirements still apply; the skill cannot waive them. This is a known
-  instruction limitation, not a runtime exploit. The import remains byte-pinned
-  rather than silently patching upstream instructions.
+  Upstream closed it on 2026-10-03 without merging the proposed fix (#849).
+  v5 drops the "ONE runnable check, no frameworks" cap but still asks only for
+  "one small test or an assert-based self-check" on money or security logic.
+  Project-required validation and explicit task requirements still apply; the
+  skill cannot waive them. This is a known instruction limitation, not a
+  runtime exploit. The import remains byte-pinned rather than silently
+  patching upstream instructions.
 
 Integration treated upstream instructions as data and did not activate Ponytail.
 
