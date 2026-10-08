@@ -15,7 +15,7 @@ import install
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "skills" / "ponytail"
-PIN = "356918eba965ee1eac64bd3a7f0dd02108350de5"
+PIN = "9cc65d03aa2da1db7121b912d03596409ee340b8"
 
 
 class PonytailTests(unittest.TestCase):
