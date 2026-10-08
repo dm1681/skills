@@ -198,8 +198,8 @@ VENDORED_SKILLS = (
         skill="ponytail",
         entrypoint="SKILL.md",
         upstream="DietrichGebert/ponytail skills/ponytail/SKILL.md",
-        commit="356918eba965ee1eac64bd3a7f0dd02108350de5",
-        sha256="1316a2f3f95741d2300b116fe0c2d81ce4a9568656ed0a62643f54aaf09957f2",
+        commit="9cc65d03aa2da1db7121b912d03596409ee340b8",
+        sha256="ba68ff26239c3c3b05b2a9a47ee0d9a6b93a69639a2555ec87a5d44bffaf2f0c",
     ),
     VendoredSkill(
         skill="asd-ste100",
