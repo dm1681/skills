@@ -77,6 +77,7 @@ class EntryPointTests(unittest.TestCase):
     def test_scripted_only_options_are_refused_by_the_dashboard(self) -> None:
         for flag in (
             "--graphify",
+            "--rea",
             "--matt-skills",
             "--matt-ref",
             "--pstack",
@@ -1587,7 +1588,9 @@ class WorkProfileDashboardTests(DashboardCase):
         )
 
     def expected_rows(self) -> list:
-        return [n for n in BUNDLED if n not in install.PERSONAL_SKILLS] + EXTERNAL
+        return [n for n in BUNDLED if n not in install.PERSONAL_SKILLS] + [
+            n for n in EXTERNAL if n not in install.PERSONAL_TOOLS
+        ]
 
     async def test_dashboard_hides_personal_skills_and_global_instructions(self) -> None:
         app = self.app()
@@ -1614,7 +1617,10 @@ class WorkProfileDashboardTests(DashboardCase):
                 if not row.selected:
                     row.focus()
                     await pilot.press("space")
-            self.assertFalse(app.selected & (install.PERSONAL_SKILLS | {GLOBAL}))
+            self.assertFalse(
+                app.selected
+                & (install.PERSONAL_SKILLS | install.PERSONAL_TOOLS | {GLOBAL})
+            )
 
 
 if __name__ == "__main__":

@@ -231,7 +231,7 @@ class ScriptTests(unittest.TestCase):
         one the user has to come back here to change."""
         body = SETUP.read_text(encoding="utf-8")
         self.assertIn("--cloud-bootstrap", body)
-        for decided in ("--skill", "--matt-skills", "--graphify", "AGENT_GLOBAL_INSTRUCTIONS"):
+        for decided in ("--skill", "--matt-skills", "--graphify", "--rea", "AGENT_GLOBAL_INSTRUCTIONS"):
             self.assertNotIn(decided, body)
 
 

@@ -240,7 +240,7 @@ directory.
 Passing installer options keeps the command non-interactive, which makes it
 safe for scripts and CI. Use `--interactive` to open the dashboard with preset
 options, or `--non-interactive` to explicitly suppress it. `--graphify`,
-`--matt-skills`, `--pstack`, and `--target` are scripted-only; combining them
+`--rea`, `--matt-skills`, `--pstack`, and `--target` are scripted-only; combining them
 with `--interactive` is an error rather than a silent no-op.
 
 ### Run it from any directory
@@ -322,6 +322,8 @@ Useful options:
                              install pstack from; defaults to the pinned
                              revision
 --graphify                   install/upgrade Graphify and register its skill
+--rea                        register REA (pinned npx rea-agents) and its skill;
+                             machine-wide, refused on the work profile
 --global-instructions [link|copy]
                              install global/AGENTS.md as user-level guidance
                              in ~/.agents/AGENTS.md and ~/.claude/CLAUDE.md
@@ -360,6 +362,9 @@ Examples:
 
 # Install the supported repository-owned Matt-derived subset.
 ./install.sh --agent all --curated-skills
+
+# Install this collection plus REA for every agent REA detects.
+./install.sh --agent all --rea
 
 # Install both into one project's Codex skill directory.
 ./install.sh --agent codex --scope project --project-dir /path/to/repo --graphify
@@ -468,6 +473,23 @@ Graphify's generic `agents` platform for the shared `.agents/skills` target and
 uses the explicit `codex`, `cursor`, `copilot`, or `claude` platform when that
 agent was selected. See [`docs/graphify.md`](docs/graphify.md) for the exact
 command matrix and boundaries.
+
+### Optional REA installation
+
+[REA](https://github.com/morluto/rea) gives agents reverse-engineering tools
+for shipped binaries, Electron apps, APKs, firmware and network captures. It
+is an External tools row in the dashboard, or `--rea` in a script. Both run
+REA's own setup at a pinned version:
+
+```sh
+npx -y rea-agents@<pinned> setup --all-detected --yes
+```
+
+That registers REA's MCP server and installs its `reverse-engineer-anything`
+skill. REA owns both, so the skill is not vendored here. `--rea` needs `npx`
+(Node.js 22.19+), is machine-wide only, never installs Hopper, and is refused on
+a work-profile machine. See [`docs/rea.md`](docs/rea.md) for the agent mapping
+and boundaries.
 
 ## Checking what needs updating
 
