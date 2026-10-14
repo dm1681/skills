@@ -71,7 +71,8 @@ For the Linear mapping example and delivery checks, see
 ## Optional tools
 
 For the optional Graphify package and its separate platform mapping, see
-[`graphify.md`](graphify.md).
+[`graphify.md`](graphify.md). For REA's MCP registration and its client
+mapping, see [`rea.md`](rea.md).
 
 For the repository-owned Matt-derived subset and session selection, see
 [`matt-pocock-skills.md`](matt-pocock-skills.md).
