@@ -112,8 +112,10 @@ wrappers) installs them locally, `skills_tui.py` is the interactive dashboard,
   machine has and not a warrant to delete what someone installed on one of
   them deliberately. See [`docs/plugin-sync.md`](docs/plugin-sync.md).
 - **The work profile is a one-way switch.** `install.PERSONAL_SKILLS` is the
-  only list of personal skills; `refuse_personal` guards `main` and
-  `install_one` (so the dashboard and `skills` are covered), and the global
+  only list of personal skills, and `ExternalTool.personal` (collected into
+  `PERSONAL_TOOLS`) is the only marker for personal external tools;
+  `refuse_personal` guards `main`, `install_one` and `install_rea` (so the
+  dashboard and `skills` are covered), and the global
   instructions and `--cloud-bootstrap` are refused outright. The sync script
   refuses rather than copying the list, so it cannot drift. Never add a flag
   that clears the marker: deleting it by hand is the deliberate escape.

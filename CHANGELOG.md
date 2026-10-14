@@ -5,6 +5,15 @@ All notable changes to this repository are documented here. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- `--rea` and a dashboard row for [REA](https://github.com/morluto/rea), an
+  external tool. It runs REA's own setup (`npx -y rea-agents@6.4.0 setup`),
+  which registers REA's MCP server and installs its `reverse-engineer-anything`
+  skill. The skill is not vendored because it changes with every release.
+  It is machine-wide only, never installs Hopper, and is refused on the work
+  profile through the new `ExternalTool.personal` flag. See `docs/rea.md`.
+
 ### Changed
 
 - `ponytail` re-synced to upstream v5.1.0 (commit

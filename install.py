@@ -285,6 +285,10 @@ class ExternalTool(NamedTuple):
     about its state is whether its marker directory is present. The marker is
     a separate field because an install may drop many skill directories under
     names that differ from the row's (matt-skills installs a dozen).
+
+    `personal` puts the tool behind the work profile alongside
+    `PERSONAL_SKILLS`: it is never a dashboard row there, and asking for it
+    by flag is refused rather than skipped.
     """
 
     name: str
@@ -292,6 +296,7 @@ class ExternalTool(NamedTuple):
     origin: str
     requires: str
     marker: str
+    personal: bool = False
 
 
 EXTERNAL_TOOLS = (
@@ -321,8 +326,19 @@ EXTERNAL_TOOLS = (
         requires="git",
         marker="setup-pstack",
     ),
+    # Reverse-engineering tooling stays off work machines: whether an
+    # employer permits it is a policy question this installer cannot answer.
+    ExternalTool(
+        name="rea",
+        summary="Reverse engineer binaries, apps, firmware and captures with REA",
+        origin="rea-agents on npm at a pinned version, registered by its own setup",
+        requires="npx",
+        marker="reverse-engineer-anything",
+        personal=True,
+    ),
 )
 EXTERNAL_NAMES = tuple(tool.name for tool in EXTERNAL_TOOLS)
+PERSONAL_TOOLS = frozenset(tool.name for tool in EXTERNAL_TOOLS if tool.personal)
 
 
 def external_tool(name: str) -> ExternalTool:
@@ -504,10 +520,10 @@ def refuse_personal(names: Iterable[str], home: Optional[Path] = None) -> None:
     """Raise when a work-profile machine is asked for a personal skill."""
     if active_profile(home) != "work":
         return
-    personal = sorted(set(names) & PERSONAL_SKILLS)
+    personal = sorted(set(names) & (PERSONAL_SKILLS | PERSONAL_TOOLS))
     if personal:
         raise InstallError(
-            f"{', '.join(personal)} {'is a personal skill' if len(personal) == 1 else 'are personal skills'} "
+            f"{', '.join(personal)} {'is a personal skill or tool' if len(personal) == 1 else 'are personal skills or tools'} "
             f"and this machine uses the work profile ({(home or Path.home()).expanduser() / PROFILE_FILE}); "
             "nothing was installed. Delete that file by hand if this is not a work machine."
         )
@@ -521,7 +537,7 @@ def set_profile(home: Path, profile: str, dry_run: bool) -> str:
     marker.write_text(profile + "\n", encoding="utf-8")
     return (
         f"marked this machine as {profile}: {marker}\n"
-        f"personal skills ({', '.join(sorted(PERSONAL_SKILLS))}), --global-instructions "
+        f"personal skills and tools ({', '.join(sorted(PERSONAL_SKILLS | PERSONAL_TOOLS))}), --global-instructions "
         "and the cloud sync script are now refused. Delete the file by hand to undo."
     )
 
@@ -721,6 +737,84 @@ def install_graphify(
         _run(command, cwd)
     for message in strip_appended_graphify(instruction_home, dry_run=False):
         emit(message)
+
+
+# REA's setup registers its MCP server and writes its own skill, so the skill
+# is never vendored here: it changes with every release and must describe the
+# tools of the server it ships with. Pinned so an install is reproducible;
+# bump it deliberately after reading the upstream changelog.
+REA_PACKAGE = "rea-agents"
+REA_VERSION = "6.4.0"
+# Our agent names -> REA's client IDs. `universal` and `agents` are absent on
+# purpose: they name a skill directory, and REA registers per agent.
+REA_CLIENTS = {
+    "claude": "claude_code",
+    "codex": "codex",
+    "cursor": "cursor",
+    "copilot": "copilot_cli",
+}
+
+
+def rea_setup_command(agents: Iterable[str], executable: str = "npx") -> list[str]:
+    """The one `rea setup` invocation that registers REA for `agents`.
+
+    `all` maps to `--all-detected` rather than to every client REA supports:
+    setup will write a registration for a client that is not installed, and
+    "all" here has always meant the agents on this machine. `--install-hopper`
+    is never passed; Hopper is a separate install the user approves by hand.
+    """
+    requested = list(agents) or list(DEFAULT_AGENTS)
+    unknown = sorted(set(requested) - KNOWN_AGENTS)
+    if unknown:
+        raise InstallError(f"unknown agent: {', '.join(unknown)}")
+    command = [executable, "-y", f"{REA_PACKAGE}@{REA_VERSION}", "setup"]
+    if "all" in requested:
+        return command + ["--all-detected", "--yes"]
+    unsupported = sorted(set(requested) - set(REA_CLIENTS))
+    if unsupported:
+        raise InstallError(
+            f"--rea registers an MCP server per agent, and {', '.join(unsupported)} "
+            "names a skill directory rather than an agent; pass --agent claude, "
+            "codex, cursor, copilot or all"
+        )
+    clients: list[str] = []
+    for value in requested:
+        if REA_CLIENTS[value] not in clients:
+            clients.append(REA_CLIENTS[value])
+    for client in clients:
+        command += ["--client", client]
+    return command + ["--yes"]
+
+
+def install_rea(
+    agents: Iterable[str],
+    scope: str,
+    dry_run: bool,
+    emit: Callable[[str], None] = print,
+    home: Optional[Path] = None,
+) -> None:
+    """Hand REA to its own setup, which registers the server and its skill.
+
+    Runs from the home directory because npx prefers a copy installed in the
+    current project, and a stray one there would replace the pinned version.
+    """
+    refuse_personal(["rea"], home)
+    if scope == "project":
+        raise InstallError(
+            "--rea registers machine-wide only (REA's setup has no project "
+            "scope); rerun with --scope user"
+        )
+    command = rea_setup_command(agents)
+    if dry_run:
+        emit(f"would run  {shlex.join(command)}")
+        return
+    npx = shutil.which("npx")
+    if not npx:
+        raise InstallError(
+            "--rea requires npx; install Node.js 22.19+, 24.11+ or 26+ and rerun"
+        )
+    _run([npx, *command[1:]], (home or Path.home()).expanduser())
+    emit("Next: restart the agents REA configured so its tools appear.")
 
 
 def upstream_fetch_commands(
@@ -3796,6 +3890,8 @@ def cloud_offer(home: Path, repo: Path = REPO_ROOT) -> Optional[str]:
         "Also available, neither bundled here nor installed by default:",
         f"  {'graphify'.ljust(width)}  external, needs uv",
         f"      {external_tool('graphify').summary}",
+        f"  {'rea'.ljust(width)}  external, needs npx",
+        f"      {external_tool('rea').summary}",
         f"  {'matt-skills'.ljust(width)}  external, needs git",
         f"      {external_tool('matt-skills').summary}. Its `code-review` shares",
         "      a name with Claude's built-in and replaces it for the session.",
@@ -3809,6 +3905,7 @@ def cloud_offer(home: Path, repo: Path = REPO_ROOT) -> Optional[str]:
         f"  this repo only         {installer} --skill NAME --scope project",
         f"  global instructions    {installer} --global-instructions",
         f"  graphify               {installer} --graphify",
+        f"  rea                    {installer} --rea",
         f"  matt-skills            {installer} --matt-skills",
         f"  pstack                 {installer} --pstack",
         f"  nothing, stop asking   touch {(home / CLOUD_DECLINED).as_posix()}",
@@ -3982,6 +4079,14 @@ def parser() -> argparse.ArgumentParser:
         "--graphify",
         action="store_true",
         help="install or upgrade graphifyy with uv and register its skill for selected agents",
+    )
+    result.add_argument(
+        "--rea",
+        action="store_true",
+        help=(
+            f"register REA ({REA_PACKAGE}@{REA_VERSION} via npx) and its skill for "
+            "selected agents; machine-wide only, refused on the work profile"
+        ),
     )
     matt_skills = result.add_mutually_exclusive_group()
     matt_skills.add_argument(
@@ -4172,6 +4277,7 @@ def open_dashboard(args: argparse.Namespace) -> int:
     """
     for option, flag in (
         (args.graphify, "--graphify"),
+        (args.rea, "--rea"),
         (args.matt_skills, "--matt-skills"),
         (args.matt_ref is not None, "--matt-ref"),
         (args.pstack, "--pstack"),
@@ -4285,6 +4391,8 @@ def execute_install(args: argparse.Namespace, selected: list[str]) -> None:
             print,
             home=args.home,
         )
+    if args.rea:
+        install_rea(args.agent, args.scope, args.dry_run, print, home=args.home)
     fetched = [
         collection
         for collection, wanted in (
@@ -4344,6 +4452,7 @@ def execute_uninstall(args: argparse.Namespace) -> int:
         (args.setup_path, "--setup-path"),
         (args.cloud_bootstrap, "--cloud-bootstrap"),
         (args.graphify, "--graphify"),
+        (args.rea, "--rea"),
         (bool(args.matt_skills), "--matt-skills"),
         (args.matt_ref is not None, "--matt-ref"),
         (bool(args.pstack), "--pstack"),
@@ -4568,6 +4677,23 @@ def main(argv: Optional[list[str]] = None) -> int:
             raise InstallError(
                 "--graphify cannot be combined with --target; use --scope instead"
             )
+        if args.rea:
+            refuse_personal(["rea"], args.home)
+            if args.target is not None:
+                raise InstallError(
+                    "--rea cannot be combined with --target; REA's setup chooses "
+                    "each agent's skill directory itself"
+                )
+            if args.scope == "project":
+                raise InstallError(
+                    "--rea registers machine-wide only (REA's setup has no "
+                    "project scope); rerun with --scope user"
+                )
+            rea_setup_command(args.agent)
+            if not args.dry_run and not shutil.which("npx"):
+                raise InstallError(
+                    "--rea requires npx; install Node.js 22.19+, 24.11+ or 26+ and rerun"
+                )
         if args.pstack and not args.dry_run:
             args.pstack_git = require_git("--pstack")
         if args.graphify and not args.dry_run:

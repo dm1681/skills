@@ -782,7 +782,11 @@ class SkillsApp(App):
         if self.work:
             self.bundled = [n for n in self.bundled if n not in install.PERSONAL_SKILLS]
         self.global_rows = [] if self.work else [GLOBAL]
-        self.external = list(install.EXTERNAL_NAMES)
+        self.external = [
+            tool.name
+            for tool in install.EXTERNAL_TOOLS
+            if not (self.work and tool.personal)
+        ]
         self.selected = set()
         # Marked for removal. Disjoint from `selected` by construction — the
         # row flips one off when it turns the other on.
@@ -1994,6 +1998,9 @@ class SkillsApp(App):
         return {
             "graphify": lambda: install.install_graphify(
                 self.agents, self.scope, self.project_dir, False, lambda _line: None
+            ),
+            "rea": lambda: install.install_rea(
+                self.agents, self.scope, False, lambda _line: None, home=self.home
             ),
             # force=True because an external row already present offers
             # "update", and install_one backs the old copy up before replacing.

@@ -85,6 +85,7 @@ What it offers:
 | one skill, this repo only | `install.sh --skill NAME --scope project` |
 | user-level instructions | `install.sh --global-instructions` |
 | graphify (needs `uv`) | `install.sh --graphify` |
+| REA (needs `npx`) | `install.sh --rea` |
 | Curated Matt-derived skills (local source) | `install.sh --curated-skills` |
 | pstack (needs `git`) | `install.sh --pstack` |
 
