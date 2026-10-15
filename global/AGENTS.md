@@ -29,6 +29,18 @@ policies there; use the onboarding example in `docs/linear-workflow.md` in the
 skills checkout. These conventions grant no new execution, messaging or
 publishing authorization. Use only actions authorized for the current task.
 
+### Naming issues
+
+Name a Linear issue by its slug, never a bare identifier, in everything a person
+reads: replies, comments, PR bodies, handoffs. The slug is the identifier plus 2
+to 5 kebab-case words saying what the issue does, e.g.
+`DIE-207-anchor-candidate-vs-baseline`. It is the first line of the issue
+description, `**Slug:** `<slug>``; use it exactly as written. An issue you create
+gets that line from you; in a project the Dispatcher maps, a tick adds one within
+minutes if you leave it out. An issue with no slug line yet is named by its
+identifier and a few words of its title. Lines that link a PR to its issue
+(`Linear issue: DIE-207`, `Closes DIE-207`) stay bare.
+
 ### Required status synchronization
 
 This applies to every authorized session working a mapped issue, including
