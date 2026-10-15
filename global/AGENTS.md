@@ -155,6 +155,11 @@ the LAN from other machines.
   explicitly chosen port, and the handoff gives the LAN URL
   `http://<lan-address>:<port>` (also `http://<lan-host>:<port>`). Never hand
   the owner a `localhost` or `127.0.0.1` URL for this host.
+- Pick that port from **8700–8799**. ufw allows that range from
+  `<lan-address>` with one rule, so a port inside it needs no firewall
+  change; check it is free first (`ss -ltn`). Do not add per-port `ufw allow`
+  rules. A port outside the range is unreachable from the LAN until the owner
+  opens it with sudo, so say so in the handoff if a tool forces one.
 - A tool hard-wired to `127.0.0.1` is a defect here: add a host/port option
   (flag or environment variable) instead of telling the owner to tunnel. Until
   it is fixed, the stopgap is `ssh -L <port>:127.0.0.1:<port> olympus` from the
