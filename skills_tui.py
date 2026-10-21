@@ -219,7 +219,7 @@ def skill_state(name: str, roots: Sequence[Path], mode: str = "copy") -> str:
     states = []
     for root in roots:
         destination = root / name
-        if not (destination.exists() or destination.is_symlink()):
+        if not install.occupied(destination):
             states.append(AVAILABLE)
         elif install.trees_equal(destination, source) and (
             install.destination_matches_mode(destination, mode)
@@ -248,7 +248,7 @@ def external_state(name: str, roots: Sequence[Path]) -> str:
         return AVAILABLE
     marker = install.external_tool(name).marker
     present = [
-        (root / marker).exists() or (root / marker).is_symlink() for root in roots
+        install.occupied(root / marker) for root in roots
     ]
     return INSTALLED if all(present) else AVAILABLE
 
@@ -332,7 +332,7 @@ def installed_versions(name: str, roots: Sequence[Path]) -> list:
     versions = []
     for root in roots:
         destination = root / name
-        if destination.exists() or destination.is_symlink():
+        if install.occupied(destination):
             versions.append(install.skill_version(destination))
     return versions
 
@@ -366,7 +366,7 @@ def version_field(name: str, state: str, roots: Sequence[Path]) -> tuple:
         moved = "%s → %s" % (version_text(stale[0]), version_text(checkout))
         return (version_column([(moved, REPLACE)]), False)
     unbumped = state == OUTDATED and any(
-        ((root / name).exists() or (root / name).is_symlink())
+        install.occupied(root / name)
         and not install.trees_equal(root / name, install.SOURCE_ROOT / name)
         for root in roots
     )
@@ -383,12 +383,12 @@ def removable(name: str, roots: Sequence[Path]) -> bool:
     state across the roots, so a skill installed in `~/.agents/skills` and
     absent from `~/.claude/skills` reads as `AVAILABLE` — and refusing `x`
     there would deny a removal for a live, agent-readable copy, which is the
-    half-installed case the uninstaller exists for. `exists() or is_symlink()`
+    half-installed case the uninstaller exists for. `install.occupied()`
     is the same presence test `install_one` and `uninstall_one` make, so what
     the key offers and what the removal does cannot disagree.
     """
     return any(
-        (root / name).exists() or (root / name).is_symlink() for root in roots
+        install.occupied(root / name) for root in roots
     )
 
 
@@ -1008,7 +1008,7 @@ class SkillsApp(App):
         entries = []
         for name in names:
             dirs = [
-                root / name for root in roots if (root / name / "SKILL.md").is_file()
+                root / name for root in roots if install.followed(root / name / "SKILL.md").is_file()
             ]
             if not dirs:
                 continue
@@ -1355,7 +1355,7 @@ class SkillsApp(App):
             lines.append("%s [b]%s[/]" % (pill(REMOVE_LABEL, BG, REPLACE), name))
             for root in roots:
                 destination = root / name
-                if not (destination.exists() or destination.is_symlink()):
+                if not install.occupied(destination):
                     lines.append("   [%s]= nothing at %s[/]" % (MUTE, destination))
                     continue
                 if not collection_owns(name, root):
@@ -1549,7 +1549,7 @@ class SkillsApp(App):
         roots = self.roots()
         row.visible_to_model = not row.visible_to_model
         for root in roots:
-            if (root / row.skill / "SKILL.md").is_file():
+            if install.followed(root / row.skill / "SKILL.md").is_file():
                 install.set_model_invocation(root / row.skill, row.visible_to_model)
         install.record_model_decisions(
             roots, {row.skill: "enabled" if row.visible_to_model else "hidden"}
