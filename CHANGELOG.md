@@ -23,6 +23,16 @@ All notable changes to this repository are documented here. Versions follow
   or unchecked, and `shortcut:` replacing `ponytail:` as the code-comment
   marker for known limits. LICENSE is unchanged; pin and hash updated.
 
+### Fixed
+
+- The dashboard and `skills status` no longer crash over SSH on Windows with
+  `WinError 448` ("untrusted mount point"). OpenSSH for Windows runs sessions
+  under Redirection Guard, which refuses to follow a symlink or junction that
+  a non-administrator created. Presence checks now read the link itself
+  (`install.occupied`), and every read of an installed skill's contents goes
+  to the link's target (`install.followed`). Agents started over SSH still
+  cannot load link-mode installs; use copy mode on machines you reach that way.
+
 ## [11.0.0] - 2026-10-05
 
 - Diagram pages: fewer arrow crossings. Other arrows are soft obstacles to

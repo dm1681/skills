@@ -18,8 +18,12 @@ import textwrap
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from stat import S_ISLNK
 from typing import Callable, Iterable, Mapping, NamedTuple, Optional, TextIO
 
+# A Windows junction's reparse tag. `stat` defines it only on Windows; the
+# value is fixed by the reparse-point format, so it is safe to spell out.
+IO_REPARSE_TAG_MOUNT_POINT = 0xA0000003
 
 REPO_ROOT = Path(__file__).resolve().parent
 SOURCE_ROOT = REPO_ROOT / "skills"
@@ -399,10 +403,13 @@ def frontmatter_value(entrypoint: Path, key: str) -> str:
     latin-1 byte or one file mode 000 in `~/.claude/skills` would otherwise
     take down every caller that merely wanted a version, the dashboard's first
     frame included. Same posture as `read_receipt`: unreadable is unknown.
+    A link-mode install is read at its target (`followed`), which is the
+    only way to read it at all over SSH on Windows.
     """
-    if not entrypoint.is_file():
-        return ""
     try:
+        entrypoint = followed(entrypoint)
+        if not entrypoint.is_file():
+            return ""
         text = entrypoint.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return ""
@@ -1510,7 +1517,7 @@ def ownership(root: Path, name: str) -> Ownership:
     return Ownership(
         name=name,
         root=root,
-        present=destination.exists() or destination.is_symlink(),
+        present=occupied(destination),
         by_receipt=name in receipt_skills(root),
         by_external=external,
         matches_checkout=trees_equal(destination, SOURCE_ROOT / name),
@@ -1773,7 +1780,7 @@ def install_curated(roots, force=False, dry_run=False, emit=print, allow_conflic
                 raise InstallError(f"{name} is owned by {external}; use --force to back up and migrate this name")
             destination = root / name
             current = destination_matches_mode(destination, mode) and trees_equal(destination, SOURCE_ROOT / name)
-            if (destination.exists() or destination.is_symlink()) and not force and not current:
+            if occupied(destination) and not force and not current:
                 raise InstallError(f"destination content or mode differs: {destination}; use --force to back up and replace it")
     for root in roots:
         names = set(receipt_skills(root)) | set(CURATED_SKILLS)
@@ -1827,8 +1834,7 @@ def hidden_skills(root: Path) -> list[str]:
     return sorted(
         path.name
         for path in root.iterdir()
-        if path.is_dir()
-        and (path / "SKILL.md").is_file()
+        if followed(path / "SKILL.md").is_file()
         and skill_is_model_hidden(path)
     )
 
@@ -1838,7 +1844,7 @@ def set_model_invocation(skill_dir: Path, visible: bool) -> bool:
 
     Returns whether the file changed, so a caller can report only real edits.
     """
-    entrypoint = skill_dir / "SKILL.md"
+    entrypoint = followed(skill_dir / "SKILL.md")
     if not entrypoint.is_file():
         raise InstallError(f"not a skill directory: {skill_dir}")
     lines = entrypoint.read_text(encoding="utf-8").splitlines()
@@ -1936,7 +1942,7 @@ def apply_model_decisions(root: Path, emit: Callable[[str], None] = print) -> No
     """Re-apply this root's recorded visibility choices to the files on disk."""
     for name, choice in sorted(read_model_decisions([root]).items()):
         skill_dir = root / name
-        if not (skill_dir / "SKILL.md").is_file():
+        if not followed(skill_dir / "SKILL.md").is_file():
             continue
         if set_model_invocation(skill_dir, visible=(choice == "enabled")):
             verb = "re-enabled for the model" if choice == "enabled" else "re-hidden"
@@ -1947,7 +1953,67 @@ def _same_file(left: Path, right: Path) -> bool:
     return filecmp.cmp(left, right, shallow=False)
 
 
+def occupied(path: Path) -> bool:
+    """Whether anything -- file, directory, or link, dangling or not -- is at `path`.
+
+    This was `path.exists() or path.is_symlink()` everywhere, which means the
+    same thing until a process runs under Windows Redirection Guard. OpenSSH
+    for Windows applies it to every session it starts, and there following a
+    link a non-administrator created raises WinError 448 instead of answering,
+    so `exists()` crashed before `is_symlink()` was reached. `lexists` reads
+    the link itself and never follows it.
+    """
+    return os.path.lexists(path)
+
+
+def _is_link(path: Path) -> bool:
+    """A symlink or a Windows junction, decided from `lstat` alone."""
+    try:
+        status = os.lstat(path)
+    except OSError:
+        return False
+    if S_ISLNK(status.st_mode):
+        return True
+    # `os.path.isjunction` is 3.12+; the reparse tag answers the same on 3.9.
+    return getattr(status, "st_reparse_tag", 0) == IO_REPARSE_TAG_MOUNT_POINT
+
+
+def followed(path: Path) -> Path:
+    """`path` with every link in it replaced by the directory it names.
+
+    The same answer as `resolve()`, reached without asking the OS to follow
+    anything. Under Redirection Guard (see `occupied`) the OS refuses to walk
+    through a link, so reading `~/.claude/skills/<name>/SKILL.md` fails when
+    `<name>` is a link-mode install -- yet `readlink` still says where the
+    link points, and the target is an ordinary directory anyone can read.
+    Anything that reads an installed skill's *contents* goes through this.
+    """
+    path = Path(os.path.abspath(path))
+    for _ in range(40):
+        parts = path.parts
+        for index in range(1, len(parts) + 1):
+            prefix = Path(*parts[:index])
+            if _is_link(prefix):
+                target = os.readlink(prefix)
+                if target.startswith("\\\\?\\"):
+                    target = target[4:]
+                path = Path(os.path.abspath(os.path.join(prefix.parent, target)), *parts[index:])
+                break
+        else:
+            return path
+    return path  # a link loop: let the caller's own read fail on it
+
+
 def trees_equal(left: Path, right: Path) -> bool:
+    try:
+        if left.is_symlink():
+            return followed(left) == followed(right)
+        return _trees_equal(followed(left), followed(right))
+    except OSError:
+        return False
+
+
+def _trees_equal(left: Path, right: Path) -> bool:
     if left.is_symlink():
         try:
             return left.resolve() == right.resolve()
@@ -1960,7 +2026,7 @@ def trees_equal(left: Path, right: Path) -> bool:
         return False
     if any(not _same_file(left / name, right / name) for name in comparison.common_files):
         return False
-    return all(trees_equal(left / name, right / name) for name in comparison.common_dirs)
+    return all(_trees_equal(left / name, right / name) for name in comparison.common_dirs)
 
 
 def destination_matches_mode(destination: Path, mode: str) -> bool:
@@ -1982,7 +2048,7 @@ def backup_path(root: Path, skill_name: str) -> Path:
     backup_root = root.parent / ".skills-backups" / root.name
     candidate = backup_root / f"{skill_name}-{timestamp}"
     suffix = 1
-    while candidate.exists() or candidate.is_symlink():
+    while occupied(candidate):
         candidate = backup_root / f"{skill_name}-{timestamp}-{suffix}"
         suffix += 1
     return candidate
@@ -2005,7 +2071,7 @@ def install_one(
     refuse_personal([source.name])
     destination = root / source.name
     takes_ownership = source.resolve() == (SOURCE_ROOT / source.name).resolve() and ownership(root, source.name).by_external is not None
-    exists = destination.exists() or destination.is_symlink()
+    exists = occupied(destination)
     current = exists and destination_matches_mode(destination, mode)
     if current and trees_equal(destination, source):
         if takes_ownership and not dry_run:
@@ -2043,7 +2109,7 @@ def install_one(
         os.replace(temporary, destination)
     except Exception:
         remove_path(temporary)
-        if backup is not None and not destination.exists() and not destination.is_symlink():
+        if backup is not None and not occupied(destination):
             shutil.move(str(backup), str(destination))
         raise
     if takes_ownership:
@@ -2101,7 +2167,7 @@ def uninstall_one(
       root", and the refusal message the caller sees invites `--force`.
     * An absent destination is a success. Removing nothing is a no-op, and a
       hook or a script that has to test for presence before every call would
-      race with itself. Presence is `exists() or is_symlink()` — the same test
+      race with itself. Presence is `occupied()` — the same test
       `install_one` makes — so a broken symlink counts as present rather than
       being silently left behind.
     * A destination that is both absent from the receipt and unequal to
@@ -2197,7 +2263,7 @@ def uninstall_names(
         stale = {
             name
             for name in externally_recorded(root)
-            if not (root / name).exists() and not (root / name).is_symlink()
+            if not occupied(root / name)
         }
         return sorted(
             {item.name for item in root_status(root).skills if item.state == ORPHAN}
@@ -2656,7 +2722,7 @@ def root_status(root: Path, bundled: Optional[Iterable[str]] = None) -> RootRepo
     for name in recorded:
         seen.add(name)
         destination = root / name
-        exists = destination.exists() or destination.is_symlink()
+        exists = occupied(destination)
         if name not in known:
             where = "still on disk" if exists else "already gone"
             reports.append(
@@ -2677,7 +2743,7 @@ def root_status(root: Path, bundled: Optional[Iterable[str]] = None) -> RootRepo
         if name in seen:
             continue
         destination = root / name
-        if not (destination.exists() or destination.is_symlink()):
+        if not occupied(destination):
             continue
         installed = _installed_report(name, destination, mode)
         if receipt is None:
@@ -2809,7 +2875,7 @@ def shadow_reports(roots: Iterable[Path]) -> list:
         # it and printed "nothing to update".
         for name in sorted(set(bundled) | claimed_names(root)):
             destination = root / name
-            if destination.exists() or destination.is_symlink():
+            if occupied(destination):
                 found.setdefault(name, []).append(destination)
     reports = []
     for name in sorted(found):
@@ -3735,7 +3801,7 @@ def global_instruction_files(home: Path, mode: str) -> list[tuple[Path, str]]:
 
 def _managed_file_state(path: Path, text: str) -> str:
     """'missing', 'current', or 'differs' for one managed instruction file."""
-    if not (path.exists() or path.is_symlink()):
+    if not occupied(path):
         return "missing"
     if path.is_file() and not path.is_symlink():
         try:
@@ -3763,7 +3829,7 @@ def global_instruction_status(home: Path, mode: str) -> list[tuple[Path, str]]:
 def _write_managed_file(path: Path, text: str, dry_run: bool) -> str:
     if _managed_file_state(path, text) == "current":
         return f"unchanged  {path}"
-    exists = path.exists() or path.is_symlink()
+    exists = occupied(path)
     backup = backup_path(path.parent, path.name) if exists else None
     if dry_run:
         detail = f"; backup {backup}" if backup else ""
@@ -3779,7 +3845,7 @@ def _write_managed_file(path: Path, text: str, dry_run: bool) -> str:
         os.replace(temporary, path)
     except Exception:
         remove_path(temporary)
-        if backup is not None and not path.exists() and not path.is_symlink():
+        if backup is not None and not occupied(path):
             shutil.move(str(backup), str(path))
         raise
     return f"installed  {path}" + (f" (backup: {backup})" if backup else "")
@@ -3832,7 +3898,7 @@ def cloud_installed_skills(home: Path) -> list[str]:
         name
         for name in available_skills()
         for root in roots
-        if (root / name).exists() or (root / name).is_symlink()
+        if occupied(root / name)
     }
     return sorted(present)
 
@@ -4521,7 +4587,7 @@ def manage_model_invocation(args: argparse.Namespace) -> int:
     for names, visible in ((args.enable_skill, True), (args.hide_skill, False)):
         for name in names:
             present = [
-                root / name for root in roots if (root / name / "SKILL.md").is_file()
+                root / name for root in roots if followed(root / name / "SKILL.md").is_file()
             ]
             if not present:
                 raise InstallError(
