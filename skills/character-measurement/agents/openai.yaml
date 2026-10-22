@@ -1,0 +1,4 @@
+interface:
+  display_name: "Character Measurement"
+  short_description: "Gate 3D character stages against reference art with calibrated scores"
+  default_prompt: "Use $character-measurement to write this character's config, check its calibration, run the stage gate on the mesh, and report each gate's verdict with the evidence folder."

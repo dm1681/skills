@@ -17,6 +17,7 @@ self-contained under [`skills/`](skills/).
 | `semantic-pr-review` | Explain a pull request as a source-verified semantic hierarchy and interactive flowchart. |
 | `viz-driven-dev` | Build the plot, overlay, or video that would show a feature's effect before implementing it, then regenerate it from real output. |
 | `wow-addon-dev` | Build, debug, package, and publish retail World of Warcraft addons under the taint and secret-value fences. |
+| `character-measurement` | Gate each stage of a 3D character against its reference art with calibrated silhouette, proportion, face and regression scores, and dispatch specialist agents at what fails. |
 
 ## Cloudflare artifact publishing
 
@@ -66,6 +67,24 @@ Strict verification compares every preview byte-for-byte with its Git blob and
 fails closed when a link, label, or editor target drifts from the analyzed
 snapshot. Editor deep links are emitted only for a worktree whose `HEAD` and
 source bytes match that snapshot exactly.
+
+## Character measurement
+
+`character-measurement` replaces eyeballing in a 3D character pipeline with
+gates: a locked render shot, a fixed command, a calibrated threshold and a
+verdict saved with its evidence, at each stage from generated mesh through
+cleanup, texture and rig. Its scripts solve the camera onto the reference's own
+silhouette, score silhouette, proportions and face likeness at full-body and
+head scale, and turn before/after renders into LPIPS heatmaps whose allowed
+change is the noise measured on that run.
+
+Thresholds come only from 2D reference art or a tolerance the user sets: the
+meshes are what the gates judge, so they never calibrate anything. A metric the
+art cannot calibrate stays report-only. The skill also defines specialist
+subagents (shape, face, repair, texture, colour, materials, hair, rig,
+expression, lighting, scene, verifier) and ships a Workflow template that loops
+gate, plan, fix and verify. Scripts run through `uv run`, which installs their
+dependencies, CUDA PyTorch included, from inline metadata; renders need Blender.
 
 ## WoW addon development
 
@@ -594,8 +613,9 @@ Mark a work machine once, before its first install:
 The marker (`~/.dm1681-skills-profile`) makes every later install on that
 machine work-safe, with no flag to remember:
 
-- personal skills (`install.PERSONAL_SKILLS`: `cloudflare-artifacts`,
-  `olympus-report-progress`, `wow-addon-dev`) are skipped by a default install
+- personal skills (`install.PERSONAL_SKILLS`: `character-measurement`,
+  `cloudflare-artifacts`, `olympus-report-progress`, `wow-addon-dev`) are
+  skipped by a default install
   and refused when named, from the installer, the dashboard and `skills`;
   the dashboard and guided wizard hide them (and the global instructions) and
   say why;
