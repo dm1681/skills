@@ -7,6 +7,17 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Added
 
+- New `character-measurement` skill (personal): gates each stage of a 3D
+  character (generated, cleanup, texture, rig) against its reference art.
+  `gate.py` renders locked shots through Blender (camera solved onto the
+  reference silhouette, head framing from body keypoints, 45-degree quarter
+  views), scores silhouette IoU, proportions, face likeness in tiers (full-body
+  scale and head scale) and before/after LPIPS regressions against a noise floor
+  measured per run, and records verdicts with evidence. Calibration uses 2D
+  reference art only; metrics it cannot separate stay report-only, and shape
+  pass lines are user tolerances. Includes specialist-agent briefs and a
+  Workflow template for the gate-plan-fix-verify loop.
+
 - `--rea` and a dashboard row for [REA](https://github.com/morluto/rea), an
   external tool. It runs REA's own setup (`npx -y rea-agents@6.4.0 setup`),
   which registers REA's MCP server and installs its `reverse-engineer-anything`

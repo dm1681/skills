@@ -40,7 +40,8 @@ MANAGED_MARKER = "<!-- dm1681/skills: managed file -->"
 # never receives the global instructions, which name personal accounts. This is
 # the one list; the guards below and the sync script's refusal all key off it
 # or off the profile marker.
-PERSONAL_SKILLS = frozenset({"cloudflare-artifacts", "olympus-report-progress", "wow-addon-dev"})
+PERSONAL_SKILLS = frozenset({"character-measurement", "cloudflare-artifacts", "olympus-report-progress",
+                             "wow-addon-dev"})
 PROFILE_FILE = ".dm1681-skills-profile"
 PROFILE_ENV = "DM1681_SKILLS_PROFILE"
 PROFILES = ("work",)

@@ -1,0 +1,21 @@
+{
+  "character": "ayla",
+  "front_axis": "-Y",
+  "evidence_root": "../measure-out",
+  "references": [
+    {"path": "refs/ayla_fullbody_front.png", "kind": "full_body_front"},
+    {"path": "refs/ayla_fullbody_back.png", "kind": "full_body_back"},
+    {"path": "refs/ayla_head_front.png", "kind": "head_front"},
+    {"path": "refs/ayla_head_45l.png", "kind": "head_q_left"},
+    {"path": "refs/ayla_smile.png", "kind": "expression"}
+  ],
+  "calibration": {
+    "images": ["refs/ayla_sheet_extra_front.png"],
+    "files": {
+      "tier4": "../calibration/semi-real-elves/tier4.json",
+      "tier1": "../calibration/semi-real-elves/tier1.json",
+      "shape": "../calibration/semi-real-elves/shape.json"
+    }
+  },
+  "render": {"lens": 85, "cam_height": 0.5}
+}
