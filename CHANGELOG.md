@@ -16,7 +16,10 @@ All notable changes to this repository are documented here. Versions follow
   measured per run, and records verdicts with evidence. Calibration uses 2D
   reference art only; metrics it cannot separate stay report-only, and shape
   pass lines are user tolerances. Includes specialist-agent briefs and a
-  Workflow template for the gate-plan-fix-verify loop.
+  Workflow template that runs one pipeline stage per run, with a face
+  tournament (parallel candidates, best kept only if it beats noise), parallel
+  waves for specialists with disjoint files, three-lens verification of a
+  pass, and per-agent model/effort overrides.
 
 - `--rea` and a dashboard row for [REA](https://github.com/morluto/rea), an
   external tool. It runs REA's own setup (`npx -y rea-agents@6.4.0 setup`),
