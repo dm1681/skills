@@ -33,10 +33,15 @@ Gates follow from the kinds listed. Every gate works from the single
 | `head_front_derived` | head front | face tier 3, labelled "vs derived ref" | head-scale check when no sheet exists |
 | `expression` | none | calibration only (same-character pairs) | sharper face thresholds |
 
-Each reference may override `view` and give a `matte` (a mask PNG) when the
-automatic matte is wrong. Pair a head reference with a view by **where the nose
-points**, not by its file name: in `q_left` and `left` the nose points
-image-left.
+Each reference may override `view`, give a `matte` (a mask PNG) when the
+automatic matte is wrong, and carry a free-text `note`. Pair a head reference
+with a view by **where the nose points**, not by its file name: in `q_left` and
+`left` the nose points image-left. Generated sheets mislabel views: a "45L" can
+face the same way as the "45R" beside it. Two references of one kind are fine;
+their gates are named apart by file.
+
+Calibration (`tier1`) is per face size: characters whose full-body faces differ by
+more than 20% each point at their own tier-1 file.
 
 ## A derived head reference
 

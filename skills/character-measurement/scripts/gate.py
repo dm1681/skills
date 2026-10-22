@@ -297,6 +297,8 @@ def run(a):
         derived = ref["kind"] == "head_front_derived"
         v, mv = face_verdict(r, cal.get("tier4"))
         name = f"face_tier{3 if derived else 4}_{ref['kind']}"
+        if name in gates:   # two references of one kind: keep both, named by file
+            name += "_" + Path(ref["path"]).stem
         gates[name] = {"verdict": v, "tier": 3 if derived else 4, "metrics": mv,
                        "label": "vs derived ref" if derived else "vs real head reference",
                        "evidence": save(d, name, r)}
@@ -405,8 +407,11 @@ def plan(config_path, blender_path=None):
              "structural (manual)", "regression (with --prev)"]
     if "full_body_back" in kinds:
         gates.append("silhouette_back")
-    gates += [f"face_tier{3 if r['kind'] == 'head_front_derived' else 4}_{r['kind']}"
-              for r in c["references"] if r["mode"] == "head"]
+    for r in c["references"]:
+        if r["mode"] != "head":
+            continue
+        name = f"face_tier{3 if r['kind'] == 'head_front_derived' else 4}_{r['kind']}"
+        gates.append(name + "_" + Path(r["path"]).stem if name in gates else name)
     out["gates"] = gates
 
     cal = load_cal(c)
