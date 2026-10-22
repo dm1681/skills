@@ -285,6 +285,13 @@ def diff(before_path, after_path, mask_path=None, map_path=None, bg=(0, 0, 0)):
 
 # ------------------------------------------------------------------------ calibrate
 
+def portable(path):
+    try:
+        return Path(path).resolve().relative_to(Path.cwd().resolve()).as_posix()
+    except ValueError:
+        return str(path)
+
+
 def calibrate(config_paths, tier=4, face_px=None):
     if tier == 1 and not face_px:
         raise SystemExit("--tier 1 needs --face-px: the face box size in the full-body reference "
@@ -352,8 +359,12 @@ def calibrate(config_paths, tier=4, face_px=None):
         return s
 
     chars = sorted({c for c, _ in items})
+    # Calibration files get committed: record paths relative to where the
+    # command ran (run it from the project root), never machine-local ones.
+    for p in pairs:
+        p["a"], p["b"] = portable(p["a"]), portable(p["b"])
     out = {"tier": tier, "face_px": face_px, "characters": chars,
-           "images_used": len(faces), "missing_inputs": [p for _, p in missing],
+           "images_used": len(faces), "missing_inputs": [portable(p) for _, p in missing],
            "pairs_scored": len(usable), "pairs_excluded_small_face": len(pairs) - len(usable),
            "identity_cosine": summary("identity_cosine", True),
            "dreamsim_face": summary("dreamsim_face", False),
