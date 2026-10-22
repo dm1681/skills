@@ -53,8 +53,11 @@ same-pose stage carries the shape forward. Rigs render in rest pose.
 
 ## Mesh files
 
-- **Front axis**: Tripo and TRELLIS GLBs usually face `-Y`; some exports face
-  `+X`. A wrong axis shows as a profile where the front should be.
+- **Front axis** belongs to the mesh file, not the character. Tripo API
+  exports face `+X` (their default `export_orientation`); Studio exports and
+  TRELLIS GLBs usually face `-Y`. Pass `gate.py run --front-axis=+X` when the
+  file differs from the config. A wrong axis shows as a profile where the front
+  should be.
 - **GLB over FBX.** A Tripo FBX may carry extension-less embedded textures that
   render white; convert or fix the texture paths first.
 - **.blend** files are opened directly. One saved in Edit or Texture Paint mode is

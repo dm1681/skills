@@ -19,7 +19,10 @@ All notable changes to this repository are documented here. Versions follow
   Workflow template that runs one pipeline stage per run, with a face
   tournament (parallel candidates, best kept only if it beats noise), parallel
   waves for specialists with disjoint files, three-lens verification of a
-  pass, and per-agent model/effort overrides.
+  pass, and per-agent model/effort overrides. `tripo.py` generates meshes
+  through the Tripo API (V3, image or multiview input), downloads them before
+  their URLs expire, and records provenance (input hashes, parameters, seeds,
+  credits); `gate.py run --front-axis` covers its X-forward exports.
 
 - `--rea` and a dashboard row for [REA](https://github.com/morluto/rea), an
   external tool. It runs REA's own setup (`npx -y rea-agents@6.4.0 setup`),
