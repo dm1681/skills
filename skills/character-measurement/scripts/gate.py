@@ -38,6 +38,9 @@
       T-pose rig from an A-pose reference). Silhouette and proportion gates turn
       NOT_RUN and the regression skips full-body shots; face gates still run.
 
+  --front-axis=AXIS (run): the direction this mesh faces, when it differs from
+      the config's (Tripo API exports face +X).
+
 Verdicts: PASS, FAIL, LOOKALIKE (face score between the closest impostor and the
 weakest true match), BORDERLINE (shape metric between the impostor fail line and
 the user's tolerance), REPORT (no calibration or tolerance for this metric --
@@ -206,8 +209,11 @@ def run(a):
     bl = find_blender(a.blender)
     gates, notes = {}, []
     rend = c["render"]
+    # The mesh file decides its facing, not the character: a Tripo API export is
+    # X-forward while a Studio export may face -Y, so a run can override the config.
+    front = a.front_axis or c["front_axis"]
     # "=" form: argparse would read a bare "-Y" as a flag
-    common = [f"--front-axis={c['front_axis']}", "--lens", str(rend["lens"]), "--tag", "r"]
+    common = [f"--front-axis={front}", "--lens", str(rend["lens"]), "--tag", "r"]
 
     # 1. Full-body shots solved onto each full-body reference's silhouette box.
     fb = {}
@@ -473,6 +479,8 @@ def main():
     r.add_argument("--target-mask", action="append")
     r.add_argument("--blender")
     r.add_argument("--pose-changed", action="store_true")
+    r.add_argument("--front-axis", choices=cfg.FRONT_AXES,
+                   help="override the config's front axis for this mesh; write it as --front-axis=+X")
     pl = sub.add_parser("plan")
     pl.add_argument("config")
     pl.add_argument("--blender")

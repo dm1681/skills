@@ -73,7 +73,7 @@ log(`tiers: gate ${JSON.stringify(tier('gate'))}, plan ${JSON.stringify(tier('pl
     `verify ${JSON.stringify(tier('verify'))}, face ${JSON.stringify(tier(null, 'face'))}`)
 
 const FACE_APPROACHES = [
-  'Regenerate: improve the generator input so the face matches the reference, regenerate, and keep the existing body',
+  'Regenerate: improve the generator input so the face matches the reference, regenerate (scripts/tripo.py for Tripo; it spends credits), and keep the existing body',
   'Deform: move the head mesh toward the reference proportions with landmark-guided deformation in headless Blender',
   'Rebuild the head: build or fit a head from the reference with a head-generation or headshot tool, then graft it onto the body',
 ]

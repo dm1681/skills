@@ -38,6 +38,16 @@ fails, and re-gates after each one.
 | **scene** | placement, scale and camera framing in the app | in-app captures | capture `diff`; user review |
 | **verifier** | nothing: read-only | all evidence of a claimed `PASS` | tries to refute the pass |
 
+Regeneration (shape, and the face tournament's regenerate candidate) can run
+headless through `scripts/tripo.py`: image-to-model from the full-body reference,
+or multiview-to-model when front plus side or back views exist. It writes the
+model with a provenance JSON (inputs and their hashes, parameters, seeds, credits)
+and spends credits, about 30-50 per textured model, so check `tripo.py balance`
+and keep candidate counts deliberate. Tripo moderates inputs at submission: a
+rejected image (code 2008) costs nothing, and revealing outfits can be rejected
+even when Tripo Studio once accepted the same character, so a regenerate
+candidate may need a more covered view or must hand that step to the user.
+
 The measurement rig and the app's look are separate on purpose: lighting and
 scene work happen in the app, and the gates keep judging the asset under the
 locked studio rig.

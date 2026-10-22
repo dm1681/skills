@@ -1,7 +1,7 @@
 ---
 name: character-measurement
 description: Measure a 3D character against its reference art and gate each pipeline stage on scores instead of eyeballing - silhouette, proportions, face likeness at full-body and head scale, colour, and before/after regressions, with evidence recorded per run. Use when building or improving a 3D character from reference images, judging whether a render matches its reference, checking a cleanup, texture or rig pass for regressions, or dispatching specialist agents (shape, face, colour, texture, materials, hair, rig, lighting, scene) on a character asset.
-version: 0.2.0
+version: 0.3.0
 ---
 
 # Character measurement
@@ -84,6 +84,7 @@ inline metadata. Every command prints one JSON object to stdout.
 | `measure.py` | `compare` (face tiers 1 and 4), `diff` (LPIPS heatmap), `calibrate` (face). |
 | `silhouette.py` | `matte`, `landmarks`, `compare` (IoU, boundary, proportions), `calibrate` (shape fail lines). |
 | `color.py` | Per-region colour difference (report-only). |
+| `tripo.py` | Generate a mesh through the Tripo API (image or multiview input) with its provenance; key from `TRIPO_API_KEY`. Spends credits. |
 
 Shots, views, the pose caveat and Blender setup:
 [references/rendering.md](references/rendering.md). Evidence layout and JSON
