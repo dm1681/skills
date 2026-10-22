@@ -86,19 +86,61 @@ Then re-gate:
 
 ## Running it as a Workflow
 
-`assets/workflow-template.js` runs the same loop deterministically: gate, plan,
-one specialist at a time, re-gate, verify a `PASS`, stop on escalation or after
-`maxRounds`. Use it only when the user has asked for a workflow or multi-agent
-orchestration. Every agent in it sets `model` and `effort` by how hard its job
-is: the gate runner is mechanical (smallest model, low effort); specialists get
-medium to high; the planner and verifier judge, so they get the strongest model at
-high effort. Pass:
+`assets/workflow-template.js` runs the loop deterministically. Use it only when the
+user has asked for a workflow or multi-agent orchestration.
+
+**One workflow per stage.** Each run gates one stage (`generated`, `cleanup`,
+`texture` or `rig`) and may dispatch only that stage's specialists:
+
+| Stage | Specialists |
+|---|---|
+| `generated` | shape, face, hair |
+| `cleanup` | repair, face, hair, texture |
+| `texture` | texture, colour, materials, hair |
+| `rig` | rig, expression |
+
+A fix that belongs to another stage makes the planner escalate rather than reach
+across. A `PASS` returns `next`, the arguments for the following stage's run. Read
+the evidence before starting it.
+
+**Inside a run:** gate, then plan, then fix, then re-gate, until the stage passes,
+escalates, or runs out of `maxRounds`.
+
+- **Face tournament.** A face task becomes several face specialists in parallel,
+  one per approach (regenerate, landmark-guided deformation, head rebuild by
+  default). Each writes its own candidate, each candidate is gated, and the best
+  is kept, but only if it beats the current face by more than both runs' noise.
+- **Waves.** The planner lists the exact files each task replaces. Tasks with
+  disjoint files run in parallel. Tasks that share a file keep the plan's order. A
+  wave with several outputs is combined by an assemble agent, then gated. A wave
+  whose regression fails is reverted.
+- **Three-lens verification.** A claimed `PASS` faces three verifiers in parallel,
+  each trying to refute it from one angle: shot integrity, regression
+  confinement, and a visual review. Any refutation, or a verifier that died,
+  blocks the pass and goes to the planner.
+
+Specialists write only under `workdir` and never modify an existing file, so
+parallel agents cannot collide.
+
+**Models and effort.** Defaults are tiered by difficulty:
+
+| Agent | Default |
+|---|---|
+| Gate runner | haiku, low |
+| Planner, verifiers | opus, high |
+| Assemble | sonnet, medium |
+| Specialists | per role (face, shape and rig high) |
+
+Overrides, most specific first: `tiers.roles.<role>` or `tiers.<agent>`, then
+`tiers.specialists`, then `override`, which sets every agent at once.
 
 ```json
 {"config": "...", "stage": "cleanup", "mesh": "...", "run": "attempt-3",
  "prev": "<previous stage folder or null>", "skillDir": "<this skill's folder>",
- "maxRounds": 3}
+ "maxRounds": 3, "candidates": 3,
+ "override": {"model": "opus", "effort": "max"},
+ "tiers": {"gate": {"model": "haiku", "effort": "low"}}}
 ```
 
-It stops and returns `NEEDS_HUMAN` when only the structural checklist is open:
-that tick is the user's.
+It returns `NEEDS_HUMAN` when only the structural checklist is open: that tick is
+the user's.
