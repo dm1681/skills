@@ -11,6 +11,11 @@ in-place edit is backed up and overwritten by the next install. This applies
 to agents asked to "always remember" something globally: the durable place for
 that instruction is the checkout, not the installed file.
 
+**This file is public.** `dm1681/skills` is a public repository, cloned on a
+work machine as well, so write here only what is safe to publish. Facts about
+particular machines, networks or addresses go in the private layer that the
+personal machines load from `~/.claude/rules/`.
+
 Install with `./install.sh --global-instructions` (see the repo `AGENTS.md`).
 `--global-instructions` (link, the default) writes pointer files that `@`-import
 this one, so edits take effect without reinstalling; `--global-instructions
@@ -148,42 +153,6 @@ hand; the maths is solid but rusty, so walk real derivations through step by
 step rather than watering them down. Prefers short, high-density material.
 Python is the default for personal projects. Timezone: **US Pacific**.
 
-## This machine
-
-Windows 11, **NVIDIA RTX 5090 / 32 GB VRAM**. Never ask about GPU or VRAM —
-assume 32 GB. That clears every consumer VRAM gate for local generative models,
-so when recommending local AI tooling default to the highest-quality tier, not
-the low-VRAM tier.
-
-## Olympus (headless Linux host)
-
-When `hostname` prints `olympus`, you are on the owner's headless Linux server
-(RTX 4070 SUPER, 12 GB), not the Windows desktop above. Nobody sits at it:
-there is no browser and no desktop to open a URL in. The owner reaches it over
-the LAN from other machines.
-
-- Anything served for the owner to look at (dev servers, dashboards, label
-  tools, uvicorn, Flask, Vite, `http.server`) binds to `0.0.0.0` on an
-  explicitly chosen port, and the handoff gives the LAN URL
-  `http://192.168.0.52:<port>` (also `http://olympus.lan:<port>`). Never hand
-  the owner a `localhost` or `127.0.0.1` URL for this host.
-- Pick that port from **8700–8799**. ufw allows that range from
-  `192.168.0.0/24` with one rule, so a port inside it needs no firewall
-  change; check it is free first (`ss -ltn`). Do not add per-port `ufw allow`
-  rules. A port outside the range is unreachable from the LAN until the owner
-  opens it with sudo, so say so in the handoff if a tool forces one.
-- A tool hard-wired to `127.0.0.1` is a defect here: add a host/port option
-  (flag or environment variable) instead of telling the owner to tunnel. Until
-  it is fixed, the stopgap is `ssh -L <port>:127.0.0.1:<port> olympus` from the
-  owner's machine; say so explicitly.
-- Binding to all interfaces exposes the service to the LAN. Keep it on the LAN
-  (no port forwarding, no public tunnels), stop it when the task ends, and
-  name it in the handoff when it can write private data or holds credentials.
-- Visual checks run headless: Playwright/Chromium screenshots to a file, never
-  "open the browser" or `xdg-open`.
-- Exception: services meant only for other processes on the host (the
-  Dispatcher dashboard on `127.0.0.1:8792`, local MCP servers) stay on loopback.
-
 ## GitHub identities and SSH remotes
 
 `~/.ssh/config` has **no `Host github.com` entry** — only per-account aliases
@@ -208,30 +177,6 @@ deanonymize the repo.
   which looks like a missing repo but is an auth problem. `gh auth switch --user
   thrway1681`, then switch back so other projects aren't silently broken. Git
   push/pull is unaffected either way (it uses the SSH alias, not gh's token).
-
-## ssh-keyscan is broken here
-
-`C:\WINDOWS\System32\OpenSSH\` ships OpenSSH_for_Windows 9.5p2 (LibreSSL 3.8.2);
-`ssh-keyscan` dies with `choose_kex: unsupported KEX method
-sntrup761x25519-sha512@openssh.com`. `ssh.exe` itself works because
-`C:\ProgramData\ssh\ssh_config` pins a working `KexAlgorithms` list.
-
-To add a host key, use real ssh, not ssh-keyscan:
-- Verify without writing: `ssh -v -o BatchMode=yes -o StrictHostKeyChecking=yes -T <host>`,
-  grep `Server host key:` and compare against the published fingerprint.
-- Write: `ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes -T <host>`,
-  confirm with `ssh-keygen -F <host> -l`, roll back with `ssh-keygen -R <host>`.
-- GitHub's published Ed25519 fingerprint:
-  `SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU`.
-
-## Networking
-
-The user uses **NordVPN**, not Tailscale. Do not suggest, configure, or document
-Tailscale (`tailscale serve`, tailnet URLs, `*.ts.net`) unless asked for by name
-— a 100.x address being visible on the machine is not consent to build on it.
-For remote access to anything self-hosted, default to the LAN address and ask
-what they want for off-LAN access. When they can't reach a LAN host from their
-phone, check whether the VPN client's "allow LAN / local network" setting is off.
 
 ## Third-party packages
 
