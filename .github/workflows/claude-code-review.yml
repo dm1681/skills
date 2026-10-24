@@ -11,6 +11,28 @@ name: Claude Code Review
 # progress, so a stale review is never posted. Claude posts as the Claude
 # GitHub App; the implementer triages each comment with a Disposition
 # (CONTEXT.md).
+#
+# The review session is headless: it ends when Claude's turn ends, so a check
+# Claude starts in the background is abandoned with no review posted. For a
+# repository whose documented check takes more than a minute or two, set the
+# Actions variable REVIEW_CHECK to that check's command
+# (gh variable set REVIEW_CHECK -R <owner>/<repo> --body '<command>'): the
+# "Run the repository's check" step runs it before Claude starts and Claude
+# reads its log instead of rerunning it. Leave the variable unset when the
+# check is quick. The file itself stays identical to the Dispatcher's template,
+# which the onboarding sweep keeps every repository on.
+#
+# A run that ends without a claude[bot] review on the head commit fails, so
+# the Dispatcher shows it instead of a green check with no verdict.
+#
+# The job runs on the repository's own self-hosted runner on olympus, not on a
+# GitHub-hosted machine, so reviews keep running whatever the hosted-minutes
+# budget is. A repository-level runner serves one repository: register one per
+# repository with `python3 runners.py <owner>/<repo>` from the agent-orchestrator
+# checkout on olympus (until then the job waits in the queue). Untrusted code
+# never reaches the runner: a pull_request run needs a branch of this
+# repository (the `if` below), and a manual run checks the PR out only after
+# the step that refuses forks.
 on:
   pull_request:
     types: [opened, reopened, ready_for_review, synchronize]
@@ -36,7 +58,7 @@ jobs:
        contains(fromJSON('["olympus-dispatcher[bot]","olympus-reviewer[bot]"]'), github.actor)))
     env:
       PR: ${{ github.event.inputs.pr || github.event.pull_request.number }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, olympus]
     permissions:
       contents: read
       pull-requests: read
@@ -80,6 +102,28 @@ jobs:
           esac
           gh pr checkout "$PR"
 
+      - name: Record the pull request head
+        id: head
+        env:
+          EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
+        # a pull_request run checks out the merge commit, not the head
+        run: echo "sha=${EVENT_HEAD:-$(git rev-parse HEAD)}" >> "$GITHUB_OUTPUT"
+
+      - name: Run the repository's check (set REVIEW_CHECK for a slow check)
+        if: vars.REVIEW_CHECK != ''
+        timeout-minutes: 30
+        env:
+          REVIEW_CHECK: ${{ vars.REVIEW_CHECK }}
+          LOG: ${{ runner.temp }}/review-check.log
+        # A failing or timed-out check (exit status 124) is a finding for the review,
+        # not a reason to skip it: the limit is enforced here, below the step's
+        # timeout-minutes backstop, so the status is recorded and Claude still runs.
+        run: |
+          status=0
+          timeout 25m bash -c "$REVIEW_CHECK" > "$LOG" 2>&1 || status=$?
+          echo "exit status $status" >> "$LOG"
+          tail -n 20 "$LOG"
+
       - name: Run Claude Code Review
         id: claude-review
         uses: anthropics/claude-code-action@v1
@@ -91,6 +135,13 @@ jobs:
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ env.PR }}
+            HEAD SHA: ${{ steps.head.outputs.sha }}
+            CHECK LOG: ${{ vars.REVIEW_CHECK != '' && format('{0}/review-check.log', runner.temp) || 'none' }}
+
+            This session is headless: it ends when your turn ends, and nothing
+            resumes it. Never start a command in the background to wait for it,
+            and never end your turn before your review is posted; a run that ends
+            without a review fails.
 
             Review this pull request as an independent reviewer. The PR body carries
             the Linear issue's acceptance criteria (copied in at claim; this runner has
@@ -99,8 +150,11 @@ jobs:
             decisions. Judge the diff against those, not against general taste.
 
             Do:
-            - Run the check the repository documents (AGENTS.md, CLAUDE.md or README)
-              and report the result. If your tools cannot run it (only
+            - If CHECK LOG above is a path, the workflow already ran the repository's
+              check before this session: read that log with `cat` (its last line is the
+              exit status), report the result, and do not rerun the check. Otherwise run
+              the check the repository documents (AGENTS.md, CLAUDE.md or README) in the
+              foreground and report the result. If your tools cannot run it (only
               `python3 -m unittest` is allowed here), say so instead of guessing.
             - Check every acceptance criterion in the linked issue; name any that is
               not met or not tested.
@@ -110,14 +164,14 @@ jobs:
               an earlier review of yours requested changes and every point in it is now
               addressed (the Dispatcher's Human Review gate waits for your approval);
               otherwise post ONE review that carries its inline comments, anchored
-              to the lines they concern. Use the Write tool to create /tmp/review.json as
-              {"commit_id": "<head sha>", "event": "COMMENT" | "REQUEST_CHANGES" | "APPROVE",
+              to the lines they concern. Use the Write tool to create ${{ runner.temp }}/review.json as
+              {"commit_id": "<HEAD SHA above>", "event": "COMMENT" | "REQUEST_CHANGES" | "APPROVE",
               "body": "...", "comments": [{"path": ..., "line": N, "side": "RIGHT",
               "body": "..."}]} and post it with
-              `gh api repos/${{ github.repository }}/pulls/${{ env.PR }}/reviews --input /tmp/review.json`.
+              `gh api repos/${{ github.repository }}/pulls/${{ env.PR }}/reviews --input ${{ runner.temp }}/review.json`.
               If that call fails, use the Write tool to write the same text, with the
-              inline comments folded in, to /tmp/review.md and post it with
-              `gh pr review ${{ env.PR }} --approve|--request-changes|--comment --body-file /tmp/review.md`,
+              inline comments folded in, to ${{ runner.temp }}/review.md and post it with
+              `gh pr review ${{ env.PR }} --approve|--request-changes|--comment --body-file ${{ runner.temp }}/review.md`,
               choosing the flag that matches your verdict (file:line references
               in the text). Never downgrade an approval or a change request to a plain
               comment: the PR's review decision is what the Dispatcher reads. A review
@@ -126,12 +180,45 @@ jobs:
               must start with the endpoint path (`gh api repos/... [flags]`), never
               with flags such as `-X`, `--method` or `--paginate` before it.
               Each comment states the evidence (what you ran or read) and a concrete fix.
+            - Each inline comment, and each finding in the review body, starts with its
+              severity tag: [P0] (data loss, a security hole, a broken main), [P1] (wrong
+              behaviour, an unmet acceptance criterion, a failing check: must be fixed
+              before merge), [P2] (a real defect that can wait for a follow-up issue) or
+              [P3] (minor). An untagged finding counts as P1. Only P0/P1 findings hold the
+              Dispatcher's Human Review gate; it files each P2/P3 finding as a follow-up.
 
             Do not: restate the diff, comment on style, or post a comment for anything
             you did not verify. An empty review ("no findings") is a valid outcome; say
             so in one sentence.
 
+          # Claude Code matches a Bash allow-rule's prefix on whole words, so
+          # `gh api repos/<repo>/pulls/:*` never matches `pulls/<n>/reviews`: each
+          # path this PR's review reads or posts is named with the number in it.
+          # Do not shorten them back to one `pulls/` rule.
           claude_args: |
             --model opus
             --effort high
-            --allowed-tools "Write,Read,Glob,Grep,Bash(python3 -m unittest:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh api repos/${{ github.repository }}/pulls/:*),Bash(gh api graphql:*),Bash(git log:*),Bash(git rev-parse:*),Bash(git diff:*),Bash(cat:*),Bash(mktemp:*)"
+            --allowed-tools "Write,Read,Glob,Grep,Bash(python3 -m unittest:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh api repos/${{ github.repository }}/pulls/${{ env.PR }}:*),Bash(gh api repos/${{ github.repository }}/pulls/${{ env.PR }}/reviews:*),Bash(gh api repos/${{ github.repository }}/pulls/${{ env.PR }}/comments:*),Bash(gh api repos/${{ github.repository }}/pulls/${{ env.PR }}/files:*),Bash(gh api graphql:*),Bash(git log:*),Bash(git rev-parse:*),Bash(git diff:*),Bash(cat:*),Bash(mktemp:*)"
+
+      # claude-code-action skips itself, with a successful step and no
+      # `conclusion` output, on a PR that edits this workflow file: its token
+      # exchange requires the file to match the default branch. Such a run cannot
+      # post a review, so it is explained rather than failed.
+      - name: Explain a skipped review (this PR changes the review workflow)
+        if: steps.claude-review.outputs.conclusion == ''
+        run: echo "::notice::claude-code-action skipped this PR because it changes .github/workflows/claude-code-review.yml; the review runs once that change is on the default branch."
+
+      - name: Require a claude[bot] review on the head commit
+        if: steps.claude-review.outputs.conclusion != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.head.outputs.sha }}
+        run: |
+          reviews=$(gh api "repos/${{ github.repository }}/pulls/$PR/reviews" --paginate \
+            --jq "[.[] | select(.user.login == \"claude[bot]\" and .commit_id == \"$HEAD_SHA\")] | length" \
+            | awk '{ n += $1 } END { print n + 0 }')
+          if [ "$reviews" -eq 0 ]; then
+            echo "::error::Claude ended without posting a review on $HEAD_SHA; rerun the review (gh workflow run claude-code-review.yml -f pr=$PR)."
+            exit 1
+          fi
+          echo "claude[bot] posted $reviews review(s) on $HEAD_SHA"
