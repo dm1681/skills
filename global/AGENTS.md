@@ -52,6 +52,17 @@ slug (`PR 212 (DIE-485-session-limit-band-policy)`); one with no issue gets a
 few words of its title (`PR 216 (pause automatic releases)`). A bare number
 tells the reader nothing about what the work does.
 
+### Self-contained writing
+
+Write every PR description, issue description, comment, handoff and report so
+the owner understands it without opening anything else. A link is welcome as
+a source, never as the explanation. Never lean on a bare internal reference:
+"criterion 3", "decision 46", "ADR 0008", "P2", "rule 7", "F3" or "step 2a"
+means nothing to a reader who has not memorised the list it points into. Say
+what the reference says, in a few words, and keep the number only as a
+pointer beside it: "the owner decides new dependencies (criterion 2)", not
+"meets criterion 2".
+
 ### Required status synchronization
 
 This applies to every authorized session working a mapped issue, including
