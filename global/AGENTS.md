@@ -46,6 +46,12 @@ minutes if you leave it out. An issue with no slug line yet is named by its
 identifier and a few words of its title. Lines that link a PR to its issue
 (`Linear issue: DIE-207`, `Closes DIE-207`) stay bare.
 
+Every mention counts: a list, a "next" line, a range of issues, a repeat of one
+named a line earlier. A pull request is named the same way, with its issue's
+slug (`PR 212 (DIE-485-session-limit-band-policy)`); one with no issue gets a
+few words of its title (`PR 216 (pause automatic releases)`). A bare number
+tells the reader nothing about what the work does.
+
 ### Required status synchronization
 
 This applies to every authorized session working a mapped issue, including
