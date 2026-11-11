@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import importlib.util
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -71,6 +72,10 @@ def _commit(repository: Path, message: str) -> str:
         "user.email=fixture@example.invalid",
         "-c",
         "user.name=Fixture",
+        # A developer's global hooks would otherwise run in the fixture; a
+        # graphify post-commit hook leaves a lock that blocks temp cleanup.
+        "-c",
+        f"core.hooksPath={os.devnull}",
         "commit",
         "-m",
         message,
