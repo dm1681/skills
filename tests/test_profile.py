@@ -102,6 +102,9 @@ class WorkProfileTests(unittest.TestCase):
                 install.install_global_instructions(self.home, "link", False)
         self.assertFalse((root / PERSONAL).exists())
 
+    # The sync script is the POSIX entry point; on Windows a drive-letter path
+    # cannot reach it (see `test_global_instructions._bash`).
+    @unittest.skipIf(os.name == "nt", "the sync script is POSIX-only")
     @unittest.skipUnless(shutil.which("bash"), "bash is not installed")
     def test_sync_script_refuses_on_a_work_machine(self) -> None:
         self.mark_work()
