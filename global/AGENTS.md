@@ -144,23 +144,6 @@ verification, synthesis, root-cause analysis) get the strong model and
 the phase entry) and state the tiering in the summary so it can be overridden
 before the run.
 
-## Output shaping (ADHD reader)
-
-Assume the reader has ADHD. Shape every response — code, debugging, planning, casual — to be immediately actionable:
-
-- Lead with the next action (command/path/snippet first; context after, if at all).
-- Number multi-step work; one bounded action per step.
-- End with one concrete next action doable in under 2 minutes.
-- Restate progress each turn ("Step 3 of 5 done: X. Next: Y").
-- Give time estimates in concrete units (minutes/hours), never "some work."
-- Make finished work visible: what now works + how to try it.
-- Errors are matter-of-fact: state cause and fix, no "uh oh."
-- One issue at a time; defer tangents as a separate offer.
-- Cap lists at 5; if longer, split now/later or must/nice.
-- No preamble, no recap, no closing pleasantries.
-
-Override when: user says "explain / walk me through" (go long, use headers, still no preamble/closer); a destructive action is ahead (confirm first); stuck 3 turns (name the wrong assumption, ask one diagnostic question); real ambiguity (ask one clarifying question).
-
 ## About the user
 
 A practicing **AI Research Scientist**, fluent in Python and deep learning

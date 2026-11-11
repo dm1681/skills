@@ -64,7 +64,7 @@ class GlobalInstructionSourceTests(unittest.TestCase):
     def test_repository_agents_guide_does_not_duplicate_them(self) -> None:
         """The repo guide covers this repo; global/AGENTS.md owns machine-wide rules."""
         guide = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
-        self.assertNotIn("Output shaping (ADHD reader)", guide)
+        self.assertNotIn("### Self-contained writing", guide)
         self.assertIn("global/AGENTS.md", guide)
 
 
@@ -85,14 +85,14 @@ class InstallerGlobalInstructionTests(unittest.TestCase):
             self.assertIn(f"@{SOURCE.resolve()}", shared.read_text(encoding="utf-8"))
             self.assertIn(f"@{shared}", claude.read_text(encoding="utf-8"))
             # The pointer references the text instead of duplicating it.
-            self.assertNotIn("Output shaping", shared.read_text(encoding="utf-8"))
+            self.assertNotIn("Self-contained writing", shared.read_text(encoding="utf-8"))
 
     def test_copy_mode_inlines_the_text_for_agents_without_imports(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
             run_installer("--home", str(home), "--global-instructions", "copy")
             shared = (home / ".agents" / "AGENTS.md").read_text(encoding="utf-8")
-            self.assertIn("Output shaping (ADHD reader)", shared)
+            self.assertIn("### Self-contained writing", shared)
             claude = (home / ".claude" / "CLAUDE.md").read_text(encoding="utf-8")
             self.assertIn(f"@{home / '.agents' / 'AGENTS.md'}", claude)
 
