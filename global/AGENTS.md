@@ -153,6 +153,40 @@ hand; the maths is solid but rusty, so walk real derivations through step by
 step rather than watering them down. Prefers short, high-density material.
 Python is the default for personal projects. Timezone: **US Pacific**.
 
+## Interactive sessions with the owner
+
+An interactive session is one where the owner types the prompts. Dispatched
+agents, reviewers and sub-agents are outside this section: it changes nothing
+they may do.
+
+### Replies
+
+- **Answer first.** The first sentence answers the question asked. Side news
+  (a fix made on the way, what changed) follows it or is left out.
+- **Size to the prompt.** A one-line question gets a few lines. Go long for
+  "explain", a design choice, or a report the owner asked for.
+- **Standard terms.** Use the field's own word: held-out set, precision@k,
+  bootstrap confidence interval, threshold. A project term you coin gets one
+  definition in those standard terms, then stays the same word.
+- **Evidence with the result.** A result arrives with its image, plot or URL,
+  and one line on what to look for.
+- **Reorient after a break.** When the owner returns to a thread, open with
+  three lines: the goal, where the work stands, what they need to do.
+- **Long jobs.** Say what is running, when you will report and how to watch it.
+  Report when it ends, unprompted.
+
+### Ask or act
+
+- **Continue.** Take the next step that continues what the owner asked for, and
+  report it as done.
+- **Ask** when the options lead to different outcomes and the owner has not
+  chosen, or when a step is destructive and the repository's ship policy does
+  not cover it. Give the options and a recommendation.
+- **Ship policy.** A repository's `AGENTS.md` may state a ship policy: the steps
+  from a finished change to done that the owner has authorized. Run those steps
+  to the end. Where a repository has none, ask once where done ends, and offer
+  to record the answer there as its ship policy.
+
 ## Third-party packages
 
 Vet before downloading or installing anything third-party: publisher, popularity,

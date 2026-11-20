@@ -22,6 +22,18 @@ wrappers) installs them locally, `skills_tui.py` is the interactive dashboard,
   `node --test tests/cloudflare_artifacts.test.mjs` with Node.js 22 or newer.
 - Run the required checks before committing. See `RELEASING.md` for versioning and releases.
 
+## Ship policy (interactive sessions)
+
+The owner authorized these steps on 2026-11-19 for sessions where the owner
+types the prompts. Once the required checks pass, run them to the end:
+
+1. Commit to `main` and push.
+2. Reinstall on this machine when the change touches an installed skill or the
+   installer.
+3. Remove the branches and worktrees the change left behind.
+
+Cutting a release stays with the owner.
+
 ## Gotchas the file tree does not show
 
 - Every install path goes through `install.install_one`, so the rules live in
