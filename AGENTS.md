@@ -165,7 +165,8 @@ that do not resolve `@path` imports and for machines without this checkout.
 The `SessionStart` sync script honours `AGENT_GLOBAL_INSTRUCTIONS=link|copy`,
 forcing `copy` when it installs from a temporary clone.
 
-The shared Linear workflow lives in `global/AGENTS.md`; see
+The shared Linear rules live in `global/AGENTS.md` and their procedure in the
+`linear-tracking` skill; see
 [`docs/linear-workflow.md`](docs/linear-workflow.md) for per-repo mapping and
 [`docs/agent-support.md`](docs/agent-support.md#global-instruction-loading) for
 instruction-loading gaps. Skill discovery alone does not load global guidance.

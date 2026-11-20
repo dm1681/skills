@@ -232,8 +232,9 @@ writes pointers back to the local checkout; `copy` writes the text itself. A
 cloned source is always installed as `copy`, since the clone is a temporary
 directory that a pointer would outlive.
 
-This also carries the [shared Linear workflow](linear-workflow.md) once the
-source contains it. The hook/bootstrap offer and skill installation alone do
+This also carries the rules of the [shared Linear workflow](linear-workflow.md)
+once the source contains them; its procedure arrives with the skills, as
+`linear-tracking`. The hook/bootstrap offer and skill installation alone do
 not opt in to global instructions. File delivery does not configure an agent's
 instruction discovery or authenticate Linear; use the
 [loading matrix](agent-support.md#global-instruction-loading) and verify both

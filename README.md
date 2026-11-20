@@ -16,6 +16,7 @@ self-contained under [`skills/`](skills/).
 | `flow-diagrams` | Draw flowcharts and block diagrams as interactive Catppuccin pages whose shapes, colours and arrows carry defined meanings. |
 | `semantic-pr-review` | Explain a pull request as a source-verified semantic hierarchy and interactive flowchart. |
 | `viz-driven-dev` | Build the plot, overlay, or video that would show a feature's effect before implementing it, then regenerate it from real output. |
+| `linear-tracking` | Track work on a Linear issue: resume, claim, state and label changes, handoff, and the fallback when Linear cannot be reached. |
 | `wow-addon-dev` | Build, debug, package, and publish retail World of Warcraft addons under the taint and secret-value fences. |
 | `character-measurement` | Gate each stage of a 3D character against its reference art with calibrated silhouette, proportion, face and regression scores, and dispatch specialist agents at what fails. |
 
@@ -409,7 +410,8 @@ checkout stays the single source of truth:
 Whatever is already at those paths is moved into `~/.skills-backups/` first,
 and reruns that would not change anything report `unchanged`.
 
-The shared instructions include [Linear work tracking and handoffs](docs/linear-workflow.md).
+The shared instructions include [Linear work tracking and handoffs](docs/linear-workflow.md);
+their procedure is the `linear-tracking` skill, installed like any other skill.
 Add a verified project mapping to each target repo's `AGENTS.md`; connector
 access is configured separately per device. Check the
 [instruction-loading matrix](docs/agent-support.md#global-instruction-loading):

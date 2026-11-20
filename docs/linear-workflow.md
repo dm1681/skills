@@ -2,7 +2,8 @@
 
 ## Status updates are part of execution
 
-Follow [required status synchronization](../global/AGENTS.md#required-status-synchronization)
+Follow the status rules in [`global/AGENTS.md`](../global/AGENTS.md#tracking-an-issue)
+and their full form in the [`linear-tracking` skill](../skills/linear-tracking/SKILL.md#status-synchronization)
 at pickup, meaningful checkpoints and before ending substantive issue work.
 Update the actual issue state field and fetch it again; a comment is not a state
 transition. Record failures honestly if the update cannot be verified.
@@ -18,10 +19,15 @@ an uncommitted instruction edit is active on other devices or remote clones.
 
 ## Interactive tracking
 
-The shared workflow lives in [`global/AGENTS.md`](../global/AGENTS.md#linear-work-tracking-and-handoffs).
-Load that source through the existing global-instruction installation; keep
-only the repository mapping and exceptions in each project's `AGENTS.md`.
-There is no additional skill or connector installation in this workflow.
+The shared workflow has two parts. [`global/AGENTS.md`](../global/AGENTS.md#linear-work-tracking-and-handoffs)
+holds what every session loads: how to name an issue, self-contained writing
+and three status rules. The [`linear-tracking` skill](../skills/linear-tracking/SKILL.md)
+holds the procedure (resume, claim, track, handoff), the state and label table
+and the fallback when Linear cannot be reached; a session loads it when it
+works a tracked issue. Deliver the first through the global-instruction
+installation and the second by installing the skill. Keep only the repository
+mapping and exceptions in each project's `AGENTS.md`. Neither part installs or
+authenticates a connector.
 
 ## Onboard a repository
 
@@ -36,8 +42,10 @@ with verified values; a similarly named project is not proof of a mapping.
 - Project: <verified Linear project URL> (ID: <verified project ID>)
 - Team: <verified team name/key>
 - Shared workflow: follow the Linear section of the installed global agent
-  instructions. If it is absent, read <path to skills checkout>/global/AGENTS.md
-  before starting tracked work.
+  instructions and the `linear-tracking` skill. If either is absent, read
+  <path to skills checkout>/global/AGENTS.md and
+  <path to skills checkout>/skills/linear-tracking/SKILL.md before starting
+  tracked work.
 - Pending handoffs: docs/handoffs/<issue-or-task>.md
 - Workflow exceptions: none; use the shared state/label conventions.
 - Technical policies and acceptance checks: see <repo-specific document>.
@@ -63,7 +71,7 @@ uncommitted work on one device is not available to another device's clone.
 Check the [agent loading matrix](agent-support.md#global-instruction-loading)
 before claiming delivery. Inspect the written file or resolve its pointer to
 the canonical source, then verify in a fresh agent session that the Linear
-section is loaded. Verify connector access independently with a read of the
+section is loaded and that the `linear-tracking` skill is listed. Verify connector access independently with a read of the
 mapped project. File installation, instruction loading and Linear access are
 three separate checks; record the devices/environments actually checked.
 
