@@ -150,7 +150,7 @@ A practicing **AI Research Scientist**, fluent in Python and deep learning
 (PyTorch, training, supervised learning). Pitch ML/AI at research-practitioner
 level — don't re-teach fundamentals. Visuals and intuition first, then build by
 hand; the maths is solid but rusty, so walk real derivations through step by
-step rather than watering them down. Prefers short, high-density material.
+step rather than watering them down. Prefers concise material.
 Python is the default for personal projects. Timezone: **US Pacific**.
 
 ## Interactive sessions with the owner
@@ -187,11 +187,25 @@ they may do.
   to the end. Where a repository has none, ask once where done ends, and offer
   to record the answer there as its ship policy.
 
+### Splitting the work
+
+- **Subagents.** Send a sweep to a subagent when its raw output is not needed
+  afterwards: a search across files, a long log, a test run, a set of pages to
+  read. Choose `model` and `effort` for each one, as "Workflows" says: a small
+  model at `low` or `medium` for search and extraction, the strong model at
+  `high` for review and judgment.
+- **Threads.** A thread serves one issue. When the owner starts a different
+  issue in a thread that has already compacted, record the handoff for the
+  finished one, suggest a new thread for the next in one line, and continue
+  here.
+
 ## Third-party packages
 
-Vet before downloading or installing anything third-party: publisher, popularity,
-maintenance status, known CVEs, license — and surface that to the user. Prefer
-the standard library or already-installed tooling to keep the dependency surface
-small. When a package is genuinely needed, present the vetting summary and
+Vet a third-party package or tool before adding it to a project or machine:
+publisher, popularity, maintenance status, known CVEs, license — and surface
+that to the user. Installing what a repository already declares in its lockfile
+or manifest (`uv sync --locked`, `npm ci`) is routine setup and needs no
+vetting. Prefer the standard library or already-installed tooling to keep the
+dependency surface small. When a package is genuinely needed, present the vetting summary and
 install it deliberately (on demand, into an isolated env) rather than
 auto-installing.
