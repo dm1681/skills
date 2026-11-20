@@ -7,6 +7,14 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Added
 
+- New `linear-tracking` skill: the procedure for work tracked in Linear
+  (status synchronization, resume, claim, track, handoff, the state and label
+  table, and the fallback when Linear cannot be reached). The text moved out of
+  `global/AGENTS.md`, where every session loaded all of it; the global file
+  keeps how to name an issue, self-contained writing, three status rules and a
+  pointer to the skill. A machine that installs the global instructions should
+  install this skill too.
+
 - New `character-measurement` skill (personal): gates each stage of a 3D
   character (generated, cleanup, texture, rig) against its reference art.
   `gate.py` renders locked shots through Blender (camera solved onto the
