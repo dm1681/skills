@@ -133,8 +133,9 @@ they may do.
   (a page, a figure, a report, a pipeline), open with a mockup or diagram of
   the intended result, labelled as a mockup and filled with realistic values.
   Then build it: the owner redirects from the sketch.
-- **Reorient after a break.** When the owner returns to a thread, open with
-  the goal, where the work stands and what they need to do.
+- **Reorient after a break.** When the owner returns to a thread, open by
+  answering where are we, how did we get here and where are we going, at the
+  altitude of the goal (the `orient` skill), then what they need to do.
 - **Long jobs.** Say what is running, when you will report and how to watch it.
   Report when it ends, unprompted.
 
