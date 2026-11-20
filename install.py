@@ -2006,12 +2006,23 @@ def followed(path: Path) -> Path:
 
 
 def trees_equal(left: Path, right: Path) -> bool:
+    """`checked_trees_equal`, with an unreadable tree answering "differs".
+
+    Right for the install and the dashboard, which must keep going. Wrong for
+    the status report: there an unreadable root is its own finding, and
+    calling it drifted hides it.
+    """
     try:
-        if left.is_symlink():
-            return followed(left) == followed(right)
-        return _trees_equal(followed(left), followed(right))
+        return checked_trees_equal(left, right)
     except OSError:
         return False
+
+
+def checked_trees_equal(left: Path, right: Path) -> bool:
+    """Whether two trees hold the same bytes; a read that fails raises."""
+    if left.is_symlink():
+        return followed(left) == followed(right)
+    return _trees_equal(followed(left), followed(right))
 
 
 def _trees_equal(left: Path, right: Path) -> bool:
@@ -2772,7 +2783,9 @@ def root_status(root: Path, bundled: Optional[Iterable[str]] = None) -> RootRepo
 def _installed_report(name: str, destination: Path, mode: Optional[str]) -> SkillReport:
     """Compare one installed destination against `skills/<name>`."""
     source = SOURCE_ROOT / name
-    if not trees_equal(destination, source):
+    # Raises on a tree it cannot read, so `machine_status` reports the root as
+    # unreadable instead of calling the skill drifted.
+    if not checked_trees_equal(destination, source):
         return SkillReport(name, DRIFTED, "installed copy differs from this checkout")
     if mode and not destination_matches_mode(destination, mode):
         actual = "link" if destination.is_symlink() else "copy"
