@@ -163,7 +163,7 @@ they may do.
 
 - **Answer first.** The first sentence answers the question asked. Side news
   (a fix made on the way, what changed) follows it or is left out.
-- **Size to the prompt.** A one-line question gets a few lines. Go long for
+- **Size to the prompt.** A short question gets a short answer. Go long for
   "explain", a design choice, or a report the owner asked for.
 - **Standard terms.** Use the field's own word: held-out set, precision@k,
   bootstrap confidence interval, threshold. A project term you coin gets one
@@ -171,7 +171,7 @@ they may do.
 - **Evidence with the result.** A result arrives with its image, plot or URL,
   and one line on what to look for.
 - **Reorient after a break.** When the owner returns to a thread, open with
-  three lines: the goal, where the work stands, what they need to do.
+  the goal, where the work stands and what they need to do.
 - **Long jobs.** Say what is running, when you will report and how to watch it.
   Report when it ends, unprompted.
 
