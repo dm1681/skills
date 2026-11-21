@@ -51,23 +51,33 @@ def _fake_run(stdout="", returncode=0, stderr="", write=None):
 class SeatCommandTests(unittest.TestCase):
     def test_each_seat_pins_the_requested_model_and_effort(self):
         out = Path("answer.md")
-        codex = council.SEATS["codex"].command(out)
+        codex = council.SEATS["codex"].command(out, Path("repo"))
         self.assertIn("gpt-6.2-astra", codex)
         self.assertIn('model_reasoning_effort="xhigh"', codex)
-        claude = council.SEATS["claude"].command(out)
+        claude = council.SEATS["claude"].command(out, Path("repo"))
         self.assertEqual(claude[claude.index("--model") + 1], "claude-fable-5-2")
         self.assertEqual(claude[claude.index("--effort") + 1], "xhigh")
-        gemini = council.SEATS["gemini"].command(out)
+        gemini = council.SEATS["gemini"].command(out, Path("repo"))
         self.assertEqual(gemini[gemini.index("-m") + 1], "council-neon")
 
     def test_every_seat_is_read_only(self):
         out = Path("answer.md")
-        codex = council.SEATS["codex"].command(out)
+        codex = council.SEATS["codex"].command(out, Path("repo"))
         self.assertEqual(codex[codex.index("-s") + 1], "read-only")
-        claude = council.SEATS["claude"].command(out)
+        claude = council.SEATS["claude"].command(out, Path("repo"))
         self.assertEqual(claude[claude.index("--tools") + 1], "Read,Grep,Glob")
-        gemini = council.SEATS["gemini"].command(out)
+        gemini = council.SEATS["gemini"].command(out, Path("repo"))
         self.assertEqual(gemini[gemini.index("--approval-mode") + 1], "plan")
+
+    def test_repository_is_granted_for_reading_without_its_config(self):
+        repo = Path("repo")
+        claude = council.SEATS["claude"].command(Path("a.md"), repo)
+        self.assertEqual(claude[claude.index("--add-dir") + 1], str(repo))
+        self.assertEqual(claude[claude.index("--setting-sources") + 1], "user")
+        settings = Path(claude[claude.index("--settings") + 1])
+        self.assertTrue(json.loads(settings.read_text(encoding="utf-8"))["disableAllHooks"])
+        gemini = council.SEATS["gemini"].command(Path("a.md"), repo)
+        self.assertEqual(gemini[gemini.index("--include-directories") + 1], str(repo))
 
     def test_gemini_alias_is_neon_at_xhigh(self):
         settings = json.loads(council.GEMINI_SETTINGS.read_text(encoding="utf-8"))
@@ -98,6 +108,18 @@ class ConsultTests(unittest.TestCase):
         self.assertEqual(kwargs["input"], "the brief")
         self.assertEqual(kwargs["env"][council.SEAT_MARKER], "1")
         self.assertIn("GEMINI_CLI_SYSTEM_SETTINGS_PATH", kwargs["env"])
+
+    def test_seats_never_run_inside_the_repository(self):
+        # A working directory is where each CLI loads project config and hooks.
+        repo = self.tmp / "repo"
+        (repo / ".claude").mkdir(parents=True)
+        for name in council.SEATS:
+            run = _fake_run(stdout="ok", write="ok" if name == "codex" else None)
+            council.consult(council.SEATS[name], "b", repo, self.tmp, 5, run, self.which)
+            workdir = Path(run.calls[0][1]["cwd"])
+            self.assertNotEqual(workdir.resolve(), repo.resolve())
+            self.assertNotIn(repo.resolve(), workdir.resolve().parents)
+            self.assertEqual(list(workdir.iterdir()), [])
 
     def test_codex_answer_is_read_from_its_last_message_file(self):
         run = _fake_run(stdout="noisy progress log", write="## Recommendation\nWait.\n")

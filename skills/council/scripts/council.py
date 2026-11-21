@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Convene a council: put one brief to Codex, Claude and Gemini in parallel.
 
-Every seat runs read-only, in the directory given by --cwd, with the brief on
-stdin. Each answer is written to <out>/<seat>.md and the combined report is
+Every seat runs read-only with the brief on stdin. Its working directory is a
+new, empty folder, and the repository given by --cwd is granted read access
+separately. A working directory is where each CLI loads project settings,
+hooks, MCP servers and folder trust from, and the repository under review is
+not trusted to supply any of them. Each answer is written to <out>/<seat>.md and the combined report is
 printed to stdout. Standard library only.
 
 Exit codes: 0 when at least one seat answered, 1 when none did, 2 for a usage
@@ -24,6 +27,7 @@ from typing import Callable
 
 HERE = Path(__file__).resolve().parent
 GEMINI_SETTINGS = HERE / "gemini-settings.json"
+CLAUDE_SETTINGS = HERE / "claude-settings.json"
 
 # Set in every seat's environment. A seat that tries to convene its own
 # council is refused, so a council never recurses into nine more calls.
@@ -40,8 +44,8 @@ You hold one seat on an advisory council. Another coding agent is asking
 several independent models for advice before it acts. You are advising, not
 acting.
 
-- Work read-only. You may read files in the working directory to check a
-  claim; change nothing, run nothing that writes, and convene no council or
+- Work read-only. The repository under discussion is at {repo}; you may
+  read its files to check a claim; change nothing, run nothing that writes, and convene no council or
   subagent of your own.
 - Answer from your own judgement. Where the brief states a belief or a
   preferred option, test it rather than adopt it. Disagreement is useful.
@@ -74,13 +78,14 @@ class Seat:
     name: str
     binary: str
     label: str
-    command: Callable[[Path], list[str]]
+    command: Callable[[Path, Path], list[str]]  # (answer file, repository)
     env: dict[str, str]
     # Codex writes its final message to a file; the others answer on stdout.
     answer_file: bool = False
 
 
-def _codex(out_file: Path) -> list[str]:
+def _codex(out_file: Path, _repo: Path) -> list[str]:
+    # The read-only sandbox can read the repository from any working directory.
     return [
         "exec",
         "-m", CODEX_MODEL,
@@ -93,9 +98,13 @@ def _codex(out_file: Path) -> list[str]:
     ]
 
 
-def _claude(_: Path) -> list[str]:
+def _claude(_: Path, repo: Path) -> list[str]:
     return [
         "-p",
+        "--add-dir", str(repo),
+        # User settings only, with every hook off: nothing in the repo runs.
+        "--setting-sources", "user",
+        "--settings", str(CLAUDE_SETTINGS),
         "--model", CLAUDE_MODEL,
         "--effort", CLAUDE_EFFORT,
         "--tools", "Read,Grep,Glob",
@@ -105,11 +114,14 @@ def _claude(_: Path) -> list[str]:
     ]
 
 
-def _gemini(_: Path) -> list[str]:
+def _gemini(_: Path, repo: Path) -> list[str]:
     return [
         "-m", GEMINI_ALIAS,
         "--approval-mode", "plan",
+        # Trusts only the empty working folder. The repository is included for
+        # reading, which loads none of its settings, hooks or MCP servers.
         "--skip-trust",
+        "--include-directories", str(repo),
         "-o", "text",
         "-p", "Answer the council brief above.",
     ]
@@ -140,17 +152,20 @@ class Verdict:
 Runner = Callable[..., subprocess.CompletedProcess]
 
 
-def consult(seat: Seat, prompt: str, cwd: Path, out_dir: Path, timeout: int,
+def consult(seat: Seat, prompt: str, repo: Path, out_dir: Path, timeout: int,
             run: Runner = subprocess.run, which=shutil.which) -> Verdict:
     """Put the prompt to one seat and return its answer or why it has none."""
     exe = which(seat.binary)
     if exe is None:
         return Verdict(seat, False, f"`{seat.binary}` is not on PATH; this seat is empty.")
     answer_path = out_dir / f"{seat.name}.md"
-    argv = [exe, *seat.command(answer_path)]
+    argv = [exe, *seat.command(answer_path, repo)]
     env = {**os.environ, **seat.env, SEAT_MARKER: "1"}
+    # A fresh temp folder sits outside every repository, so no CLI finds a
+    # project config by walking up from it - whatever --out is.
+    workdir = tempfile.mkdtemp(prefix=f"council-{seat.name}-")
     try:
-        done = run(argv, input=prompt, cwd=str(cwd), env=env, capture_output=True,
+        done = run(argv, input=prompt, cwd=workdir, env=env, capture_output=True,
                    text=True, encoding="utf-8", errors="replace", timeout=timeout)
     except subprocess.TimeoutExpired:
         return Verdict(seat, False, f"No answer within {timeout} s.")
@@ -184,7 +199,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--seats", default="codex,claude,gemini",
                    help="comma-separated seats to convene (default: all three)")
     p.add_argument("--cwd", type=Path, default=Path.cwd(),
-                   help="directory the seats may read (default: current directory)")
+                   help="repository the seats may read, never run from (default: current directory)")
     p.add_argument("--out", type=Path, help="directory for the answers (default: a new temp dir)")
     p.add_argument("--timeout", type=int, default=1200, help="seconds each seat may take (default: 1200)")
     p.add_argument("--dry-run", action="store_true", help="print each seat's command and stop")
@@ -206,7 +221,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         for seat in seats:
             extra = " ".join(f"{k}={v}" for k, v in seat.env.items())
-            cmd = " ".join([seat.binary, *seat.command(Path("<out>") / f"{seat.name}.md")])
+            cmd = " ".join([seat.binary, *seat.command(Path("<out>") / f"{seat.name}.md", args.cwd.resolve())])
             print(f"{seat.name}: {(extra + ' ') if extra else ''}{cmd} < brief")
         return 0
 
@@ -216,12 +231,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     out_dir = args.out or Path(tempfile.mkdtemp(prefix="council-"))
     out_dir.mkdir(parents=True, exist_ok=True)
-    prompt = PREAMBLE + brief + "\n"
+    repo = args.cwd.resolve()
+    prompt = PREAMBLE.format(repo=repo) + brief + "\n"
     (out_dir / "brief.md").write_text(brief + "\n", encoding="utf-8")
 
     with ThreadPoolExecutor(max_workers=len(seats)) as pool:
         verdicts = list(pool.map(
-            lambda s: consult(s, prompt, args.cwd.resolve(), out_dir, args.timeout), seats))
+            lambda s: consult(s, prompt, repo, out_dir, args.timeout), seats))
     if hasattr(sys.stdout, "reconfigure"):  # a redirected stdout may not have it
         sys.stdout.reconfigure(encoding="utf-8")
     print(report(verdicts, out_dir))
