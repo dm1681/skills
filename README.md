@@ -254,9 +254,11 @@ without Textual there, naming skills on the command line still works and the
 installer says so rather than failing with a traceback.
 
 The default destination is a user-scoped copy into every skill root:
-`~/.agents/skills`, the shared location supported by Codex, Cursor, and GitHub
-Copilot, and `~/.claude/skills`, which Claude Code reads instead of the shared
-directory.
+`~/.agents/skills`, the shared location supported by Codex, Cursor, GitHub
+Copilot, and Gemini CLI; `~/.claude/skills`, which Claude Code reads instead of
+the shared directory; and `~/.gemini/config/skills`, Antigravity's global root.
+Project scope needs only two of them, because Antigravity reads the shared
+`.agents/skills` in a workspace.
 
 Passing installer options keeps the command non-interactive, which makes it
 safe for scripts and CI. Use `--interactive` to open the dashboard with preset
@@ -325,7 +327,7 @@ and never `.agents/skills`:
 Useful options:
 
 ```text
---agent universal|codex|cursor|copilot|claude|all
+--agent universal|codex|cursor|copilot|gemini|antigravity|claude|all
                              defaults to all: every skill root, so the
                              install is visible to whichever agent you use
 --scope user|project         scripted installs only; the dashboard switches
@@ -492,7 +494,8 @@ graphify install --platform <selected-platform>
 The package is `graphifyy` (two “y” characters); the installed command is
 `graphify`. Project-scoped installs add `--project`. The installer uses
 Graphify's generic `agents` platform for the shared `.agents/skills` target and
-uses the explicit `codex`, `cursor`, `copilot`, or `claude` platform when that
+uses the explicit `codex`, `cursor`, `copilot`, `gemini`, `antigravity`, or
+`claude` platform when that
 agent was selected. See [`docs/graphify.md`](docs/graphify.md) for the exact
 command matrix and boundaries.
 

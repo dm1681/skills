@@ -53,11 +53,19 @@ class SetupCommandTests(unittest.TestCase):
         for agents in (["all"], ["codex"]):
             self.assertNotIn("--install-hopper", install.rea_setup_command(agents))
 
-    def test_every_shared_agent_but_the_generic_ones_has_a_client(self) -> None:
+    def test_every_agent_but_the_generic_ones_has_a_client_or_is_refused(self) -> None:
         self.assertEqual(
-            install.KNOWN_AGENTS - {"all", "universal", "agents"},
+            install.KNOWN_AGENTS - {"all", "universal", "agents"} - install.REA_NO_CLIENT,
             set(install.REA_CLIENTS),
         )
+        self.assertFalse(install.REA_NO_CLIENT & set(install.REA_CLIENTS))
+
+    def test_an_agent_without_a_confirmed_client_is_refused_by_name(self) -> None:
+        for agent in sorted(install.REA_NO_CLIENT):
+            with self.subTest(agent=agent):
+                with self.assertRaises(install.InstallError) as caught:
+                    install.rea_setup_command(["claude", agent])
+                self.assertIn(f"no confirmed REA client for {agent}", str(caught.exception))
 
 
 class InstallReaTests(unittest.TestCase):

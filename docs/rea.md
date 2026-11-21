@@ -20,6 +20,7 @@ npx -y rea-agents@<REA_VERSION> setup <clients> --yes
 | `cursor` | `--client cursor` |
 | `copilot` | `--client copilot_cli` |
 | `universal` / `agents` | refused: they name a skill directory, not an agent |
+| `gemini` / `antigravity` | refused: no REA client ID confirmed for them yet (`install.REA_NO_CLIENT`) |
 
 REA's setup writes each client's MCP registration (backing up the original
 config file) and installs its skill into that client's personal skill
