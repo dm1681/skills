@@ -7,13 +7,13 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Added
 
-- `--agent gemini` and `--agent antigravity`. Gemini CLI reads the shared
-  `.agents/skills` roots, so it installs where Codex, Cursor and Copilot do.
-  Antigravity's global root is `~/.gemini/config/skills` (it does not read
-  `~/.agents/skills`), so a user-scope `all` — the default — now writes a third
-  root; at project scope it reads the shared `.agents/skills`. Graphify maps
-  both to its own platforms; `--rea` refuses them until a client ID is
-  confirmed.
+- `--agent gemini` and `--agent antigravity`, both installing into the shared
+  `.agents/skills` roots where Codex, Cursor and Copilot do. Gemini CLI reads
+  them natively. Antigravity reads the workspace one natively, but at user
+  scope only once `~/.agents/skills` is registered as an Antigravity skill
+  source (its native global root is `~/.gemini/config/skills`). `all` still
+  writes two roots. Graphify maps both to its own platforms; `--rea` refuses
+  them until a client ID is confirmed.
 
 - New `linear-tracking` skill: the procedure for work tracked in Linear
   (status synchronization, resume, claim, track, handoff, the state and label

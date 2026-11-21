@@ -22,11 +22,8 @@ It then runs the matching Graphify registration command:
 | `claude` | `graphify install --platform claude` |
 | `all` | Both the `agents` and `claude` commands above |
 
-`all` does not add the `antigravity` platform, although it now installs
-skills into Antigravity's root. Name `--agent antigravity` to register Graphify
-there.
-
-When more than one shared agent (`codex`, `cursor`, `copilot`, or `gemini`) is selected,
+When more than one shared agent (`codex`, `cursor`, `copilot`, `gemini`, or
+`antigravity`) is selected,
 the installer uses the generic `agents` platform once. This avoids repeatedly
 overwriting the same `.agents/skills/graphify` destination with incompatible
 agent-specific variants.
