@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -34,6 +35,10 @@ CLAUDE_SETTINGS = HERE / "claude-settings.json"
 SEAT_MARKER = "COUNCIL_SEAT"
 
 CODEX_MODEL, CODEX_EFFORT = "gpt-6.2-astra", "xhigh"
+# Tried only when the server refuses CODEX_MODEL as a model (a ChatGPT login
+# is not offered every API model), never after a timeout or an auth error.
+CODEX_FALLBACK_MODEL = "gpt-6-astra"
+MODEL_REFUSED = re.compile(r"model_not_found|model is not supported", re.IGNORECASE)
 CLAUDE_MODEL, CLAUDE_EFFORT = "claude-fable-5-2", "xhigh"
 # Gemini CLI sets thinking effort per model alias, not per call. The alias is
 # defined in gemini-settings.json: gemini-4-neon at thinking level XHIGH.
@@ -45,8 +50,8 @@ several independent models for advice before it acts. You are advising, not
 acting.
 
 - Work read-only. The repository under discussion is at {repo}; you may
-  read its files to check a claim; change nothing, run nothing that writes, and convene no council or
-  subagent of your own.
+  read its files to check a claim. Change nothing, run nothing that writes,
+  and convene no council or subagent of your own.
 - Answer from your own judgement. Where the brief states a belief or a
   preferred option, test it rather than adopt it. Disagreement is useful.
 - Say which statements you checked against the code or the docs and which
@@ -82,20 +87,24 @@ class Seat:
     env: dict[str, str]
     # Codex writes its final message to a file; the others answer on stdout.
     answer_file: bool = False
+    # The seat to ask instead when the server refuses this one's model.
+    fallback: Seat | None = None
 
 
-def _codex(out_file: Path, _repo: Path) -> list[str]:
-    # The read-only sandbox can read the repository from any working directory.
-    return [
-        "exec",
-        "-m", CODEX_MODEL,
-        "-c", f'model_reasoning_effort="{CODEX_EFFORT}"',
-        "-s", "read-only",
-        "--skip-git-repo-check",
-        "--ephemeral",
-        "-o", str(out_file),
-        "-",
-    ]
+def _codex(model: str) -> Callable[[Path, Path], list[str]]:
+    def command(out_file: Path, _repo: Path) -> list[str]:
+        # The read-only sandbox can read the repository from any working directory.
+        return [
+            "exec",
+            "-m", model,
+            "-c", f'model_reasoning_effort="{CODEX_EFFORT}"',
+            "-s", "read-only",
+            "--skip-git-repo-check",
+            "--ephemeral",
+            "-o", str(out_file),
+            "-",
+        ]
+    return command
 
 
 def _claude(_: Path, repo: Path) -> list[str]:
@@ -128,7 +137,11 @@ def _gemini(_: Path, repo: Path) -> list[str]:
 
 
 SEATS = {
-    "codex": Seat("codex", "codex", f"{CODEX_MODEL} ({CODEX_EFFORT})", _codex, {}, answer_file=True),
+    "codex": Seat(
+        "codex", "codex", f"{CODEX_MODEL} ({CODEX_EFFORT})", _codex(CODEX_MODEL), {}, answer_file=True,
+        fallback=Seat("codex", "codex", f"{CODEX_FALLBACK_MODEL} ({CODEX_EFFORT}, fallback)",
+                      _codex(CODEX_FALLBACK_MODEL), {}, answer_file=True),
+    ),
     "claude": Seat("claude", "claude", f"{CLAUDE_MODEL} ({CLAUDE_EFFORT})", _claude, {}),
     "gemini": Seat(
         "gemini",
@@ -177,6 +190,12 @@ def consult(seat: Seat, prompt: str, repo: Path, out_dir: Path, timeout: int,
     else:
         answer = (done.stdout or "").strip()
     if done.returncode != 0 or not answer:
+        output = f"{done.stderr or ''}\n{done.stdout or ''}"
+        if seat.fallback is not None and MODEL_REFUSED.search(output):
+            verdict = consult(seat.fallback, prompt, repo, out_dir, timeout, run, which)
+            refused = seat.label.split(" (")[0]
+            verdict.text = f"_`{refused}` was refused by the server; this is the fallback._\n\n{verdict.text}"
+            return verdict
         tail = "\n".join((done.stderr or done.stdout or "").strip().splitlines()[-12:])
         return Verdict(seat, False, f"Exited {done.returncode} without an answer.\n\n```\n{tail}\n```")
     answer_path.write_text(answer + "\n", encoding="utf-8")
@@ -220,9 +239,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.dry_run:
         for seat in seats:
-            extra = " ".join(f"{k}={v}" for k, v in seat.env.items())
-            cmd = " ".join([seat.binary, *seat.command(Path("<out>") / f"{seat.name}.md", args.cwd.resolve())])
-            print(f"{seat.name}: {(extra + ' ') if extra else ''}{cmd} < brief")
+            for role, s in (("", seat), (" (if refused)", seat.fallback)):
+                if s is None:
+                    continue
+                extra = " ".join(f"{k}={v}" for k, v in s.env.items())
+                cmd = " ".join([s.binary, *s.command(Path("<out>") / f"{s.name}.md", args.cwd.resolve())])
+                print(f"{s.name}{role}: {(extra + ' ') if extra else ''}{cmd} < brief")
         return 0
 
     brief = (args.brief.read_text(encoding="utf-8") if args.brief else sys.stdin.read()).strip()

@@ -104,11 +104,14 @@ for the full text rather than pasting it.
 
 | Seat | CLI | Model | Effort |
 | --- | --- | --- | --- |
-| codex | `codex exec` | `gpt-6.2-astra` | `xhigh` |
+| codex | `codex exec` | `gpt-6.2-astra`, or `gpt-6-astra` when the server refuses it | `xhigh` |
 | claude | `claude -p` | `claude-fable-5-2` | `xhigh` |
 | gemini | `gemini -p` | `gemini-4-neon` via the `council-neon` alias | `XHIGH` |
 
-Model ids live at the top of `scripts/council.py`. Gemini CLI sets thinking
+Model ids live at the top of `scripts/council.py`. The Codex fallback runs
+only when the server refuses the model itself (a ChatGPT login is not
+offered every API model), and its answer is labelled as the fallback;
+report it as such. Gemini CLI sets thinking
 effort per model alias, so the Gemini effort lives in
 `scripts/gemini-settings.json`, which the script loads through
 `GEMINI_CLI_SYSTEM_SETTINGS_PATH` and never writes into the user's own

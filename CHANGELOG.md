@@ -8,7 +8,8 @@ All notable changes to this repository are documented here. Versions follow
 ### Added
 
 - New `council` skill: an agent writes one self-contained brief and
-  `scripts/council.py` puts it to Codex (`gpt-6.2-astra`, `xhigh`), Claude
+  `scripts/council.py` puts it to Codex (`gpt-6.2-astra`, `xhigh`, falling
+  back to `gpt-6-astra` only when the server refuses the model), Claude
   (`claude-fable-5-2`, `xhigh`) and Gemini (`gemini-4-neon`, thinking level
   `XHIGH`) in parallel, each read-only, then the agent weighs agreement and
   dissent and verifies what it acts on. Gemini CLI sets effort per model
