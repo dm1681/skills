@@ -46,11 +46,15 @@ PROFILE_FILE = ".dm1681-skills-profile"
 PROFILE_ENV = "DM1681_SKILLS_PROFILE"
 PROFILES = ("work",)
 
-SHARED_AGENTS = {"universal", "agents", "codex", "cursor", "copilot"}
-KNOWN_AGENTS = SHARED_AGENTS | {"claude", "all"}
+SHARED_AGENTS = {"universal", "agents", "codex", "cursor", "copilot", "gemini"}
+# Antigravity reads the shared `.agents/skills` in a workspace but not the shared
+# `~/.agents/skills` at user scope: its global root is ~/.gemini/config/skills.
+# So it is its own canonical agent whose project root dedupes into the shared one.
+KNOWN_AGENTS = SHARED_AGENTS | {"claude", "antigravity", "all"}
 # Install into every known skill root unless the caller narrows it. A shared-only
 # default silently produces an install that Claude Code cannot see, because Claude
-# reads ~/.claude/skills and never ~/.agents/skills.
+# reads ~/.claude/skills and never ~/.agents/skills -- and the same holds for
+# Antigravity's ~/.gemini/config/skills.
 DEFAULT_AGENTS = ["all"]
 GRAPHIFY_PLATFORMS = {
     "universal": "agents",
@@ -58,6 +62,8 @@ GRAPHIFY_PLATFORMS = {
     "codex": "codex",
     "cursor": "cursor",
     "copilot": "copilot",
+    "gemini": "gemini",
+    "antigravity": "antigravity",
     "claude": "claude",
 }
 MATT_SKILLS_SOURCE = "mattpocock/skills"
@@ -574,7 +580,7 @@ def expand_agents(values: Iterable[str]) -> list[str]:
     if unknown:
         raise InstallError(f"unknown agent: {', '.join(unknown)}")
     if "all" in requested:
-        return ["universal", "claude"]
+        return ["universal", "claude", "antigravity"]
     normalized: list[str] = []
     for value in requested:
         canonical = "universal" if value in SHARED_AGENTS else value
@@ -600,6 +606,12 @@ def resolve_roots(
             root = base / ".agents" / "skills"
         elif agent == "claude":
             root = base / ".claude" / "skills"
+        elif agent == "antigravity":
+            root = (
+                base / ".gemini" / "config" / "skills"
+                if scope == "user"
+                else base / ".agents" / "skills"
+            )
         else:  # Defensive: expand_agents returns only canonical names.
             raise InstallError(f"unsupported canonical agent: {agent}")
         if root not in roots:
@@ -627,6 +639,8 @@ def root_agent(root: Path) -> str:
         return "claude"
     if root.parent.name == ".agents":
         return "universal"
+    if root.parent.name == "config" and root.parent.parent.name == ".gemini":
+        return "antigravity"
     return ""
 
 
@@ -761,6 +775,10 @@ REA_CLIENTS = {
     "cursor": "cursor",
     "copilot": "copilot_cli",
 }
+# Agents whose skills this collection installs but for which no REA client ID
+# has been confirmed. Refused by name rather than guessed: a wrong client ID
+# writes an MCP registration into some other program's config.
+REA_NO_CLIENT = frozenset({"gemini", "antigravity"})
 
 
 def rea_setup_command(agents: Iterable[str], executable: str = "npx") -> list[str]:
@@ -778,6 +796,12 @@ def rea_setup_command(agents: Iterable[str], executable: str = "npx") -> list[st
     command = [executable, "-y", f"{REA_PACKAGE}@{REA_VERSION}", "setup"]
     if "all" in requested:
         return command + ["--all-detected", "--yes"]
+    no_client = sorted(set(requested) & REA_NO_CLIENT)
+    if no_client:
+        raise InstallError(
+            f"--rea has no confirmed REA client for {', '.join(no_client)}; "
+            "pass --agent claude, codex, cursor, copilot or all"
+        )
     unsupported = sorted(set(requested) - set(REA_CLIENTS))
     if unsupported:
         raise InstallError(
@@ -4135,7 +4159,7 @@ def parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         metavar="NAME",
-        help="universal, codex, cursor, copilot, claude, or all (repeatable; default all)",
+        help="universal, codex, cursor, copilot, gemini, antigravity, claude, or all (repeatable; default all)",
     )
     result.add_argument(
         "--scope",

@@ -540,7 +540,7 @@ def parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         metavar="NAME",
-        help="universal, codex, cursor, copilot, claude, or all (repeatable; default all)",
+        help="universal, codex, cursor, copilot, gemini, antigravity, claude, or all (repeatable; default all)",
     )
     installer.add_argument("--mode", choices=("copy", "link"), default="copy")
     guided = installer.add_mutually_exclusive_group()
@@ -593,7 +593,7 @@ def parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         metavar="NAME",
-        help="universal, codex, cursor, copilot, claude, or all (repeatable; default all)",
+        help="universal, codex, cursor, copilot, gemini, antigravity, claude, or all (repeatable; default all)",
     )
     remover.add_argument(
         "--force",

@@ -8,8 +8,10 @@ it, and falls back to the agent's native directory only when necessary.
 | `universal` / `codex` | `~/.agents/skills` | `<repo>/.agents/skills` | Codex's documented user and repository locations. |
 | `cursor` | `~/.agents/skills` | `<repo>/.agents/skills` | Cursor supports the shared directory and its own `.cursor/skills`; the shared path is preferred. |
 | `copilot` | `~/.agents/skills` | `<repo>/.agents/skills` | GitHub Copilot supports the shared directory plus Copilot/GitHub-specific alternatives. |
+| `gemini` | `~/.agents/skills` | `<repo>/.agents/skills` | Gemini CLI reads the shared directory as an alias of `.gemini/skills`, and the alias wins within a tier. |
+| `antigravity` | `~/.gemini/config/skills` | `<repo>/.agents/skills` | Antigravity's global root is its own; it does not read `~/.agents/skills`. Its workspace root is the shared one (legacy `.agent/skills` still read). |
 | `claude` | `~/.claude/skills` | `<repo>/.claude/skills` | Claude Code's documented native location. |
-| `all` | Both unique targets above | Both unique targets above | Installs once per distinct discovery root. |
+| `all` | All three unique user roots above | Both unique project roots above | Installs once per distinct discovery root. |
 
 Primary references:
 
@@ -17,6 +19,8 @@ Primary references:
 - [Anthropic: Extend Claude with skills](https://code.claude.com/docs/en/skills)
 - [GitHub: About agent skills](https://docs.github.com/en/copilot/concepts/agents/about-agent-skills)
 - [Cursor: Agent Skills](https://cursor.com/docs/skills)
+- [Gemini CLI: Agent Skills](https://geminicli.com/docs/cli/skills/) (checked 2026-11-20)
+- [Google Antigravity: Agent skills](https://antigravity.google/docs/skills) (checked 2026-11-20)
 
 Agent discovery behavior changes over time. Keep this matrix and the installer
 mapping together, and update both in the same pull request.

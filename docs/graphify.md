@@ -17,10 +17,16 @@ It then runs the matching Graphify registration command:
 | `codex` | `graphify install --platform codex` |
 | `cursor` | `graphify install --platform cursor` |
 | `copilot` | `graphify install --platform copilot` |
+| `gemini` | `graphify install --platform gemini` |
+| `antigravity` | `graphify install --platform antigravity` |
 | `claude` | `graphify install --platform claude` |
 | `all` | Both the `agents` and `claude` commands above |
 
-When more than one shared agent (`codex`, `cursor`, or `copilot`) is selected,
+`all` does not add the `antigravity` platform, although it now installs
+skills into Antigravity's root. Name `--agent antigravity` to register Graphify
+there.
+
+When more than one shared agent (`codex`, `cursor`, `copilot`, or `gemini`) is selected,
 the installer uses the generic `agents` platform once. This avoids repeatedly
 overwriting the same `.agents/skills/graphify` destination with incompatible
 agent-specific variants.
