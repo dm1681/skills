@@ -114,3 +114,10 @@ effort per model alias, so the Gemini effort lives in
 `GEMINI_CLI_SYSTEM_SETTINGS_PATH` and never writes into the user's own
 settings. A seat cannot convene a council of its own: the script refuses
 when `COUNCIL_SEAT` is set.
+
+`--cwd` may be a repository nobody vetted, so no seat runs inside it. Each
+seat's working directory is a new, empty temp folder — the place every CLI
+loads project settings, hooks, MCP servers and folder trust from — and the
+repository is granted for reading only (`--add-dir` for Claude, which also
+loads user settings alone with hooks off; `--include-directories` for
+Gemini; Codex's read-only sandbox reads it directly).

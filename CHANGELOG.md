@@ -14,7 +14,10 @@ All notable changes to this repository are documented here. Versions follow
   dissent and verifies what it acts on. Gemini CLI sets effort per model
   alias, so the skill ships a `council-neon` alias and loads it through
   `GEMINI_CLI_SYSTEM_SETTINGS_PATH` rather than editing the user's settings.
-  A seat cannot convene a council of its own.
+  A seat cannot convene a council of its own. No seat runs inside the
+  repository it reviews: each starts in an empty temp folder and is granted
+  the repository for reading, so a repository's own settings, hooks, MCP
+  servers and folder trust never load.
 
 - `--agent gemini` and `--agent antigravity`, both installing into the shared
   `.agents/skills` roots where Codex, Cursor and Copilot do. Gemini CLI reads
