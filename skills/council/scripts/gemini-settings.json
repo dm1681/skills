@@ -1,0 +1,17 @@
+{
+  "modelConfigs": {
+    "customAliases": {
+      "council-neon": {
+        "extends": "chat-base-3",
+        "modelConfig": {
+          "model": "gemini-4-neon",
+          "generateContentConfig": {
+            "thinkingConfig": {
+              "thinkingLevel": "XHIGH"
+            }
+          }
+        }
+      }
+    }
+  }
+}
