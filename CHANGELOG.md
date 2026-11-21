@@ -7,6 +7,15 @@ All notable changes to this repository are documented here. Versions follow
 
 ### Added
 
+- New `council` skill: an agent writes one self-contained brief and
+  `scripts/council.py` puts it to Codex (`gpt-6.2-astra`, `xhigh`), Claude
+  (`claude-fable-5-2`, `xhigh`) and Gemini (`gemini-4-neon`, thinking level
+  `XHIGH`) in parallel, each read-only, then the agent weighs agreement and
+  dissent and verifies what it acts on. Gemini CLI sets effort per model
+  alias, so the skill ships a `council-neon` alias and loads it through
+  `GEMINI_CLI_SYSTEM_SETTINGS_PATH` rather than editing the user's settings.
+  A seat cannot convene a council of its own.
+
 - `--agent gemini` and `--agent antigravity`, both installing into the shared
   `.agents/skills` roots where Codex, Cursor and Copilot do. Gemini CLI reads
   them natively. Antigravity reads the workspace one natively, but at user

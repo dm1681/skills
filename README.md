@@ -15,6 +15,7 @@ self-contained under [`skills/`](skills/).
 | `space-domain-awareness` | Reduce observations, fit and propagate orbits, associate tracks, and triage maneuvers and anomalies with explicit uncertainty. |
 | `flow-diagrams` | Draw flowcharts and block diagrams as interactive Catppuccin pages whose shapes, colours and arrows carry defined meanings. |
 | `semantic-pr-review` | Explain a pull request as a source-verified semantic hierarchy and interactive flowchart. |
+| `council` | Put one brief to Codex, Claude and Gemini at extra-high effort, read-only and in parallel, and weigh their independent advice before acting. |
 | `orient` | Answer where are we, how did we get here and where are we going in a thread, at the altitude of the goal rather than the last commands. |
 | `viz-driven-dev` | Build the plot, overlay, or video that would show a feature's effect before implementing it, then regenerate it from real output. |
 | `linear-tracking` | Track work on a Linear issue: resume, claim, state and label changes, handoff, and the fallback when Linear cannot be reached. |
