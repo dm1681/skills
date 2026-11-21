@@ -128,6 +128,30 @@ class ConsultTests(unittest.TestCase):
         self.assertNotIn("noisy", verdict.text)
         self.assertIn("Wait.", verdict.text)
 
+    def test_refused_codex_model_falls_back_to_gpt_6_astra(self):
+        calls = []
+
+        def run(argv, **kwargs):
+            calls.append(argv)
+            model = argv[argv.index("-m") + 1]
+            if model == "gpt-6.2-astra":
+                return subprocess.CompletedProcess(argv, 1, "", '"code":"model_not_found"')
+            Path(argv[argv.index("-o") + 1]).write_text("## Recommendation\nFallback.\n", encoding="utf-8")
+            return subprocess.CompletedProcess(argv, 0, "", "")
+
+        verdict = council.consult(council.SEATS["codex"], "b", self.tmp, self.tmp, 5, run, self.which)
+        self.assertEqual([a[a.index("-m") + 1] for a in calls], ["gpt-6.2-astra", "gpt-6-astra"])
+        self.assertTrue(verdict.ok)
+        self.assertIn("gpt-6-astra (xhigh, fallback)", verdict.seat.label)
+        self.assertIn("`gpt-6.2-astra` was refused", verdict.text)
+        self.assertIn("Fallback.", verdict.text)
+
+    def test_other_codex_failures_do_not_spend_a_second_run(self):
+        run = _fake_run(returncode=1, stderr="401 Unauthorized")
+        verdict = council.consult(council.SEATS["codex"], "b", self.tmp, self.tmp, 5, run, self.which)
+        self.assertEqual(len(run.calls), 1)
+        self.assertFalse(verdict.ok)
+
     def test_missing_cli_is_an_empty_seat_not_a_crash(self):
         verdict = council.consult(council.SEATS["gemini"], "b", self.tmp, self.tmp, 5, _fake_run(), lambda _: None)
         self.assertFalse(verdict.ok)
@@ -161,7 +185,8 @@ class MainTests(unittest.TestCase):
     def test_dry_run_prints_one_command_per_seat(self):
         code, out, _ = self._main("--dry-run")
         self.assertEqual(code, 0)
-        self.assertEqual(len(out.strip().splitlines()), 3)
+        self.assertEqual(len(out.strip().splitlines()), 4)
+        self.assertIn("codex (if refused): codex exec -m gpt-6-astra", out)
 
     def test_a_seat_cannot_convene_its_own_council(self):
         code, _, err = self._main("--dry-run", env={council.SEAT_MARKER: "1"})
