@@ -111,12 +111,21 @@ for the full text rather than pasting it.
 Model ids live at the top of `scripts/council.py`. The Codex fallback runs
 only when the server refuses the model itself (a ChatGPT login is not
 offered every API model), and its answer is labelled as the fallback;
-report it as such. Gemini CLI sets thinking
-effort per model alias, so the Gemini effort lives in
-`scripts/gemini-settings.json`, which the script loads through
-`GEMINI_CLI_SYSTEM_SETTINGS_PATH` and never writes into the user's own
-settings. A seat cannot convene a council of its own: the script refuses
-when `COUNCIL_SEAT` is set.
+report it as such. Gemini CLI sets thinking effort per model alias, so the
+Gemini effort lives in `scripts/gemini-settings.json`, copied in as the
+seat's workspace settings; the user's own settings are never written. A
+seat cannot convene a council of its own: the script refuses when
+`COUNCIL_SEAT` is set.
+
+The Gemini seat signs in with Google, never an API key: it drops
+`GEMINI_API_KEY` and `GOOGLE_API_KEY` from its environment. It needs a
+one-time interactive sign-in; when it reports "Manual authorization is
+required", tell the user to run, in a terminal of their own:
+
+    Remove-Item Env:GEMINI_API_KEY; $env:GOOGLE_GENAI_USE_GCA='true'; gemini
+
+and choose **Sign in with Google**. A POSIX shell uses
+`env -u GEMINI_API_KEY GOOGLE_GENAI_USE_GCA=true gemini`.
 
 `--cwd` may be a repository nobody vetted, so no seat runs inside it. Each
 seat's working directory is a new, empty temp folder — the place every CLI

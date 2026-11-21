@@ -41,7 +41,9 @@ CODEX_FALLBACK_MODEL = "gpt-6-astra"
 MODEL_REFUSED = re.compile(r"model_not_found|model is not supported", re.IGNORECASE)
 CLAUDE_MODEL, CLAUDE_EFFORT = "claude-fable-5-2", "xhigh"
 # Gemini CLI sets thinking effort per model alias, not per call. The alias is
-# defined in gemini-settings.json: gemini-4-neon at thinking level XHIGH.
+# defined in gemini-settings.json: gemini-4-neon at thinking level XHIGH. It
+# is copied in as the seat's workspace settings, because the CLI skips a
+# GEMINI_CLI_SYSTEM_SETTINGS_PATH file in any folder a user can write to.
 GEMINI_ALIAS, GEMINI_LABEL = "council-neon", "gemini-4-neon (XHIGH)"
 
 PREAMBLE = """\
@@ -89,6 +91,10 @@ class Seat:
     answer_file: bool = False
     # The seat to ask instead when the server refuses this one's model.
     fallback: Seat | None = None
+    # Environment variables removed before the seat starts.
+    drop_env: tuple = ()
+    # Files copied into the seat's empty working folder: {relative path: source}.
+    workspace: tuple = ()
 
 
 def _codex(model: str) -> Callable[[Path, Path], list[str]]:
@@ -148,9 +154,12 @@ SEATS = {
         "gemini",
         GEMINI_LABEL,
         _gemini,
-        # Points the CLI at the alias without touching the user's own
-        # ~/.gemini/settings.json. It replaces the system settings layer.
-        {"GEMINI_CLI_SYSTEM_SETTINGS_PATH": str(GEMINI_SETTINGS)},
+        # Sign in with Google, never an API key: an exported key otherwise
+        # wins silently and bills prepaid credits. NO_BROWSER makes a missing
+        # sign-in fail at once with a message instead of prompting.
+        {"GOOGLE_GENAI_USE_GCA": "true", "NO_BROWSER": "true"},
+        drop_env=("GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENAI_USE_VERTEXAI"),
+        workspace=((".gemini/settings.json", GEMINI_SETTINGS),),
     ),
 }
 
@@ -173,10 +182,16 @@ def consult(seat: Seat, prompt: str, repo: Path, out_dir: Path, timeout: int,
         return Verdict(seat, False, f"`{seat.binary}` is not on PATH; this seat is empty.")
     answer_path = out_dir / f"{seat.name}.md"
     argv = [exe, *seat.command(answer_path, repo)]
-    env = {**os.environ, **seat.env, SEAT_MARKER: "1"}
+    env = {k: v for k, v in os.environ.items() if k not in seat.drop_env}
+    env.update(seat.env)
+    env[SEAT_MARKER] = "1"
     # A fresh temp folder sits outside every repository, so no CLI finds a
     # project config by walking up from it - whatever --out is.
     workdir = tempfile.mkdtemp(prefix=f"council-{seat.name}-")
+    for relative, source in seat.workspace:
+        target = Path(workdir, relative)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
     try:
         done = run(argv, input=prompt, cwd=workdir, env=env, capture_output=True,
                    text=True, encoding="utf-8", errors="replace", timeout=timeout)

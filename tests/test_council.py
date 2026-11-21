@@ -84,9 +84,14 @@ class SeatCommandTests(unittest.TestCase):
         alias = settings["modelConfigs"]["customAliases"]["council-neon"]["modelConfig"]
         self.assertEqual(alias["model"], "gemini-4-neon")
         self.assertEqual(alias["generateContentConfig"]["thinkingConfig"]["thinkingLevel"], "XHIGH")
-        self.assertEqual(
-            council.SEATS["gemini"].env["GEMINI_CLI_SYSTEM_SETTINGS_PATH"], str(council.GEMINI_SETTINGS)
-        )
+        self.assertIn((".gemini/settings.json", council.GEMINI_SETTINGS), council.SEATS["gemini"].workspace)
+
+    def test_gemini_signs_in_with_google_and_never_uses_an_api_key(self):
+        gemini = council.SEATS["gemini"]
+        self.assertEqual(gemini.env["GOOGLE_GENAI_USE_GCA"], "true")
+        self.assertEqual(gemini.env["NO_BROWSER"], "true")
+        self.assertIn("GEMINI_API_KEY", gemini.drop_env)
+        self.assertIn("GOOGLE_API_KEY", gemini.drop_env)
 
 
 class ConsultTests(unittest.TestCase):
@@ -103,11 +108,14 @@ class ConsultTests(unittest.TestCase):
 
     def test_brief_goes_on_stdin_and_the_seat_is_marked(self):
         run = _fake_run(stdout="ok")
-        council.consult(council.SEATS["gemini"], "the brief", self.tmp, self.tmp, 5, run, self.which)
+        with mock.patch.dict(os.environ, {"GEMINI_API_KEY": "k"}):
+            council.consult(council.SEATS["gemini"], "the brief", self.tmp, self.tmp, 5, run, self.which)
         _, kwargs = run.calls[0]
         self.assertEqual(kwargs["input"], "the brief")
         self.assertEqual(kwargs["env"][council.SEAT_MARKER], "1")
-        self.assertIn("GEMINI_CLI_SYSTEM_SETTINGS_PATH", kwargs["env"])
+        self.assertNotIn("GEMINI_API_KEY", kwargs["env"])
+        settings = Path(kwargs["cwd"], ".gemini", "settings.json")
+        self.assertIn("council-neon", settings.read_text(encoding="utf-8"))
 
     def test_seats_never_run_inside_the_repository(self):
         # A working directory is where each CLI loads project config and hooks.
@@ -119,7 +127,9 @@ class ConsultTests(unittest.TestCase):
             workdir = Path(run.calls[0][1]["cwd"])
             self.assertNotEqual(workdir.resolve(), repo.resolve())
             self.assertNotIn(repo.resolve(), workdir.resolve().parents)
-            self.assertEqual(list(workdir.iterdir()), [])
+            # Empty but for the seat's own workspace files.
+            expected = {Path(rel).parts[0] for rel, _ in council.SEATS[name].workspace}
+            self.assertEqual({p.name for p in workdir.iterdir()}, expected)
 
     def test_codex_answer_is_read_from_its_last_message_file(self):
         run = _fake_run(stdout="noisy progress log", write="## Recommendation\nWait.\n")
