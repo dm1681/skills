@@ -98,45 +98,27 @@ class InstallerTests(unittest.TestCase):
             self.run_installer("--home", str(home), "--agent", "all")
             self.assertTrue((home / ".agents" / "skills" / SKILL / "SKILL.md").is_file())
             self.assertTrue((home / ".claude" / "skills" / SKILL / "SKILL.md").is_file())
-            self.assertTrue(
-                (home / ".gemini" / "config" / "skills" / SKILL / "SKILL.md").is_file()
-            )
 
-    def test_gemini_uses_the_shared_root(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            home = Path(directory)
-            self.run_installer("--home", str(home), "--agent", "gemini")
-            self.assertTrue((home / ".agents" / "skills" / SKILL / "SKILL.md").is_file())
-            self.assertFalse((home / ".gemini").exists())
-            self.assertFalse((home / ".claude").exists())
+    def test_gemini_and_antigravity_use_the_shared_root(self) -> None:
+        for agent in ("gemini", "antigravity"):
+            with self.subTest(agent=agent), tempfile.TemporaryDirectory() as directory:
+                home = Path(directory)
+                self.run_installer("--home", str(home), "--agent", agent)
+                self.assertTrue(
+                    (home / ".agents" / "skills" / SKILL / "SKILL.md").is_file()
+                )
+                self.assertFalse((home / ".gemini").exists())
+                self.assertFalse((home / ".claude").exists())
 
-    def test_antigravity_has_its_own_user_root(self) -> None:
-        """Antigravity does not read ~/.agents/skills, so a user install that
-        landed there would be invisible to it."""
-        with tempfile.TemporaryDirectory() as directory:
-            home = Path(directory)
-            self.run_installer("--home", str(home), "--agent", "antigravity")
-            self.assertTrue(
-                (home / ".gemini" / "config" / "skills" / SKILL / "SKILL.md").is_file()
-            )
-            self.assertFalse((home / ".agents").exists())
-
-    def test_antigravity_project_root_is_the_shared_one(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            base = Path(directory).resolve()
-            roots = install.resolve_roots(
-                ["antigravity", "gemini", "codex"], "project", base / "home", base, None
-            )
-            self.assertEqual([base / ".agents" / "skills"], roots)
-            self.assertEqual(
-                [base / ".agents" / "skills", base / ".claude" / "skills"],
-                install.resolve_roots(["all"], "project", base / "home", base, None),
-            )
-
-    def test_root_agent_names_the_antigravity_root(self) -> None:
-        root = Path("home") / ".gemini" / "config" / "skills"
-        self.assertEqual("antigravity", install.root_agent(root))
-        self.assertEqual("", install.root_agent(Path("home") / "config" / "skills"))
+    def test_shared_agents_dedupe_into_one_root_at_both_scopes(self) -> None:
+        base = Path("base")
+        for scope in ("user", "project"):
+            with self.subTest(scope=scope):
+                roots = install.resolve_roots(
+                    ["antigravity", "gemini", "codex"], scope, base, base, None
+                )
+                self.assertEqual(1, len(roots))
+                self.assertEqual(Path(".agents") / "skills", Path(*roots[0].parts[-2:]))
 
     def test_project_scope(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -46,15 +46,15 @@ PROFILE_FILE = ".dm1681-skills-profile"
 PROFILE_ENV = "DM1681_SKILLS_PROFILE"
 PROFILES = ("work",)
 
-SHARED_AGENTS = {"universal", "agents", "codex", "cursor", "copilot", "gemini"}
-# Antigravity reads the shared `.agents/skills` in a workspace but not the shared
-# `~/.agents/skills` at user scope: its global root is ~/.gemini/config/skills.
-# So it is its own canonical agent whose project root dedupes into the shared one.
-KNOWN_AGENTS = SHARED_AGENTS | {"claude", "antigravity", "all"}
+# Antigravity reads the shared `.agents/skills` in a workspace, but its native
+# global root is ~/.gemini/config/skills. It is shared here because the owner
+# registers ~/.agents/skills as an Antigravity skill source; a machine without
+# that registration sees only project-scope installs (docs/agent-support.md).
+SHARED_AGENTS = {"universal", "agents", "codex", "cursor", "copilot", "gemini", "antigravity"}
+KNOWN_AGENTS = SHARED_AGENTS | {"claude", "all"}
 # Install into every known skill root unless the caller narrows it. A shared-only
 # default silently produces an install that Claude Code cannot see, because Claude
-# reads ~/.claude/skills and never ~/.agents/skills -- and the same holds for
-# Antigravity's ~/.gemini/config/skills.
+# reads ~/.claude/skills and never ~/.agents/skills.
 DEFAULT_AGENTS = ["all"]
 GRAPHIFY_PLATFORMS = {
     "universal": "agents",
@@ -580,7 +580,7 @@ def expand_agents(values: Iterable[str]) -> list[str]:
     if unknown:
         raise InstallError(f"unknown agent: {', '.join(unknown)}")
     if "all" in requested:
-        return ["universal", "claude", "antigravity"]
+        return ["universal", "claude"]
     normalized: list[str] = []
     for value in requested:
         canonical = "universal" if value in SHARED_AGENTS else value
@@ -606,12 +606,6 @@ def resolve_roots(
             root = base / ".agents" / "skills"
         elif agent == "claude":
             root = base / ".claude" / "skills"
-        elif agent == "antigravity":
-            root = (
-                base / ".gemini" / "config" / "skills"
-                if scope == "user"
-                else base / ".agents" / "skills"
-            )
         else:  # Defensive: expand_agents returns only canonical names.
             raise InstallError(f"unsupported canonical agent: {agent}")
         if root not in roots:
@@ -639,8 +633,6 @@ def root_agent(root: Path) -> str:
         return "claude"
     if root.parent.name == ".agents":
         return "universal"
-    if root.parent.name == "config" and root.parent.parent.name == ".gemini":
-        return "antigravity"
     return ""
 
 

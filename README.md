@@ -255,10 +255,10 @@ installer says so rather than failing with a traceback.
 
 The default destination is a user-scoped copy into every skill root:
 `~/.agents/skills`, the shared location supported by Codex, Cursor, GitHub
-Copilot, and Gemini CLI; `~/.claude/skills`, which Claude Code reads instead of
-the shared directory; and `~/.gemini/config/skills`, Antigravity's global root.
-Project scope needs only two of them, because Antigravity reads the shared
-`.agents/skills` in a workspace.
+Copilot, Gemini CLI, and Antigravity, and `~/.claude/skills`, which Claude Code
+reads instead of the shared directory. Antigravity reads the shared directory at
+user scope only once it is registered as a skill source there; see
+[`docs/agent-support.md`](docs/agent-support.md).
 
 Passing installer options keeps the command non-interactive, which makes it
 safe for scripts and CI. Use `--interactive` to open the dashboard with preset

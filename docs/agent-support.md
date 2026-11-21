@@ -9,9 +9,9 @@ it, and falls back to the agent's native directory only when necessary.
 | `cursor` | `~/.agents/skills` | `<repo>/.agents/skills` | Cursor supports the shared directory and its own `.cursor/skills`; the shared path is preferred. |
 | `copilot` | `~/.agents/skills` | `<repo>/.agents/skills` | GitHub Copilot supports the shared directory plus Copilot/GitHub-specific alternatives. |
 | `gemini` | `~/.agents/skills` | `<repo>/.agents/skills` | Gemini CLI reads the shared directory as an alias of `.gemini/skills`, and the alias wins within a tier. |
-| `antigravity` | `~/.gemini/config/skills` | `<repo>/.agents/skills` | Antigravity's global root is its own; it does not read `~/.agents/skills`. Its workspace root is the shared one (legacy `.agent/skills` still read). |
+| `antigravity` | `~/.agents/skills` | `<repo>/.agents/skills` | The workspace root is Antigravity's documented default (legacy `.agent/skills` still read). Its native global root is `~/.gemini/config/skills`, and it does not read `~/.agents/skills` by default: register that directory as a skill source in Antigravity, or user-scope installs stay invisible to it. |
 | `claude` | `~/.claude/skills` | `<repo>/.claude/skills` | Claude Code's documented native location. |
-| `all` | All three unique user roots above | Both unique project roots above | Installs once per distinct discovery root. |
+| `all` | Both unique targets above | Both unique targets above | Installs once per distinct discovery root. |
 
 Primary references:
 
