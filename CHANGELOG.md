@@ -10,14 +10,16 @@ All notable changes to this repository are documented here. Versions follow
 - New `council` skill: an agent writes one self-contained brief and
   `scripts/council.py` puts it to Codex (`gpt-6.2-astra`, `xhigh`, falling
   back to `gpt-6-astra` only when the server refuses the model), Claude
-  (`claude-fable-5-2`, `xhigh`) and Gemini (`gemini-4-neon`, thinking level
-  `XHIGH`) in parallel, each read-only, then the agent weighs agreement and
-  dissent and verifies what it acts on. Gemini CLI sets effort per model
-  alias, so the skill ships a `council-neon` alias as the seat's workspace
-  settings rather than editing the user's (the CLI skips a
-  `GEMINI_CLI_SYSTEM_SETTINGS_PATH` file in any user-writable folder). The
-  Gemini seat signs in with Google and drops `GEMINI_API_KEY` and
-  `GOOGLE_API_KEY`, which would otherwise win silently and bill credits.
+  (`claude-fable-5-2`, `xhigh`) and Gemini (`gemini-4-neon-xhigh`) in
+  parallel, each read-only, then the agent weighs agreement and dissent and
+  verifies what it acts on. The Gemini seat runs Antigravity CLI (`agy`)
+  signed in with a personal Google AI Pro or Ultra account, because Gemini
+  CLI's Google sign-in stopped serving those accounts on 2026-06-18. It drops
+  every Gemini and Google key from its environment, so nothing is billed per
+  call, and is read-only through one-session permission rules. A failed seat
+  is reported with the CLI's error line and what to do (update, sign in, or
+  wait out a quota), and a CLI in `~/.local/bin` or `~/.npm-global/bin` is
+  found off `PATH`.
   A seat cannot convene a council of its own. No seat runs inside the
   repository it reviews: each starts in an empty temp folder and is granted
   the repository for reading, so a repository's own settings, hooks, MCP

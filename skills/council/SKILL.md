@@ -106,30 +106,30 @@ for the full text rather than pasting it.
 | --- | --- | --- | --- |
 | codex | `codex exec` | `gpt-6.2-astra`, or `gpt-6-astra` when the server refuses it | `xhigh` |
 | claude | `claude -p` | `claude-fable-5-2` | `xhigh` |
-| gemini | `gemini -p` | `gemini-4-neon` via the `council-neon` alias | `XHIGH` |
+| gemini | `agy --print` (Antigravity CLI) | `gemini-4-neon-xhigh` | `xhigh`, part of the model id |
 
 Model ids live at the top of `scripts/council.py`. The Codex fallback runs
 only when the server refuses the model itself (a ChatGPT login is not
 offered every API model), and its answer is labelled as the fallback;
-report it as such. Gemini CLI sets thinking effort per model alias, so the
-Gemini effort lives in `scripts/gemini-settings.json`, copied in as the
-seat's workspace settings; the user's own settings are never written. A
-seat cannot convene a council of its own: the script refuses when
-`COUNCIL_SEAT` is set.
+report it as such. A seat cannot convene a council of its own: the script
+refuses when `COUNCIL_SEAT` is set.
 
-The Gemini seat signs in with Google, never an API key: it drops
-`GEMINI_API_KEY` and `GOOGLE_API_KEY` from its environment. It needs a
-one-time interactive sign-in; when it reports "Manual authorization is
-required", tell the user to run, in a terminal of their own:
+A seat whose CLI fails is reported with the CLI's own error line first, then
+what to do: update a CLI that rejects a flag (the Gemini seat needs `agy`
+1.5.14 or later), sign in, or wait out a quota. A CLI installed under
+`~/.local/bin` or `~/.npm-global/bin` is found even when a non-interactive
+shell leaves that folder off `PATH`.
 
-    Remove-Item Env:GEMINI_API_KEY; $env:GOOGLE_GENAI_USE_GCA='true'; gemini
+## Gemini seat and isolation
 
-and choose **Sign in with Google**. A POSIX shell uses
-`env -u GEMINI_API_KEY GOOGLE_GENAI_USE_GCA=true gemini`.
+The Gemini seat runs Antigravity CLI (`agy`) signed in with a personal
+Google AI Pro or Ultra account; it never uses an API key. When it reports
+that `agy` is not signed in, tell the user to run `agy` once in a terminal
+of their own and choose **Google OAuth** (over SSH it prints a URL and takes
+a code back). Which accounts each route needs, and the full sign-in steps:
+[references/gemini-seat.md](references/gemini-seat.md).
 
-`--cwd` may be a repository nobody vetted, so no seat runs inside it. Each
-seat's working directory is a new, empty temp folder — the place every CLI
-loads project settings, hooks, MCP servers and folder trust from — and the
-repository is granted for reading only (`--add-dir` for Claude, which also
-loads user settings alone with hooks off; `--include-directories` for
-Gemini; Codex's read-only sandbox reads it directly).
+`--cwd` may be a repository nobody vetted, so no seat runs inside it: each
+starts in a new, empty temp folder and is granted the repository for
+reading only. How each CLI is kept from loading the repository's settings,
+hooks and MCP servers is in the same reference.
