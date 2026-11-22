@@ -92,12 +92,13 @@ class SeatCommandTests(unittest.TestCase):
 
         def runs(cmd):
             return (any(re.fullmatch(a, cmd) for a in allowed)
-                    and not any(re.fullmatch(d, cmd) for d in denied))
+                    and not any(re.fullmatch(d, cmd, re.DOTALL) for d in denied))
 
         for cmd in ("grep -rn needle /r", "ls -R /r", "cat /r/a.py", "head -n 5 /r/a.py", "wc -l /r/a.py"):
             self.assertTrue(runs(cmd), cmd)
         for cmd in ("find /r -name x -delete", "rg --pre sh x /r", "rm /r/a.py", "ls /r > /r/out",
-                    "cat $(echo /r/a)", "cat `echo /r/a`", "grep x /r; rm /r/a.py", "git log"):
+                    "cat $(echo /r/a)", "cat `echo /r/a`", "grep x /r; rm /r/a.py", "git log",
+                    "grep x /r\nrm /r/a.py", "cat /r/a\r\nrm /r/a.py", "ls /r\n"):
             self.assertFalse(runs(cmd), cmd)
 
     def test_gemini_signs_in_with_google_and_never_uses_an_api_key(self):

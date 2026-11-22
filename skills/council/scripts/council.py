@@ -146,8 +146,10 @@ def _claude(_: Path, repo: Path) -> list[str]:
 # run: no find (-delete, -exec) and no rg (--pre). A rule's regex must match
 # the whole command; agy checks each part of a pipeline on its own. Any other
 # command is soft-denied, since headless agy cannot ask.
-READ_ONLY_COMMANDS = r"command(regex:(ls|grep|cat|head|tail|wc)( [^;&|<>`$]*)?)"
-REDIRECTION = r"command(regex:.*([<>`]|\$\().*)"
+# No line break or control character either: a newline would start a second
+# command inside one allowed line.
+READ_ONLY_COMMANDS = r"command(regex:(ls|grep|cat|head|tail|wc)( [^;&|<>`$\x00-\x1f\x7f]*)?)"
+REDIRECTION = r"command(regex:(?s).*([<>`]|\$\(|[\x00-\x1f\x7f]).*)"
 
 
 def _gemini_settings(repo: Path) -> str:
