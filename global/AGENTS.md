@@ -6,8 +6,9 @@ These apply to every project on this machine, in addition to any project-level
 **Source of truth: `global/AGENTS.md` in the dm1681/skills checkout.** If you
 are reading this text as `~/.agents/AGENTS.md` or `~/.claude/CLAUDE.md`, you
 are reading an installed copy. Never edit it in place — change the checkout's
-`global/AGENTS.md` and rerun `./install.sh --global-instructions`, because an
-in-place edit is backed up and overwritten by the next install. This applies
+`global/AGENTS.md` instead, because an in-place edit is backed up and
+overwritten by the next install. A link install picks up the change at once;
+a copy install needs `./install.sh --global-instructions copy` again. This applies
 to agents asked to "always remember" something globally: the durable place for
 that instruction is the checkout, not the installed file.
 
@@ -40,7 +41,7 @@ Name a Linear issue by its slug, never a bare identifier, in everything a person
 reads: replies, comments, PR bodies, handoffs. The slug is the identifier plus 2
 to 5 kebab-case words saying what the issue does, e.g.
 `DIE-207-anchor-candidate-vs-baseline`. It is the first line of the issue
-description, `**Slug:** `<slug>``; use it exactly as written. An issue you create
+description, ``**Slug:** `<slug>` ``; use it exactly as written. An issue you create
 gets that line from you; in a project the Dispatcher maps, a tick adds one within
 minutes if you leave it out. An issue with no slug line yet is named by its
 identifier and a few words of its title. Lines that link a PR to its issue
@@ -65,15 +66,19 @@ pointer beside it: "the owner decides new dependencies (criterion 2)", not
 
 ### Tracking an issue
 
-Three rules hold in every session that works a mapped issue, supervised setup
+A mapped issue is one in the Linear project that the repository's `AGENTS.md`
+names. Three rules hold in every session that works one, supervised setup
 work included:
 
-- When authorized work begins on an issue in Backlog or Todo, set the mapped
-  active state (In Progress here) before substantive implementation.
+- When authorized work begins on an issue in Backlog or Todo, set the active
+  state the repository maps (In Progress unless it says otherwise) before
+  substantive implementation.
 - After every state change, fetch the issue by its exact ID and verify the
   state field. A comment, a checklist or a successful request is not proof.
-- Before ending a substantive work turn, reconcile the issue's state with the
-  actual progress and record a handoff on the issue.
+- Before you stop work on the issue, reconcile its state with the actual
+  progress and record a handoff where the repository's `AGENTS.md` says
+  (the `linear-tracking` skill gives the default). A reply that continues
+  the work is not a stop.
 
 The procedure behind them is the `linear-tracking` skill: resume, claim, track
 and handoff, the state and label table, and what to do when Linear cannot be
@@ -82,8 +87,9 @@ write a handoff. Where the skill is not installed, read
 `skills/linear-tracking/SKILL.md` in the skills checkout.
 
 ## graphify
-- **graphify** (`~/.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
-When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
+
+`graphify` turns any input into a knowledge graph. When the owner types
+`/graphify`, load the installed graphify skill before doing anything else.
 
 ## Workflows
 
@@ -96,9 +102,9 @@ verification, synthesis, root-cause analysis) get the strong model and
 the phase entry) and state the tiering in the summary so it can be overridden
 before the run.
 
-## About the user
+## About the owner
 
-A practicing **AI Research Scientist**, fluent in Python and deep learning
+This file calls the user the owner. A practicing **AI Research Scientist**, fluent in Python and deep learning
 (PyTorch, training, supervised learning). Pitch ML/AI at research-practitioner
 level — don't re-teach fundamentals. Visuals and intuition first, then build by
 hand; the maths is solid but rusty, so walk real derivations through step by
@@ -132,10 +138,14 @@ they may do.
 - **Sketch first.** When the work will produce something the owner looks at
   (a page, a figure, a report, a pipeline), open with a mockup or diagram of
   the intended result, labelled as a mockup and filled with realistic values.
-  Then build it: the owner redirects from the sketch.
+  When the build is costly to redo, wait for the owner's reaction to the
+  sketch; otherwise build right after it and let the owner redirect. Skip the
+  sketch for a small change to something the owner has already seen.
 - **Reorient after a break.** When the owner returns to a thread, open by
   answering where are we, how did we get here and where are we going, at the
-  altitude of the goal (the `orient` skill), then what they need to do.
+  altitude of the goal, then what they need to do. The procedure is the
+  `orient` skill; where it is not installed, read `skills/orient/SKILL.md` in
+  the skills checkout.
 - **Long jobs.** Say what is running, when you will report and how to watch it.
   Report when it ends, unprompted.
 
@@ -172,23 +182,25 @@ they may do.
 
 ### Splitting the work
 
-- **Subagents.** Send a sweep to a subagent when its raw output is not needed
-  afterwards: a search across files, a long log, a test run, a set of pages to
-  read. Choose `model` and `effort` for each one, as "Workflows" says: a small
-  model at `low` or `medium` for search and extraction, the strong model at
-  `high` for review and judgment.
-- **Threads.** A thread serves one issue. When the owner starts a different
-  issue in a thread that has already compacted, record the handoff for the
-  finished one, suggest a new thread for the next in one line, and continue
-  here.
+- **Subagents.** Send a sweep to a subagent when it takes more than a few
+  tool calls and its raw output is not needed afterwards: a search across
+  files, a long log, a test run, a set of pages to read. Choose `model` and
+  `effort` for each one, as "Workflows" says: a small model at `low` for
+  search and extraction, the strong model at `high` or above for review and
+  judgment.
+- **Threads.** A thread serves one issue or task. When the owner starts a
+  different one in a thread that has already compacted, record the handoff
+  for the finished one and suggest, in one line, a new thread for the next.
+  Keep working on it in this thread until the owner moves.
 
 ## Third-party packages
 
 Vet a third-party package or tool before adding it to a project or machine:
 publisher, popularity, maintenance status, known CVEs, license — and surface
-that to the user. Installing what a repository already declares in its lockfile
+that to the owner. Installing what a repository already declares in its lockfile
 or manifest (`uv sync --locked`, `npm ci`) is routine setup and needs no
 vetting. Prefer the standard library or already-installed tooling to keep the
-dependency surface small. When a package is genuinely needed, present the vetting summary and
-install it deliberately (on demand, into an isolated env) rather than
-auto-installing.
+dependency surface small. When a package is genuinely needed, present the
+vetting summary and wait for the owner's yes, then install it deliberately (on
+demand, into an isolated env). An unattended agent with no one to ask does not
+install it: it reports the package and the summary instead.
