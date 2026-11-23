@@ -73,7 +73,7 @@ Cutting a release stays with the owner.
 - A root records which external collection placed which skills, in
   `.skills-external.json` beside the receipt. It exists because a flat skill
   root cannot say where a directory came from, and both collections hide most
-  of what they ship (20 of 35, 39 of 44) — so the dashboard's per-row review
+  of what they ship (20 of 35, 57 of 58) — so the dashboard's per-row review
   would otherwise offer to unhide skills that row never installed. It also
   makes a name owned rather than merely present, which is what turns a silent
   overwrite of a shared name (`tdd`, `teach` — both collections ship both, and

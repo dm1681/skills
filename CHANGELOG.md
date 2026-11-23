@@ -73,6 +73,14 @@ All notable changes to this repository are documented here. Versions follow
   order replacing the seven-rung ladder, a closing line on what was skipped
   or unchecked, and `shortcut:` replacing `ponytail:` as the code-comment
   marker for known limits. LICENSE is unchanged; pin and hash updated.
+- `--pstack` now installs pstack 0.15.46 (cursor/plugins commit
+  `7a583913eb1b8d1a0ee76753d1a2cf072e7b54f9`), up from 0.14.1. That is 58
+  skills instead of 44, with none removed: `correct`, `sharpen`,
+  `in-your-own-words`, `ketchup`, `ketchup-video`, `poteto-help`,
+  `benchmark-checklist`, `make-bot-ui`, `statechart`,
+  `create-formal-verification-skill`, `maintain-formal-verification-skill`
+  and three more `principle-*` skills. 57 of the 58 now install hidden from
+  the model; only `setup-pstack` stays visible.
 
 ### Fixed
 

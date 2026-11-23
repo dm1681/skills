@@ -438,7 +438,7 @@ unrelated installs are preserved. See [curation and migration](docs/matt-pocock-
 
 [`pstack`](https://github.com/cursor/plugins/tree/main/pstack) is a Cursor
 plugin shipping rigorous agent workflows (`poteto-mode`, `architect`,
-`interrogate`, `why`) and 21 `principle-*` skills. No skill in this collection
+`interrogate`, `why`) and 24 `principle-*` skills. No skill in this collection
 requires them, so nothing installs them by default and nothing prompts for a
 third-party download. Like graphify and matt-skills, pstack appears as a row
 under the dashboard's **External tools** group, which fetches it only when
@@ -460,7 +460,7 @@ pstack and `mattpocock/skills` both ship `tdd` and `teach`, and mean different
 things by them. A skill root is one flat directory, so the second install stops
 and names the conflict rather than letting one silently replace the other;
 `--force` accepts the replacement and backs the old copy up, and `--uninstall`
-clears the other copy's claim if you would rather remove it. 39 of pstack's 44
+clears the other copy's claim if you would rather remove it. 57 of pstack's 58
 skills install hidden from the model — each collection's dashboard row unfolds
 the skills that collection installed, or `--enable-skill NAME` from a script.
 

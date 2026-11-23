@@ -937,7 +937,7 @@ class SkillsApp(App):
 
         Two external tools now install skills carrying
         disable-model-invocation — mattpocock/skills hides 20 of its 35, pstack
-        39 of its 44 — and a root scan cannot attribute an installed directory
+        57 of its 58 — and a root scan cannot attribute an installed directory
         to the tool that placed it. So each install records what it placed, and
         a row shows only its own: without that, both rows would list the union
         and each would offer to unhide skills it never installed.

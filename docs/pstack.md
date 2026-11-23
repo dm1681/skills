@@ -2,7 +2,7 @@
 
 [`pstack`](https://github.com/cursor/plugins/tree/main/pstack) is a Cursor
 plugin by Lauren Tan, MIT-licensed, that ships rigorous agent workflows
-(`poteto-mode`, `architect`, `interrogate`, `why`, `how`) alongside 21
+(`poteto-mode`, `architect`, `interrogate`, `why`, `how`) alongside 24
 `principle-*` skills stating one coding principle each. No skill bundled in
 this collection depends on them, so they are a pure opt-in. When requested, the
 complete plugin is installed so those workflows and the principles they cite
@@ -26,7 +26,7 @@ The effective commands have this form:
 
 ```sh
 git init --quiet --template=
-git fetch --quiet --depth 1 https://github.com/cursor/plugins.git 51a96e0…
+git fetch --quiet --depth 1 https://github.com/cursor/plugins.git 7a58391…
 git -c core.hooksPath=.git/no-hooks -c core.autocrlf=false -c core.eol=lf \
   checkout --quiet --detach FETCH_HEAD
 git status --porcelain   # must be empty before anything is copied
@@ -47,8 +47,8 @@ first check but not the second.
 Two things differ, and both come from pstack living inside a monorepo:
 
 - The byte comparison is scoped to `pstack/` rather than the whole revision.
-  At the pinned commit that is 156 blobs rather than the repository's 478, and
-  the 322 it skips are other plugins — files no install can reach, whose
+  At the pinned commit that is 553 blobs rather than the repository's 2176, and
+  the 1623 it skips are other plugins — files no install can reach, whose
   `.gitattributes` could otherwise fail a pstack install.
 - Skill discovery is rooted at `pstack/skills/`, so a sibling plugin's skills
   can never be picked up by it.
@@ -62,7 +62,7 @@ because destination resolution remains under this installer's control.
 `cursor/plugins` publishes no tags. `mattpocock/skills` does, which is why that
 pin is a tag plus the commit behind it — the tag is what a human reads and the
 commit is what actually pins. Here the tag half is missing, so the pin is a
-bare commit and there is nothing readable in it: `51a96e0` names no release
+bare commit and there is nothing readable in it: `7a58391` names no release
 anybody can look up.
 
 So the readable half comes from the plugin itself. `PSTACK_REF` in `install.py`
@@ -85,7 +85,7 @@ Override the ref per run:
 # An exact commit, named in full: the remote resolves the argument as a
 # refspec, and an abbreviated SHA is not one.
 ./install.sh --agent all --pstack \
-  --pstack-ref 51a96e0dd838404da19ba83dc70aa21eef71f868
+  --pstack-ref 7a583913eb1b8d1a0ee76753d1a2cf072e7b54f9
 ```
 
 A named ref is checked against no second pin — it *is* the revision the caller
@@ -99,12 +99,12 @@ reading the plugin's diff, not the repository's:
 
 ```sh
 git clone https://github.com/cursor/plugins.git /tmp/cursor-plugins
-git -C /tmp/cursor-plugins diff 51a96e0..main -- pstack/
+git -C /tmp/cursor-plugins diff 7a58391..main -- pstack/
 ```
 
 ## What gets installed
 
-44 skills, every directory under `pstack/skills/`, flattened to `<name>/` in
+58 skills, every directory under `pstack/skills/`, flattened to `<name>/` in
 each selected root. Two things upstream ships are deliberately left out:
 
 - **`pstack/automations/benny/`** — three more skills (`setup-benny`,
@@ -116,10 +116,15 @@ each selected root. Two things upstream ships are deliberately left out:
 - **`pstack/agents/`** — the manifest's second pointer, holding two Cursor
   subagent personas. This repository installs skills into skill roots and has
   no concept of an agent root to put these in, and inventing one would write
-  into a directory nothing here can later report on or clean up. Two skills
-  name an agent that will not be there: `no-comments` spawns *Comment Sicko*,
-  and `poteto-mode` routes to `poteto-agent`. Both still describe what they
-  want done.
+  into a directory nothing here can later report on or clean up. Three skills
+  name an agent that will not be there: `no-comments` spawns `comment-sicko`,
+  and `poteto-mode` and `poteto-help` route to `poteto-agent`. All three still
+  describe what they want done.
+- **`pstack/docs/`** — upstream's guide, including
+  `docs/harness/claude-code.md`, which maps Cursor tool names, subagent fields
+  and model slugs to their Claude Code equivalents. It sits outside the
+  manifest's `skills/` pointer, so it is not copied; `poteto-help` is the one
+  skill that points at it. Read it upstream when a skill names a Cursor tool.
 
 Every selected root receives the same files, and a checkout that does not
 contain `setup-pstack` fails the install, because that is the shape of the
@@ -181,7 +186,7 @@ says where it came from, and that record is the only thing that can say.
 
 ## Skills hidden from the model
 
-pstack sets `disable-model-invocation: true` on 39 of its 44 skills, keeping
+pstack sets `disable-model-invocation: true` on 57 of its 58 skills, keeping
 their descriptions out of every session's context. The cost is that a harness
 routing slash commands through the model reports "that skill is not installed"
 for a skill sitting right there on disk.
@@ -193,7 +198,7 @@ be done twice.
 
 That review is per-collection, which is what the `.skills-external.json` record
 above makes possible: `mattpocock/skills` hides 20 of its 35 and pstack hides
-39 of its 44, and without a record of who installed what, each row would list
+57 of its 58, and without a record of who installed what, each row would list
 the union and unhiding under one would silently unhide the other's skills.
 
 A root installed before that record existed has none, so attribution there
@@ -202,10 +207,13 @@ wrote a root that predates the bookkeeping.
 
 ## Written for Cursor
 
-pstack is a Cursor plugin and does not hide it. 28 of its markdown files
-reference `.cursor` paths or Cursor-only affordances: six name `AskQuestion`, a
-Cursor tool with no Claude Code equivalent, and `setup-pstack` writes a
-machine-level rules file at `~/.cursor/rules/` naming specific model slugs.
+pstack is a Cursor plugin and does not hide it. 30 of its markdown files
+reference `.cursor` paths or Cursor-only affordances: four name `AskQuestion`,
+a Cursor tool, and `setup-pstack` writes a machine-level rules file at
+`~/.cursor/rules/pstack-models.mdc` naming specific model slugs. Since 0.15
+upstream also documents a Claude Code mapping (`AskQuestion` becomes
+`AskUserQuestion`, the rules file becomes `~/.claude/rules/pstack-models.md`),
+but in `pstack/docs/`, which this install does not copy.
 
 Installed under Claude Code these skills still read as instructions and the
 prose still applies — the `principle-*` set and the writing skills (`unslop`,

@@ -99,9 +99,9 @@ PSTACK_SUBDIR = "pstack"
 # that is what the default install checks: the commit says the fetch landed
 # where it was told, and the version says the thing that landed is the release
 # this repository documents. Update the three together.
-PSTACK_REF = "51a96e0dd838404da19ba83dc70aa21eef71f868"
+PSTACK_REF = "7a583913eb1b8d1a0ee76753d1a2cf072e7b54f9"
 PSTACK_COMMIT = PSTACK_REF
-PSTACK_VERSION = "0.14.1"
+PSTACK_VERSION = "0.15.46"
 PSTACK_MANIFEST = ".cursor-plugin/plugin.json"
 # `plugin.json` points its own installer at `./skills/` and nothing else, so
 # that is what installs here. `automations/benny/` holds three more skills
@@ -1299,7 +1299,7 @@ def read_external_manifest(root: Path) -> dict:
     it came from, so without this file the only way to attribute an installed
     skill to the collection that placed it is to guess by name. That guess was
     survivable while one external tool hid skills from the model; pstack hides
-    39 of the 44 it ships, so two rows would each claim the other's skills and
+    57 of the 58 it ships, so two rows would each claim the other's skills and
     the review screen would offer to unhide skills its row never installed.
 
     Missing or malformed reads as "nothing recorded" rather than raising: this
@@ -1834,7 +1834,7 @@ def skill_is_model_hidden(skill_dir: Path) -> bool:
     """Whether this skill's frontmatter hides it from the model's skill list.
 
     Upstream collections (mattpocock/skills hides 20 of the 35 it ships, and
-    pstack 39 of its 44) set
+    pstack 57 of its 58) set
     `disable-model-invocation: true` to keep their descriptions out of every
     session's context. The cost is that a harness which routes slash commands
     through the model gets "that skill is not installed in this session" for
