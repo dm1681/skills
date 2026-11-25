@@ -102,6 +102,27 @@ verification, synthesis, root-cause analysis) get the strong model and
 the phase entry) and state the tiering in the summary so it can be overridden
 before the run.
 
+## Parallel work
+
+Run independent steps at the same time. Two steps are independent when
+neither needs the other's result and they write to different files.
+
+**Audit first.** When a task or a settled plan has three or more steps, go
+through the steps once before you start. Mark which are independent and group
+those into batches that run together. State the grouping in one line of the
+plan, or say in one line that every step depends on the one before it. Audit
+again when the plan changes.
+
+- **Tool calls.** Send independent reads, searches and commands in one
+  message, not one per turn.
+- **Long jobs.** Start a build, test run or download in the background and
+  continue with work that does not need its result.
+- **Subagents.** When a task splits into independent sweeps, launch them
+  together in one message. "Splitting the work" says when a sweep earns a
+  subagent.
+- **Stay serial** when steps share files, when a later step needs an earlier
+  result, or when the resource is the limit (one GPU, a rate-limited API).
+
 ## About the owner
 
 This file calls the user the owner. A practicing **AI Research Scientist**, fluent in Python and deep learning
