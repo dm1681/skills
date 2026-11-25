@@ -118,8 +118,10 @@ again when the plan changes.
 - **Long jobs.** Start a build, test run or download in the background and
   continue with work that does not need its result.
 - **Subagents.** When a task splits into independent sweeps, launch them
-  together in one message. "Splitting the work" says when a sweep earns a
-  subagent.
+  together in one message, each with its own `model` and `effort` as
+  "Workflows" says: a small model at `low` for search and extraction, the
+  strong model at `high` or above for review and judgment. "Splitting the
+  work" says when a sweep earns a subagent.
 - **Stay serial** when steps share files, when a later step needs an earlier
   result, or when the resource is the limit (one GPU, a rate-limited API).
 
